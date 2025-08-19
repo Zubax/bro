@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brocui"
+authors = [
+    {name = "Pavel Kirienko", email = "pavel.kirienko@zubax.com"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai~=1.100",
+    "PyAutoGUI~=0.9",
+    "mss~=10.1",
+    "Pillow~=11.1",
+]
+
+# --------------------------------------------------  BLACK  --------------------------------------------------
+[tool.black]
+line-length = 120
+target-version = ['py313']
+include = '''
+(bro.py$)
+|
+(noxfile.py$)
+'''
