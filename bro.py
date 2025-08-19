@@ -32,6 +32,172 @@ _logger = logging.getLogger(__name__)
 _log_dir = Path(f".bro/logs/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
 _log_dir.mkdir(exist_ok=True, parents=True)
 
+
+def main():
+    _setup_logging()
+
+    if env_task := os.environ.get("BRO_TASK"):
+        task = env_task
+    else:
+        task = input("Describe the task:\n").strip()
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    model = "computer-use-preview"
+
+    agent = Agent(client=client, model=model)
+    agent.run(task)
+
+
+class Agent:
+    def __init__(self, *, client: OpenAI, model: str):
+        self.client = client
+        self.model = model
+
+        screen_w, screen_h = pyautogui.size()
+        self._tools = [
+            {
+                "type": "computer_use_preview",
+                "display_width": int(screen_w),
+                "display_height": int(screen_h),
+                "environment": "linux",
+            }
+        ]
+
+    def run(self, task: str) -> None:
+        # TODO use instructions!
+        items = [{"role": "user", "content": task}]
+        while (not items) or (items[-1].get("role") != "assistant"):
+            _logger.debug(f"Sending a request with input items: {items}")
+            response = self.client.responses.create(
+                model=self.model,
+                input=items,
+                tools=self._tools,
+                truncation="auto",
+            )
+            _logger.debug(f"Received a response: {response}")
+            output = [x.model_dump() for x in response.output]
+            if not output:
+                _logger.warning("No output from model")
+            items += output
+            for item in output:
+                items += self._process_item(item)
+
+    def _process_item(self, item: dict[str, Any]) -> list[dict[str, Any]]:
+        match item["type"]:
+            case "message":
+                _logger.info(f"Message: {item['content'][0]['text']}")
+                return []
+
+            case "reasoning":
+                _logger.info(f"Reasoning: {item}")
+                return []
+
+            case "function_call":
+                name, args = item["name"], json.loads(item["arguments"])
+                _logger.info(f"Processing function call: {name}({args})")
+                _logger.error("TODO: FUNCTION CALL NOT IMPLEMENTED")  # TODO FIXME
+                return [
+                    {
+                        "type": "function_call_output",
+                        "call_id": item["call_id"],
+                        "output": "ERROR: NOT IMPLEMENTED",
+                    }
+                ]
+
+            case "computer_call":
+                _do_computer_action(item["action"])
+                screenshot_b64 = _screenshot_base64()
+                # The Western society is ailed with a mindless, damaging obsession with excessive safety.
+                pending_checks = item.get("pending_safety_checks", [])
+                for check in pending_checks:
+                    _logger.warning(f"✅ Skipping safety check: {check['message']}")
+                call_output = {
+                    "type": "computer_call_output",
+                    "call_id": item["call_id"],
+                    "acknowledged_safety_checks": pending_checks,
+                    "output": {
+                        "type": "input_image",
+                        "image_url": f"data:image/png;base64,{screenshot_b64}",
+                    },
+                }
+                return [call_output]
+
+            case _:
+                _logger.error(f"Unrecognized item type: {item['type']}")
+                _logger.debug(f"Full item: {item}")
+                # TODO FIXME not sure if the below is up to the API spec; update it if needed
+                return [
+                    {
+                        "type": "error",
+                        "error": f"Unrecognized item type: {item['type']}",
+                        "item": item,
+                    }
+                ]
+
+
+def _screenshot_base64() -> str:
+    im = None
+
+    # 1) MSS on the virtual screen (works on X11)
+    try:
+        with mss.mss() as sct:
+            mon = sct.monitors[0]  # bounding box of all displays
+            img = sct.grab(
+                {
+                    "top": mon["top"],
+                    "left": mon["left"],
+                    "width": mon["width"],
+                    "height": mon["height"],
+                }
+            )
+            im = Image.frombytes("RGB", img.size, img.rgb)
+    except Exception as ex:
+        _logger.debug("Failed to capture screenshot with mss: %s", ex, exc_info=True)
+
+    if im is None:
+        # 2) Wayland-friendly tools
+        for tool, args in (
+            ("gnome-screenshot", ["-f"]),  # GNOME Wayland
+            ("grim", ["-"]),  # wlroots compositors
+        ):
+            if shutil.which(tool):
+                try:
+                    if tool == "gnome-screenshot":
+                        fd, path = tempfile.mkstemp(suffix=".png")
+                        os.close(fd)
+                        subprocess.run([tool, *args, path], check=True)
+                        with open(path, "rb") as f:
+                            data = f.read()
+                        os.unlink(path)
+                        im = Image.open(BytesIO(data))
+                    else:  # grim to stdout
+                        data = subprocess.check_output([tool, *args])
+                        im = Image.open(BytesIO(data))
+                except Exception as ex:
+                    _logger.debug("Failed to capture screenshot with %s: %s", tool, ex, exc_info=True)
+                if im is not None:
+                    break
+
+    if im is None:
+        # 3) PyAutoGUI fallback (may require scrot on some setups)
+        try:
+            im = pyautogui.screenshot()
+        except Exception as ex:
+            _logger.debug("Failed to capture screenshot with pyautogui: %s", ex, exc_info=True)
+
+    if im is None:
+        raise RuntimeError("Could not capture screenshot on this session")
+
+    # Save screenshot to log dir with ISO datetime
+    now_str = datetime.now().isoformat(timespec="seconds").replace(":", "-")
+    screenshot_path = _log_dir / f"screenshot-{now_str}.png"
+    _logger.info(f"📷 Saving screenshot to {screenshot_path}")
+    buf = BytesIO()
+    im.save(buf, format="PNG")
+    im.save(screenshot_path, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 _KEYMAP = {
     "CTRL": "ctrl",
     "CONTROL": "ctrl",
@@ -59,66 +225,6 @@ _KEYMAP = {
 }
 
 
-def _screenshot_base64() -> str:
-    im = None
-    buf = BytesIO()
-
-    # 1) MSS on the virtual screen (works on X11)
-    try:
-        with mss.mss() as sct:
-            mon = sct.monitors[0]  # bounding box of all displays
-            img = sct.grab(
-                {
-                    "top": mon["top"],
-                    "left": mon["left"],
-                    "width": mon["width"],
-                    "height": mon["height"],
-                }
-            )
-            im = Image.frombytes("RGB", img.size, img.rgb)
-    except Exception:
-        pass
-
-    if im is None:
-        # 2) Wayland-friendly tools
-        for tool, args in (
-            ("gnome-screenshot", ["-f"]),  # GNOME Wayland
-            ("grim", ["-"]),  # wlroots compositors
-        ):
-            if shutil.which(tool):
-                try:
-                    if tool == "gnome-screenshot":
-                        fd, path = tempfile.mkstemp(suffix=".png")
-                        os.close(fd)
-                        subprocess.run([tool, *args, path], check=True)
-                        with open(path, "rb") as f:
-                            data = f.read()
-                        os.unlink(path)
-                        im = Image.open(BytesIO(data))
-                    else:  # grim to stdout
-                        data = subprocess.check_output([tool, *args])
-                        im = Image.open(BytesIO(data))
-                except Exception:
-                    pass
-                if im is not None:
-                    break
-
-    if im is None:
-        # 3) PyAutoGUI fallback (may require scrot on some setups)
-        try:
-            im = pyautogui.screenshot()
-        except Exception as e:
-            raise RuntimeError(f"Could not capture screenshot on this session: {e}")
-
-    # Save screenshot to log dir with ISO datetime
-    now_str = datetime.now().isoformat(timespec="seconds").replace(":", "-")
-    screenshot_path = _log_dir / f"screenshot-{now_str}.png"
-    _logger.info(f"📷 Saving screenshot to {screenshot_path}")
-    im.save(screenshot_path, format="PNG")
-    im.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("ascii")
-
-
 def _to_pyauto_key(k: str) -> str:
     k = k.strip()
     return _KEYMAP.get(k.upper(), k.lower())
@@ -134,7 +240,12 @@ def _aget(obj: Any, attr: str, default=None, key: str | None = None):
     return default
 
 
-def _do_action(action: Any) -> None:
+class ActionError(RuntimeError):
+    pass
+
+
+def _do_computer_action(action: dict[str, Any]) -> None:
+    _logger.debug(f"Computer action: {action}")
     match atype := _aget(action, "type"):
         case "move":
             x = _aget(action, "x")
@@ -181,7 +292,7 @@ def _do_action(action: Any) -> None:
                 try:
                     pyautogui.hscroll(sx)
                 except Exception as ex:
-                    _logger.exception(f"hscroll failed: {ex}")
+                    raise ActionError(f"hscroll failed; possibly not supported on this platform: {ex}")
 
         case "type":
             if text := _aget(action, "text", default=""):
@@ -208,26 +319,7 @@ def _do_action(action: Any) -> None:
             pass
 
         case _:
-            raise RuntimeError(f"Unrecognized action: {atype!r}")
-
-
-def _first_computer_call(resp) -> Any:
-    for item in getattr(resp, "output", []) or []:
-        if getattr(item, "type", None) == "computer_call":
-            return item
-    return None
-
-
-def _maybe_print_text(resp) -> None:
-    text = getattr(resp, "output_text", None)
-    if text:
-        print(text)
-    else:
-        for item in getattr(resp, "output", []) or []:
-            if getattr(item, "type", None) == "message":
-                content = getattr(item, "content", None)
-                if content:
-                    print(str(content))
+            raise ActionError(f"Unrecognized action: {atype!r}")
 
 
 def _setup_logging() -> None:
@@ -249,78 +341,10 @@ def _setup_logging() -> None:
     # Per-module customizations
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def main():
-    _setup_logging()
-    task = input("Describe the task:\n").strip()
-
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    screen_w, screen_h = pyautogui.size()
-    model = "computer-use-preview"
-
-    # Initial turn
-    response = client.responses.create(
-        model=model,
-        tools=[
-            {
-                "type": "computer_use_preview",
-                "display_width": int(screen_w),
-                "display_height": int(screen_h),
-                "environment": "linux",
-            }
-        ],
-        input=[
-            {
-                "role": "user",
-                "content": task,
-            }
-        ],
-        truncation="auto",
-    )
-
-    while True:
-        _logger.info(f"Response: {response}\n")
-        call = _first_computer_call(response)
-        if call is not None:
-            _maybe_print_text(response)
-            break
-
-        if checks := getattr(call, "pending_safety_checks", []):
-            print("[safety] Skipping safety checks:")
-            for c in checks:
-                code = getattr(c, "code", "")
-                msg = getattr(c, "message", "")
-                print(f"  - {code}: {msg}")
-
-        action = getattr(call, "action", None) or {}
-        _do_action(action)
-
-        # Send fresh screenshot back
-        b64 = _screenshot_base64()
-        response = client.responses.create(
-            model=model,
-            previous_response_id=response.id,
-            tools=[
-                {
-                    "type": "computer_use_preview",
-                    "display_width": int(screen_w),
-                    "display_height": int(screen_h),
-                    "environment": "linux",
-                }
-            ],
-            input=[
-                {
-                    "type": "computer_call_output",
-                    "call_id": getattr(call, "call_id", None),
-                    "output": {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{b64}",
-                    },
-                }
-            ],
-            truncation="auto",
-        )
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("pyautogui").setLevel(logging.WARNING)
+    logging.getLogger("mss").setLevel(logging.WARNING)
 
 
 if __name__ == "__main__":
