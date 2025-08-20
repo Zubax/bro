@@ -1,1 +1,1 @@
- 
+Summarize the Estonian accounting policies in three sentences, and write them into a text file.

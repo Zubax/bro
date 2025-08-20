@@ -64,14 +64,16 @@ def build_context(paths: list[str]) -> Context:
 
     # Read the prompt and exclude it from the context
     prompt_files = [f for f in all_files if f.name == "prompt.txt"]
-    if not prompt_files:
-        raise FileNotFoundError("No prompt.txt file found in any of the provided paths")
     if len(prompt_files) > 1:
         raise ValueError(f"Multiple prompt.txt files found: {prompt_files}")
-    try:
-        prompt = prompt_files[0].read_text(encoding="utf-8").strip()
-    except Exception as e:
-        raise RuntimeError(f"Failed to read prompt.txt from {prompt_path}: {e}")
+    if len(prompt_files) == 1:
+        try:
+            prompt = prompt_files[0].read_text(encoding="utf-8").strip()
+        except Exception as e:
+            raise RuntimeError(f"Failed to read prompt.txt from {prompt_path}: {e}")
+    else:
+        prompt = "Summarize the files."
+        _logger.warning("No prompt.txt file found; using a default prompt, which is:\n%r", prompt)
     _logger.debug(f"Prompt:\n{prompt}")
 
     return Context(prompt=prompt, files=[f for f in all_files if f not in prompt_files])
@@ -81,7 +83,7 @@ def upload_files(client: OpenAI, files: list[Path]) -> None:
     file_objects: list[FileObject] = []
     for file in files:
         fobj = client.files.create(
-            file=file.read_bytes(),
+            file=(file.name, file.read_bytes()),  # File name is required! Otherwise the model will refuse to use it.
             purpose="user_data",
             expires_after=ExpiresAfter(anchor="created_at", seconds=3600 * 24 * 7),
         )
@@ -172,7 +174,16 @@ class Assistant:
                 ],
             },
         ]
-        # TODO handle file_objects
+        if file_objects:
+            # We cannot attach content of type "input_file" to the system message, so we need a "user" message.
+            self.context.append({"role": "user", "content": []})
+            for fo in file_objects:
+                self.context[-1]["content"].append(
+                    {
+                        "type": "input_file",
+                        "file_id": fo.id,  # The file under this ID must have been uploaded with a valid name!
+                    }
+                )
 
     def ask(self, message: str, *, screenshot_b64: str | None = None) -> str:
         msg = {
@@ -289,7 +300,13 @@ class Agent:
                 ],
             },
         ]
-        # TODO handle file_objects
+        for fo in file_objects:
+            context[0]["content"].append(
+                {
+                    "type": "input_file",
+                    "file_id": fo.id,  # The file under this ID must have been uploaded with a valid name!
+                }
+            )
         while True:
             context = _truncate(context)
             self._save_context(context)
