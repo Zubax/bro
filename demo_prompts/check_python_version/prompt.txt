@@ -1,0 +1,1 @@
+Open a new terminal window and check the default Python version.

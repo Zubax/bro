@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
 import os
 import time
 import copy
 import json
 import base64
 import argparse
-from typing import Any, List, Dict
+from typing import Any
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,8 @@ from datetime import datetime
 
 # Third-party imports
 from openai import OpenAI
+from openai.types import FileObject
+from openai.types.file_create_params import ExpiresAfter
 import pyautogui
 import mss
 from PIL import Image
@@ -28,11 +31,62 @@ try:
 except ImportError:
     pass  # readline is not available on all platforms, but input() will still work
 
+from dataclasses import dataclass
+
 pyautogui.FAILSAFE = False  # disable corner abort
 
 _logger = logging.getLogger(__name__)
 _log_dir = Path(f".bro/logs/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
 _log_dir.mkdir(exist_ok=True, parents=True)
+
+
+@dataclass(frozen=True)
+class Context:
+    prompt: str
+    files: list[Path]
+
+
+def build_context(paths: list[str]) -> Context:
+    _logger.debug(f"Building context from paths: {paths}")
+    all_files: list[Path] = []
+    for path_str in paths:
+        _logger.debug(f"Processing path: {path_str}")
+        path = Path(path_str)
+        if not path.exists():
+            raise FileNotFoundError(f"Path does not exist: {path}")
+        if path.is_dir():
+            for file_path in path.rglob("*"):
+                if file_path.is_file() and not file_path.name.startswith("."):
+                    all_files.append(file_path)
+        else:
+            all_files.append(path)
+    _logger.info(f"Context files:\n" + "\n".join(f"{i+1:02d}. {f}" for i, f in enumerate(all_files)))
+
+    # Read the prompt and exclude it from the context
+    prompt_files = [f for f in all_files if f.name == "prompt.txt"]
+    if not prompt_files:
+        raise FileNotFoundError("No prompt.txt file found in any of the provided paths")
+    if len(prompt_files) > 1:
+        raise ValueError(f"Multiple prompt.txt files found: {prompt_files}")
+    try:
+        prompt = prompt_files[0].read_text(encoding="utf-8").strip()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read prompt.txt from {prompt_path}: {e}")
+    _logger.debug(f"Prompt:\n{prompt}")
+
+    return Context(prompt=prompt, files=[f for f in all_files if f not in prompt_files])
+
+
+def upload_files(client: OpenAI, files: list[Path]) -> None:
+    file_objects: list[FileObject] = []
+    for file in files:
+        fobj = client.files.create(
+            file=file.read_bytes(),
+            purpose="user_data",
+            expires_after=ExpiresAfter(anchor="created_at", seconds=3600 * 24 * 7),
+        )
+        file_objects.append(fobj)
+    return file_objects
 
 
 _AUX_PROMPT = """\
@@ -67,20 +121,27 @@ class CompletionError(RuntimeError):
 def main():
     _setup_logging()
 
-    if env_task := os.environ.get("BRO_TASK"):
-        task = env_task
-    else:
-        task = input("Describe the task:\n").strip()
-
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    assistant = Assistant(client=client, model="gpt-5-mini", task=task)
+    context = build_context(sys.argv[1:])
+    file_objects = upload_files(client, context.files)
+    _logger.info(
+        f"Uploaded {len(file_objects)} files:\n"
+        + "\n".join(f"{i+1:02d}. {f.id!r} {f.filename!r}" for i, f in enumerate(file_objects))
+    )
+
+    assistant = Assistant(
+        client=client,
+        model="gpt-5-mini",
+        prompt=context.prompt,
+        file_objects=file_objects,
+    )
 
     agent = Agent(client=client, model="computer-use-preview", assistant=assistant)
     try:
-        agent.run(task)
+        agent.run(context.prompt, file_objects)
     except CompletionError as ex:
-        _logger.info(f"🏁 Task completed: success={ex.success}; reason: {ex.reason}")
+        _logger.info(f"🏁 Task completed: success={ex.success}: {ex.reason}")
         sys.exit(0 if ex.success else 1)
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
@@ -88,15 +149,30 @@ def main():
 
 
 class Assistant:
-    def __init__(self, *, client: OpenAI, model: str, task: str):
+    def __init__(self, *, client: OpenAI, model: str, prompt: str, file_objects: list[FileObject]):
         self.client = client
         self.model = model
+        self.tools = [
+            {
+                "type": "web_search_preview",
+            },
+            {
+                "type": "code_interpreter",
+                "container": {"type": "auto"},
+            },
+        ]
         self.context = [
             {
                 "role": "system",
-                "content": _AUX_PROMPT + task,
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": _AUX_PROMPT + prompt,
+                    },
+                ],
             },
         ]
+        # TODO handle file_objects
 
     def ask(self, message: str, *, screenshot_b64: str | None = None) -> str:
         msg = {
@@ -116,11 +192,15 @@ class Assistant:
                 },
             )
         self.context.append(msg)
+        self.context = _truncate(self.context)
         _logger.warning(f"🤔 Asking the assistant: {message}")
         self._save_context(self.context)
         response = self.client.responses.create(
             model=self.model,
             input=self.context,
+            tools=self.tools,
+            reasoning={"effort": "low"},
+            text={"verbosity": "low"},
         ).model_dump()
         self._save_response(response)
         self.context += response["output"]
@@ -132,6 +212,12 @@ class Assistant:
             if x.get("type") == "reasoning" and "status" in x:
                 del x["status"]
 
+        for out in response["output"]:
+            if out.get("type") == "reasoning":
+                for x in out["summary"]:
+                    if x.get("type") == "summary_text":
+                        _logger.info(f"🤔 Assistant thought: {x['text']}")
+
         out = None
         for out in response["output"]:
             if out.get("type") == "message":
@@ -140,7 +226,7 @@ class Assistant:
         if not out:
             raise RuntimeError("Assistant failed to produce a response")
 
-        _logger.warning(f"🤔 Assistant says: {out}")
+        _logger.warning(f"🤔 Assistant said: {out}")
         return out
 
     def _save_context(self, context: list[dict[str, Any]]) -> None:
@@ -168,9 +254,10 @@ class Agent:
             },
             {
                 "type": "function",
-                "name": "task_completion",
+                "name": "stop",
                 "description": "Report that the task has been completed and no further action is needed."
-                " If the task failed, explain why.",
+                " If the task failed, explain why."
+                " If the task succeeded, provide the final result, if applicable.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -189,15 +276,22 @@ class Agent:
             },
         ]
 
-    def run(self, task: str) -> None:
+    def run(self, prompt: str, file_objects: list[FileObject]) -> None:
         # TODO use instructions!
         context = [
             {
                 "role": "user",
-                "content": task,
-            }
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    },
+                ],
+            },
         ]
+        # TODO handle file_objects
         while True:
+            context = _truncate(context)
             self._save_context(context)
             response = self.client.responses.create(
                 model=self.model,
@@ -259,7 +353,7 @@ class Agent:
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
                 match name:
-                    case "task_completion":
+                    case "stop":
                         _logger.debug(f"✅ Task completed: {args}")
                         raise CompletionError(
                             success=args["status"] == "success",
@@ -479,6 +573,12 @@ def _do_computer_action(action: dict[str, Any]) -> None:
 
         case _:
             raise ActionError(f"Unrecognized action: {atype!r}")
+
+
+def _truncate(x: list[Any]) -> list[Any]:
+    if len(x) <= 1100:
+        return x
+    return x[:100] + x[-1000:]
 
 
 def _setup_logging() -> None:
