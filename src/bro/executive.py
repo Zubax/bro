@@ -168,17 +168,17 @@ class _OpenAI_CUA_Executive(Executive):
                 act = item["action"]
                 match ty := act["type"]:
                     case "move":
-                        self._uiio.do(ui_io.MoveAction(coord=(act["x"], act["y"])))
+                        self._uiio.do(ui_io.MoveAction(coord=self._get_coords(act)))
                     case "click":
-                        self._uiio.do(ui_io.ClickAction(coord=(act["x"], act["y"]), button=act.get("button", "left")))
+                        self._uiio.do(ui_io.ClickAction(coord=self._get_coords(act), button=act.get("button", "left")))
                     case "double_click":
-                        self._uiio.do(ui_io.ClickAction(coord=(act["x"], act["y"]), button="left", count=2))
+                        self._uiio.do(ui_io.ClickAction(coord=self._get_coords(act), button="left", count=2))
                     case "drag":
-                        self._uiio.do(ui_io.DragAction(path=[(pt["x"], pt["y"]) for pt in act.get("path", [])]))
+                        self._uiio.do(ui_io.DragAction(path=[self._get_coords(pt) for pt in act.get("path", [])]))
                     case "scroll":
                         self._uiio.do(
                             ui_io.ScrollAction(
-                                coord=(act["x"], act["y"]) if "x" in act and "y" in act else None,
+                                coord=self._get_coords(act) if "x" in act and "y" in act else None,
                                 scroll_x=int(act.get("scroll_x", 0) or 0),
                                 scroll_y=int(act.get("scroll_y", 0) or 0),
                             )
@@ -233,6 +233,11 @@ class _OpenAI_CUA_Executive(Executive):
         im = self._uiio.screenshot()
         im.save(self._dir / f"executive-{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
+
+    def _get_coords(self, act: dict[str, Any]) -> ui_io.ScreenCoord:
+        # w, h = self._uiio.screen_width_height
+        # return (int(w * act["x"] / 1024), int(h * act["y"] / 1024))
+        return int(act["x"]), int(act["y"])
 
 
 def _test() -> None:

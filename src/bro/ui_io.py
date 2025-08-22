@@ -178,6 +178,7 @@ class _Impl(UIIO):
             case DragAction(path=path):
                 if len(path) > 1:
                     sx, sy = path[0]
+                    _logger.info(f"🖥️ Drag start at {sx}, {sy}")
                     pyautogui.moveTo(sx, sy, duration=0)
                     pyautogui.mouseDown()
                     for px, py in path[1:]:
