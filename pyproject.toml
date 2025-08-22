@@ -21,7 +21,7 @@ dependencies = [
 line-length = 120
 target-version = ['py313']
 include = '''
-(bro.py$)
+(src/bro/.+\.py$)
 |
-(noxfile.py$)
+(noxfile\.py$)
 '''
