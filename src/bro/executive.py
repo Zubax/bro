@@ -91,7 +91,18 @@ class _OpenAI_CUA_Executive(Executive):
         ]
 
     def act(self, goal: str) -> str:
-        _logger.debug(f"🥅 New goal: {goal}")
+        _logger.info(f"🥅 {goal}")
+        self._context.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": goal,
+                    },
+                ],
+            }
+        )
         stop = None
         while stop is None:
             self._context = truncate(self._context)
@@ -126,7 +137,7 @@ class _OpenAI_CUA_Executive(Executive):
                 except StopError as ex:
                     stop = ex.report
 
-        _logger.debug(f"🏁 {stop}")
+        _logger.info(f"🏁 {stop}")
         return stop
 
     def _process(self, item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -163,7 +174,7 @@ class _OpenAI_CUA_Executive(Executive):
                     case "double_click":
                         self._uiio.do(ui_io.ClickAction(coord=(act["x"], act["y"]), button="left", count=2))
                     case "drag":
-                        self._uiio.do(ui_io.DragAction(path=[(pt["x"], pt["y"]) for pt in act.get("path", default=[])]))
+                        self._uiio.do(ui_io.DragAction(path=[(pt["x"], pt["y"]) for pt in act.get("path", [])]))
                     case "scroll":
                         self._uiio.do(
                             ui_io.ScrollAction(
@@ -220,21 +231,28 @@ class _OpenAI_CUA_Executive(Executive):
 
     def _screenshot_b64(self) -> str:
         im = self._uiio.screenshot()
-        f_screenshot = self._dir / f"executive-{datetime.now().isoformat()}.png"
-        f_screenshot.write_bytes(im.tobytes())
+        im.save(self._dir / f"executive-{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
 
 
-if __name__ == "__main__":
+def _test() -> None:
     import logging
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(message)s")
-
-    uiio = ui_io.make()
-    state_dir = Path(f".bro/test/{__name__}")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-3.3s %(name)s: %(message)s")
+    state_dir = Path(f".bro/test-executive")
     state_dir.mkdir(parents=True, exist_ok=True)
-    exe = make(uiio, state_dir)
+    for item in state_dir.iterdir():
+        if item.is_file() or item.is_symlink():
+            item.unlink()
+        elif item.is_dir():
+            for sub_item in item.iterdir():
+                sub_item.unlink()
+            item.rmdir()
+    exe = make(ui_io.make(), state_dir)
+    # print(exe.act("Search for Zubax Robotics on Google and open the official website."))
+    # print(exe.act("Open the system settings and display the About page."))
+    print(exe.act("Drag the file manager window to the left side of the screen."))
 
-    goal = "Search for Zubax Robotics on Google and open the official website."
-    report = exe.act(goal)
-    print(report)
+
+if __name__ == "__main__":
+    _test()
