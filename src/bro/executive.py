@@ -67,7 +67,7 @@ class _OpenAI_CUA_Executive(Executive):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "c": {
+                        "report": {
                             "type": "string",
                             "description": "Final detailed report of the task, including success status, actions taken,"
                             " and any noteworthy events.",
@@ -242,6 +242,7 @@ class _OpenAI_CUA_Executive(Executive):
 
 def _test() -> None:
     import logging
+    import sys
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-3.3s %(name)s: %(message)s")
     state_dir = Path(f".bro/test-executive")
@@ -254,9 +255,12 @@ def _test() -> None:
                 sub_item.unlink()
             item.rmdir()
     exe = make(ui_io.make(), state_dir)
-    # print(exe.act("Search for Zubax Robotics on Google and open the official website."))
-    # print(exe.act("Open the system settings and display the About page."))
-    print(exe.act("Drag the file manager window to the left side of the screen."))
+    prompt = (
+        " ".join(sys.argv[1:])
+        if len(sys.argv) > 1
+        else "Search for Zubax Robotics on Google and open the official website."
+    )
+    print(exe.act(prompt))
 
 
 if __name__ == "__main__":
