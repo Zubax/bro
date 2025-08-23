@@ -162,15 +162,15 @@ class _Impl(UIIO):
         _logger.debug(f"Computer action: {action}")
         match action:
             case MoveAction(coord=(x, y)):
-                _logger.info(f"🖥️ Moving cursor to {x}, {y}")
+                _logger.info(f"🐁 Moving cursor to {x}, {y}")
                 pyautogui.moveTo(x, y, duration=0)
 
             case ClickAction(coord=(x, y), button=button, count=count):
                 if count == 1:
-                    _logger.info(f"🖥️ Clicking {button} button at {x}, {y}")
+                    _logger.info(f"🐁 Clicking {button} button at {x}, {y}")
                     pyautogui.click(x=x, y=y, button=button)
                 elif count == 2:
-                    _logger.info(f"🖥️ Double clicking at {x}, {y}")
+                    _logger.info(f"🐁 Double clicking at {x}, {y}")
                     pyautogui.doubleClick(x=x, y=y, button=button)
                 else:
                     raise UIActionError(f"Invalid click count: {count}; add support for this if needed", action)
@@ -178,40 +178,40 @@ class _Impl(UIIO):
             case DragAction(path=path):
                 if len(path) > 1:
                     sx, sy = path[0]
-                    _logger.info(f"🖥️ Drag start at {sx}, {sy}")
+                    _logger.info(f"🐁 Drag start at {sx}, {sy}")
                     pyautogui.moveTo(sx, sy, duration=0)
                     pyautogui.mouseDown()
                     for px, py in path[1:]:
-                        _logger.info(f"🖥️ Dragging to {px}, {py}")
+                        _logger.info(f"🐁 Dragging to {px}, {py}")
                         pyautogui.moveTo(px, py, duration=0)
                     pyautogui.mouseUp()
                 else:
-                    _logger.error(f"Drag path is too short, skipping: {action}")
+                    _logger.error(f"🐁 Drag path is incomplete, skipping: {action}")
 
             case ScrollAction(coord=coord, scroll_x=sx, scroll_y=sy):
                 if coord:
                     x, y = coord
-                    _logger.info(f"🖥️ Moving the cursor to scroll at {x}, {y}")
+                    _logger.info(f"🐁 Moving the cursor to scroll at {x}, {y}")
                     pyautogui.moveTo(x, y, duration=0)
                 if sy:
-                    _logger.info(f"🖥️ Scrolling by {sy}")
+                    _logger.info(f"🐁 Scrolling by {sy}")
                     pyautogui.scroll(sy)
                 if sx:
-                    _logger.info(f"🖥️ Horizontally scrolling by {sx}")
+                    _logger.info(f"🐁 Horizontally scrolling by {sx}")
                     try:
                         pyautogui.hscroll(sx)
                     except Exception as ex:
                         _logger.exception(f"{action} failed; possibly not supported on this platform: {ex}")
 
             case TypeAction(text=text):
-                _logger.info(f"🖥️ Typing {text!r}")
+                _logger.info(f"⌨️ Typing {text!r}")
                 pyautogui.write(text, interval=0.02)
                 if not text:
                     _logger.warning(f"Typed empty text in {action}")
 
             case KeyPressAction(keys=keys):
                 keys = [_to_pyauto_key(k) for k in keys if k]
-                _logger.info(f"🖥️ Pressing {keys}")
+                _logger.info(f"⌨️ Pressing {keys}")
                 if len(keys) == 1:
                     pyautogui.press(keys[0])
                 elif len(keys) > 1:
@@ -220,11 +220,13 @@ class _Impl(UIIO):
                     _logger.error(f"No valid keys to press in {action}")
 
             case WaitAction(duration=delay):
-                _logger.info(f"🖥️ Waiting for {delay} seconds while preventing sleep")
-                # The volume keys and cursor movement are used to avoid the lock screen
+                _logger.info(f"💤 Waiting for {delay} seconds")
+                # The random keys and cursor movement are used to avoid the lock screen
                 pyautogui.moveTo(pyautogui.position())
+                pyautogui.press("numlock")
                 pyautogui.press("volumeup")
                 pyautogui.press("volumedown")
+                pyautogui.press("numlock")
                 time.sleep(delay)
 
             case _:

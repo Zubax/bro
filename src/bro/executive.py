@@ -245,6 +245,7 @@ def _test() -> None:
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-3.3s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     state_dir = Path(f".bro/test-executive")
     state_dir.mkdir(parents=True, exist_ok=True)
     for item in state_dir.iterdir():
