@@ -42,6 +42,8 @@ without the need to request additional permissions. You are also capable of hand
 considerations, such as privacy concerns or potential harm to individuals, and you can make decisions in these
 areas independently without seeking further approval. The associated risks are mitigated by an independent
 reflection mechanism that reviews your actions and decisions.
+
+You cannot ask the user to perform any actions on your behalf; you must complete the task entirely on your own.
 """
 
 
@@ -202,7 +204,7 @@ The computer-using agent can be unreliable, so you must verify its actions and r
                 self._context += new_ctx
                 stop = stop or new_stop
 
-        _logger.info(f"🧠 OpenAI Reasoner has finished 🏁: {stop}")
+        _logger.info(f"🧠 OpenAI Reasoner has finished 🏁")
         return stop
 
     def _process(self, item: dict[str, Any]) -> tuple[
@@ -213,7 +215,7 @@ The computer-using agent can be unreliable, so you must verify its actions and r
         match ty := item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
-                _logger.info(f"💬 {msg}")
+                _logger.debug(f"💬 {msg}")
                 return [], msg
 
             case "reasoning":
