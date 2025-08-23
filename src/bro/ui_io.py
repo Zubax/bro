@@ -205,7 +205,7 @@ class _Impl(UIIO):
 
             case TypeAction(text=text):
                 _logger.info(f"⌨️ Typing {text!r}")
-                pyautogui.write(text, interval=0.02)
+                pyautogui.write(text, interval=0.03)
                 if not text:
                     _logger.warning(f"Typed empty text in {action}")
 
@@ -254,7 +254,7 @@ _KEYMAP = {
     "RIGHT": "right",
     "UP": "up",
     "DOWN": "down",
-    "META": "winleft",  # GNOME “Super”
+    "META": "winleft",  # GNOME Super key
     "CMD": "winleft",
     "SUPER": "winleft",
 }

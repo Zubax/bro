@@ -67,14 +67,15 @@ class _OpenAI_CUA_Executive(Executive):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "report": {
+                        "detailed_report": {
                             "type": "string",
-                            "description": "Final detailed report of the task, including success status, actions taken,"
+                            "description": "Final detailed report of the task, including success status,"
+                            " a full detailed list of the actions taken,"
                             " and any noteworthy events.",
                         },
                     },
                     "additionalProperties": True,
-                    "required": ["report"],
+                    "required": ["detailed_report"],
                 },
             },
         ]
