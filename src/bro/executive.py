@@ -89,7 +89,7 @@ class OpenAiCuaExecutive(Executive):
         ]
 
     def act(self, goal: str) -> str:
-        _logger.info(f"🥅 OpenAI Executive goal: {goal}")
+        _logger.debug(f"🥅 OpenAI Executive goal: {goal}")
         self._context.append(
             {
                 "role": "user",
@@ -134,7 +134,7 @@ class OpenAiCuaExecutive(Executive):
                 self._context += new_ctx
                 stop = stop or new_stop
 
-        _logger.info(f"🏁 OpenAI Executive finished: {stop}")
+        _logger.debug(f"🏁 OpenAI Executive finished: {stop}")
         return stop
 
     def _process(self, item: dict[str, Any]) -> tuple[

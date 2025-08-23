@@ -87,9 +87,11 @@ Perform computer operations to complete the assigned task using a separate small
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites,
 manipulating files, and so on. The actions are performed by a separate small agent that can be easily confused,
-so be very specific and detailed in your instructions. The computer-using agent can see the screen in real time
-so you don't need to explain the current state of the screen. You will be provided with a screenshot per interaction,
-so please do not ask the computer-using agent to take screenshots explicitly or to describe the screen.
+so be very specific and detailed in your instructions, and avoid instructions longer than about 5 steps or so.
+
+The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
+You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
+screenshots explicitly or to describe the screen.
 
 Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly
 (it can, however, use instant messaging or email applications to communicate with humans if the task requires so).
@@ -168,7 +170,9 @@ The computer-using agent can be unreliable, so you must verify its actions and r
                     "content": [
                         {
                             "type": "input_text",
-                            "text": "The most recent screenshot is as follows.",
+                            "text": "The most recent screenshot is as follows."
+                            " You will be provided with a screenshot per interaction,"
+                            " so you don't need to ask for it explicitly.",
                         },
                         {
                             "type": "input_image",
