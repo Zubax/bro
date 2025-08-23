@@ -51,6 +51,8 @@ class OpenAiReasoner(Reasoner):
     _TOOLS = [
         {
             "type": "web_search_preview",
+            "user_location": {"type": "approximate"},
+            "search_context_size": "low",
         },
         {
             "type": "code_interpreter",
@@ -87,18 +89,31 @@ Perform computer operations to complete the assigned task using a separate small
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites,
 manipulating files, and so on. The actions are performed by a separate small agent that can be easily confused,
-so be very specific and detailed in your instructions, and avoid instructions longer than about 5 steps or so.
+so be very specific and detailed in your instructions, and avoid instructions longer than a few steps.
+It is recommended to break down complex tasks into smaller, manageable steps and use multiple calls to this function
+to achieve the overall goal.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
 screenshots explicitly or to describe the screen.
 
+YOU MUST NOT ASK THE COMPUTER-USING AGENT TO TAKE SCREENSHOTS, as that will effectively distract it from the task;
+you will be given a screenshot automatically per interaction regardless of what the computer-using agent does.
+
 Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly
 (it can, however, use instant messaging or email applications to communicate with humans if the task requires so).
 
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
+
+TASK EXAMPLES:
+
+Example 1: Click the web browser icon on the desktop to open it and navigate to example.com.
+
+Example 2: Open the file explorer, navigate to the Documents folder, create a new text file named notes.txt,
+and open it.
+
+Example 3: Open the email application and begin composing a new email to pavel.kirienko@zubax.com.
 """,
-            # TODO: add examples
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -121,7 +136,7 @@ The computer-using agent can be unreliable, so you must verify its actions and r
         ui: UiObserver,
         state_dir: Path,
         openai_api_key: str,
-        model: str = "gpt-5-mini",
+        model: str = "gpt-5",
         reasoning_effort: str = "medium",
     ) -> None:
         self._exe = executive
