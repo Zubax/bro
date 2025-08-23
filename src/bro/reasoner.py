@@ -62,9 +62,10 @@ class OpenAiReasoner(Reasoner):
             "type": "function",
             "name": "stop",
             "description": """\
-Report that no further action will be performed due to successful completion of the task or impossibility to complete it.
-Explain in detail: whether the task was successful or failed, and why; which actions were taken;
-and if any unusual or noteworthy events were observed.
+Report that the final goal has been achieved and the task is complete, or there is no possible way to complete it.
+Use this function to terminate the task.
+When invoking this function, you must explain in detail whether the task was successful or failed, and why;
+which actions were taken; and if any unusual or noteworthy events were observed.
 It is mandatory to provide a brief list of the actions taken to complete the task.
 """,
             "parameters": {
@@ -103,6 +104,18 @@ you will be given a screenshot automatically per interaction regardless of what 
 Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly
 (it can, however, use instant messaging or email applications to communicate with humans if the task requires so).
 
+Some tasks can be time-sensitive, such as entering one-time passwords or responding to messages.
+In such cases, you must prefer delegating larger parts of the task to the computer-using agent,
+as it is able to act faster than you.
+
+Remember that the computer-using agent is not a human, and as such, some computer usage patterns that are appropriate
+for humans may be suboptimal for the computer-using agent. For example, usually there is no point in copying and pasting
+text, as the computer-using agent can type very fast and accurately. Similarly, using keyboard shortcuts
+is usually preferable to using the mouse, as it is faster and more reliable. The computer-using agent is aware of
+its own capabilities and limitations and it is recommended to avoid micromanaging its actions, allowing it to decide
+how to manipulate the computer to achieve the desired outcome. The agent keeps the memory of its interactions and
+you can ask it to recall the data it saw a few steps ago.
+
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
 
 TASK EXAMPLES:
@@ -113,6 +126,10 @@ Example 2: Open the file explorer, navigate to the Documents folder, create a ne
 and open it.
 
 Example 3: Open the email application and begin composing a new email to pavel.kirienko@zubax.com.
+
+Example 4 (time-sensitive, hence larger task): Open the one-time passwords application,
+go to the login page for example.com in the web browser, proceed to the 2FA step,
+and enter the current one-time password for the example.com account.
 """,
             "parameters": {
                 "type": "object",
