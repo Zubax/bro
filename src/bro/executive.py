@@ -10,7 +10,7 @@ from pathlib import Path
 from openai import OpenAI
 
 from bro import ui_io
-from bro.ui_io import UIIO
+from bro.ui_io import UiController
 from bro.util import truncate, image_to_base64
 
 _logger = logging.getLogger(__name__)
@@ -19,11 +19,7 @@ _logger = logging.getLogger(__name__)
 class Executive(ABC):
     @abstractmethod
     def act(self, goal: str) -> str:
-        pass
-
-
-def make(uiio: UIIO, state_dir: Path) -> Executive:
-    return _OpenAI_CUA_Executive(uiio, state_dir)
+        raise NotImplementedError
 
 
 _OPENAI_CUA_PROMPT = """
@@ -37,20 +33,21 @@ you must invoke the stop function with a detailed report of the outcome and any 
 """
 
 
-class StopError(RuntimeError):
-    def __init__(self, message: str, report: str):
-        self.report = report
-        super().__init__(message)
-
-
-class _OpenAI_CUA_Executive(Executive):
-    def __init__(self, uiio: UIIO, state_dir: Path) -> None:
+class OpenAiCuaExecutive(Executive):
+    def __init__(
+        self,
+        *,
+        ui: UiController,
+        state_dir: Path,
+        openai_api_key: str,
+        model: str = "computer-use-preview",
+    ) -> None:
         # TODO: do we need reflection here?
-        self._uiio = uiio
+        self._ui = ui
         self._dir = state_dir
-        self._client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self._model = "computer-use-preview"
-        screen_size = self._uiio.screen_width_height
+        self._client = OpenAI(api_key=openai_api_key)
+        self._model = model
+        screen_size = self._ui.screen_width_height
         self._tools = [
             {
                 "type": "computer_use_preview",
@@ -92,7 +89,7 @@ class _OpenAI_CUA_Executive(Executive):
         ]
 
     def act(self, goal: str) -> str:
-        _logger.info(f"🥅 {goal}")
+        _logger.info(f"🥅 OpenAI Executive goal: {goal}")
         self._context.append(
             {
                 "role": "user",
@@ -133,51 +130,63 @@ class _OpenAI_CUA_Executive(Executive):
 
             self._context += output
             for item in output:
-                try:
-                    self._context += self._process(item)
-                except StopError as ex:
-                    stop = ex.report
+                new_ctx, new_stop = self._process(item)
+                self._context += new_ctx
+                if new_stop is not None:
+                    stop = new_stop
 
-        _logger.info(f"🏁 {stop}")
+        _logger.info(f"🏁 OpenAI Executive finished: {stop}")
         return stop
 
-    def _process(self, item: dict[str, Any]) -> list[dict[str, Any]]:
+    def _process(self, item: dict[str, Any]) -> tuple[
+        list[dict[str, Any]],
+        str | None,
+    ]:
         _logger.debug(f"Processing item: {item}")
         match item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
                 _logger.debug(f"💬 {msg}")
-                raise StopError("Task interrupted", msg)
+                return [], msg
 
             case "reasoning":
                 for x in item["summary"]:
                     if x.get("type") == "summary_text":
                         _logger.info(f"💭 {x['text']}")
-                return []
+                return [], None
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
+                result = None
+                final = None
                 match name:
                     case "stop":
-                        report = args["report"]
-                        raise StopError(f"Task completed", report)
+                        result = "Task terminated, thank you."
+                        final = args["detailed_report"]
                     case _:
-                        _logger.error(f"Unrecognized function call: {name}({args})")
-                        return []
+                        result = f"Unrecognized function call: {name}({args})"
+                        _logger.error(result)
+                return [
+                    {
+                        "type": "function_call_output",
+                        "call_id": item["call_id"],
+                        "output": json.dumps(result),
+                    }
+                ], final
 
             case "computer_call":
                 act = item["action"]
                 match ty := act["type"]:
                     case "move":
-                        self._uiio.do(ui_io.MoveAction(coord=self._get_coords(act)))
+                        self._ui.do(ui_io.MoveAction(coord=self._get_coords(act)))
                     case "click":
-                        self._uiio.do(ui_io.ClickAction(coord=self._get_coords(act), button=act.get("button", "left")))
+                        self._ui.do(ui_io.ClickAction(coord=self._get_coords(act), button=act.get("button", "left")))
                     case "double_click":
-                        self._uiio.do(ui_io.ClickAction(coord=self._get_coords(act), button="left", count=2))
+                        self._ui.do(ui_io.ClickAction(coord=self._get_coords(act), button="left", count=2))
                     case "drag":
-                        self._uiio.do(ui_io.DragAction(path=[self._get_coords(pt) for pt in act.get("path", [])]))
+                        self._ui.do(ui_io.DragAction(path=[self._get_coords(pt) for pt in act.get("path", [])]))
                     case "scroll":
-                        self._uiio.do(
+                        self._ui.do(
                             ui_io.ScrollAction(
                                 coord=self._get_coords(act) if "x" in act and "y" in act else None,
                                 scroll_x=int(act.get("scroll_x", 0) or 0),
@@ -185,15 +194,15 @@ class _OpenAI_CUA_Executive(Executive):
                             )
                         )
                     case "type":
-                        self._uiio.do(ui_io.TypeAction(text=act.get("text", "") or ""))
+                        self._ui.do(ui_io.TypeAction(text=act.get("text", "") or ""))
                     case "keypress":
-                        self._uiio.do(
+                        self._ui.do(
                             ui_io.KeyPressAction(
                                 keys=[key for key in act.get("keys", []) if isinstance(key, str) and key.strip()]
                             )
                         )
                     case "wait":
-                        self._uiio.do(ui_io.WaitAction())
+                        self._ui.do(ui_io.WaitAction())
                     case "screenshot":
                         pass  # we always return a fresh screenshot after each step
                     case _:
@@ -214,29 +223,29 @@ class _OpenAI_CUA_Executive(Executive):
                         "image_url": f"data:image/png;base64,{scr}",
                     },
                 }
-                return [output]
+                return [output], None
 
             case _:
                 _logger.error(f"Unrecognized item type: {item['type']}")
                 _logger.debug(f"Full item: {item}")
                 # Do we need better handling here?
-                return []
+                return [], None
 
     def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / "context.json"
+        f_context = self._dir / "executive_context.json"
         f_context.write_text(json.dumps(context, indent=2))
 
     def _save_response(self, response: dict[str, Any]) -> None:
-        f_response = self._dir / "response.json"
+        f_response = self._dir / "executive_response.json"
         f_response.write_text(json.dumps(response, indent=2))
 
     def _screenshot_b64(self) -> str:
-        im = self._uiio.screenshot()
-        im.save(self._dir / f"executive-{datetime.now().isoformat()}.png", format="PNG")
+        im = self._ui.screenshot()
+        im.save(self._dir / f"executive_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
 
     def _get_coords(self, act: dict[str, Any]) -> ui_io.ScreenCoord:
-        # w, h = self._uiio.screen_width_height
+        # w, h = self._ui.screen_width_height
         # return (int(w * act["x"] / 1024), int(h * act["y"] / 1024))
         return int(act["x"]), int(act["y"])
 
@@ -256,7 +265,11 @@ def _test() -> None:
             for sub_item in item.iterdir():
                 sub_item.unlink()
             item.rmdir()
-    exe = make(ui_io.make(), state_dir)
+    exe = OpenAiCuaExecutive(
+        ui=ui_io.make_controller(),
+        state_dir=state_dir,
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+    )
     prompt = (
         " ".join(sys.argv[1:])
         if len(sys.argv) > 1

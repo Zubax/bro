@@ -77,7 +77,7 @@ class WaitAction(Action):
     duration: float = 10.0  # seconds
 
 
-class UIIO(ABC):
+class UiObserver(ABC):
     @property
     @abstractmethod
     def screen_width_height(self) -> tuple[int, int]:
@@ -87,16 +87,18 @@ class UIIO(ABC):
     def screenshot(self) -> Image.Image:
         raise NotImplementedError
 
+
+class UiController(UiObserver):
     @abstractmethod
     def do(self, action: Any) -> None:
         raise NotImplementedError
 
 
-def make() -> UIIO:
+def make_controller() -> UiController:
     return _Impl()
 
 
-class _Impl(UIIO):
+class _Impl(UiController):
     def __init__(self) -> None:
         sz = pyautogui.size()
         self._screen_wh = int(sz[0]), int(sz[1])
