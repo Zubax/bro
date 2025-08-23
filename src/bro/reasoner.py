@@ -51,10 +51,12 @@ class OpenAiReasoner(Reasoner):
         {
             "type": "function",
             "name": "stop",
-            "description": "Report that no further action will be performed due to successful completion of the task"
-            " or impossibility to complete it."
-            " Explain in detail: whether the task was successful or failed, and why;"
-            " which actions were taken; and if any unusual or noteworthy events were observed.",
+            "description": """\
+Report that no further action will be performed due to successful completion of the task or impossibility to complete it.
+Explain in detail: whether the task was successful or failed, and why; which actions were taken;
+and if any unusual or noteworthy events were observed.
+It is mandatory to provide a brief list of the actions taken to complete the task.
+""",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -72,13 +74,17 @@ class OpenAiReasoner(Reasoner):
         {
             "type": "function",
             "name": "use_computer",
-            "description": "Perform computer operations to complete the assigned task."
-            " Use this function to perform any computer operations, such as"
-            " opening applications, navigating to websites, manipulating files, and so on."
-            " The actions are implemented by a separate small agent that can be easily confused,"
-            " so be very specific and detailed in your instructions."
-            " The small agent can see the screen in real time so you don't need to explain the current state of"
-            " the screen.",
+            "description": """\
+Perform computer operations to complete the assigned task.
+
+Use this function to perform any computer operations, such as opening applications, navigating to websites,
+manipulating files, and so on. The actions are performed by a separate small agent that can be easily confused,
+so be very specific and detailed in your instructions. The small agent can see the screen in real time so you don't
+need to explain the current state of the screen. You will be provided with a screenshot per interaction,
+so please do not ask the small agent to take screenshots explicitly or to describe the screen.
+
+The small agent can be unreliable, so you must verify its actions and repeat them if necessary.
+""",
             # TODO: add examples
             "parameters": {
                 "type": "object",

@@ -55,7 +55,7 @@ def _build_context(paths: list[str]) -> Context:
                     all_files.append(file_path)
         else:
             all_files.append(path)
-    _logger.info(f"Context files:\n" + "\n".join(f"{i+1:02d}. {f}" for i, f in enumerate(all_files)))
+    _logger.info(f"🗂️ Context files:\n" + "\n".join(f"{i+1:02d}. {f}" for i, f in enumerate(all_files)))
 
     # Read the prompt and exclude it from the context
     prompt_files = [f for f in all_files if f.name == "prompt.txt"]
