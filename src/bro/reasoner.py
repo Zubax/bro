@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os
+import copy
 import json
 from abc import ABC, abstractmethod
 from typing import Any
@@ -14,7 +14,7 @@ from openai.types.file_create_params import ExpiresAfter
 
 from bro.executive import Executive
 from bro.ui_io import UiObserver
-from bro.util import image_to_base64, truncate
+from bro.util import image_to_base64, truncate, format_exception
 
 _logger = logging.getLogger(__name__)
 
@@ -26,16 +26,75 @@ class Context:
 
 
 class Reasoner(ABC):
-    def run(self, ctx: Context) -> str:
+    @abstractmethod
+    def run(self, ctx: Context, /) -> str:
         pass
 
 
 _OPENAI_REASONER_PROMPT = """
-Say mew
+You are a confident AI agent designed to autonomously complete complex tasks by reasoning, planning,
+and executing actions on a computer. You control a smaller specialized LLM agent that can actually manipulate
+the computer and report back the results of its actions; the smaller agent is accessible via the `use_computer`
+function.
 """
 
 
 class OpenAiReasoner(Reasoner):
+    _TOOLS = [
+        {
+            "type": "web_search_preview",
+        },
+        {
+            "type": "code_interpreter",
+            "container": {"type": "auto"},
+        },
+        {
+            "type": "function",
+            "name": "stop",
+            "description": "Report that no further action will be performed due to successful completion of the task"
+            " or impossibility to complete it."
+            " Explain in detail: whether the task was successful or failed, and why;"
+            " which actions were taken; and if any unusual or noteworthy events were observed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "detailed_report": {
+                        "type": "string",
+                        "description": "Final detailed report of the task, including success status,"
+                        " a full detailed list of the actions taken,"
+                        " and any noteworthy events.",
+                    },
+                },
+                "additionalProperties": True,
+                "required": ["detailed_report"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "use_computer",
+            "description": "Perform computer operations to complete the assigned task."
+            " Use this function to perform any computer operations, such as"
+            " opening applications, navigating to websites, manipulating files, and so on."
+            " The actions are implemented by a separate small agent that can be easily confused,"
+            " so be very specific and detailed in your instructions."
+            " The small agent can see the screen in real time so you don't need to explain the current state of"
+            " the screen.",
+            # TODO: add examples
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "A detailed description of the task to perform.",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["task"],
+            },
+        },
+        # TODO: add reflection!
+    ]
+
     def __init__(
         self,
         *,
@@ -52,31 +111,7 @@ class OpenAiReasoner(Reasoner):
         self._client = OpenAI(api_key=openai_api_key)
         self._model = model
         self._reasoning_effort = reasoning_effort
-        self._tools = [
-            {"type": "web_search_preview"},
-            {"type": "code_interpreter", "container": {"type": "auto"}},
-            {
-                "type": "function",
-                "name": "stop",
-                "description": "Report that no further action will be performed due to successful completion of the task"
-                " or impossibility to complete it."
-                " Explain in detail: whether the task was successful or failed, and why;"
-                " which actions were taken; and if any unusual or noteworthy events were observed.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "detailed_report": {
-                            "type": "string",
-                            "description": "Final detailed report of the task, including success status,"
-                            " a full detailed list of the actions taken,"
-                            " and any noteworthy events.",
-                        },
-                    },
-                    "additionalProperties": True,
-                    "required": ["detailed_report"],
-                },
-            },
-        ]
+        self._tools = copy.deepcopy(self._TOOLS)
         self._context = [
             {
                 "role": "system",
@@ -84,7 +119,7 @@ class OpenAiReasoner(Reasoner):
             },
         ]
 
-    def run(self, ctx: Context) -> str:
+    def run(self, ctx: Context, /) -> str:
         self._context += [
             {
                 "role": "user",
@@ -92,10 +127,6 @@ class OpenAiReasoner(Reasoner):
                     {
                         "type": "input_text",
                         "text": ctx.prompt,
-                    },
-                    {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{self._screenshot_b64()}",
                     },
                 ],
             }
@@ -114,6 +145,21 @@ class OpenAiReasoner(Reasoner):
         _logger.info("🧠 OpenAI Reasoner is ready to dazzle 🫠")
         stop = None
         while stop is None:
+            self._context += [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "The most recent screenshot is as follows.",
+                        },
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:image/png;base64,{self._screenshot_b64()}",
+                        },
+                    ],
+                }
+            ]
             self._context = truncate(self._context)
             self._save_context(self._context)
             # noinspection PyTypeChecker
@@ -136,44 +182,66 @@ class OpenAiReasoner(Reasoner):
                 if x.get("type") == "reasoning" and "status" in x:
                     del x["status"]
 
-            # TODO: loop --- feed next screenshot etc.
             for item in output:
-                try:
-                    self._context += self._process(item)
-                except _StopError as ex:
-                    stop = ex.report
+                new_ctx, new_stop = self._process(item)
+                self._context += new_ctx
+                stop = stop or new_stop
 
         _logger.info(f"🧠 OpenAI Reasoner has finished 🏁: {stop}")
         return stop
 
-    def _process(self, item: dict[str, Any]) -> list[dict[str, Any]]:
+    def _process(self, item: dict[str, Any]) -> tuple[
+        list[dict[str, Any]],
+        str | None,
+    ]:
         _logger.debug(f"Processing item: {item}")
         match ty := item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
-                _logger.debug(f"💬 {msg}")
-                raise _StopError("Task interrupted", msg)
+                _logger.info(f"💬 {msg}")
+                return [], msg
 
             case "reasoning":
                 for x in item["summary"]:
                     if x.get("type") == "summary_text":
                         _logger.info(f"💭 {x['text']}")
-                return []
+                return [], None
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
+                result = None
+                final = None
                 match name:
                     case "stop":
-                        report = args["report"]
-                        raise _StopError(f"Task completed", report)
+                        result = "Task terminated, thank you."
+                        final = args["detailed_report"]
+                        _logger.info(f"🏁 Stopping: {final}")
+                    case "use_computer":
+                        task = args["task"]
+                        _logger.info(f"🖥️ Invoking the executive: {task}")
+                        try:
+                            result = self._exe.act(task)
+                        except Exception as ex:
+                            _logger.exception(f"Exception during use_computer: {ex}")
+                            result = (
+                                f"ERROR: Exception during use_computer: {type(ex).__name__}: {ex}\n"
+                                + format_exception(ex)
+                            )
                     case _:
-                        _logger.error(f"Unrecognized function call: {name}({args})")
-                        return []
+                        result = f"ERROR: Unrecognized function call: {name!r}({args})"
+                        _logger.error(f"Unrecognized function call: {name!r}({args})")
+                return [
+                    {
+                        "type": "function_call_output",
+                        "call_id": item["call_id"],
+                        "output": json.dumps(result),
+                    }
+                ], final
 
             case _:
                 _logger.error(f"Unrecognized item type: {ty!r}")
                 _logger.debug(f"Full item: {item}")
-                return []
+                return [], None
 
     def _save_context(self, context: list[dict[str, Any]]) -> None:
         f_context = self._dir / "reasoner_context.json"
@@ -187,12 +255,6 @@ class OpenAiReasoner(Reasoner):
         im = self._ui.screenshot()
         im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
-
-
-class _StopError(RuntimeError):
-    def __init__(self, message: str, report: str):
-        self.report = report
-        super().__init__(message)
 
 
 def _openai_upload_files(

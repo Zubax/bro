@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 import base64
+import traceback
 from io import BytesIO
 from PIL import Image
 
@@ -17,3 +18,7 @@ def truncate(x: list[Any], head: int = 100, tail: int = 1000) -> list[Any]:
     if len(x) <= head + tail:
         return x
     return x[:head] + x[-tail:]
+
+
+def format_exception(exc: BaseException) -> str:
+    return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))

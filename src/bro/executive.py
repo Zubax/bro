@@ -132,8 +132,7 @@ class OpenAiCuaExecutive(Executive):
             for item in output:
                 new_ctx, new_stop = self._process(item)
                 self._context += new_ctx
-                if new_stop is not None:
-                    stop = new_stop
+                stop = stop or new_stop
 
         _logger.info(f"🏁 OpenAI Executive finished: {stop}")
         return stop
@@ -164,8 +163,8 @@ class OpenAiCuaExecutive(Executive):
                         result = "Task terminated, thank you."
                         final = args["detailed_report"]
                     case _:
-                        result = f"Unrecognized function call: {name}({args})"
-                        _logger.error(result)
+                        result = f"ERROR: Unrecognized function call: {name!r}({args})"
+                        _logger.error(f"Unrecognized function call: {name!r}({args})")
                 return [
                     {
                         "type": "function_call_output",

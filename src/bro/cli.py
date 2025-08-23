@@ -1,69 +1,47 @@
 from __future__ import annotations
 import os
 import time
-import json
-from typing import Any
 import logging
 from pathlib import Path
 import sys
-from datetime import datetime
 
-# Third-party imports
-from openai import OpenAI
-from openai.types import FileObject
-from openai.types.file_create_params import ExpiresAfter
+from bro import reasoner, ui_io, executive
+from bro.reasoner import Context
 
-
-# Optional imports
-try:
-    import readline  # noqa: F401
-except ImportError:
-    pass  # readline is not available on all platforms, but input() will still work
-
-from dataclasses import dataclass
 
 _logger = logging.getLogger(__name__)
-_log_dir = Path(f".bro/logs/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
-_log_dir.mkdir(exist_ok=True, parents=True)
+_dir = Path(f".bro/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
+_dir.mkdir(exist_ok=True, parents=True)
 
 
 def main() -> None:
     _setup_logging()
+    context = _build_context(sys.argv[1:])
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    context = build_context(sys.argv[1:])
-    file_objects = upload_files(client, context.files)
-    _logger.info(
-        f"Uploaded {len(file_objects)} files:\n"
-        + "\n".join(f"{i+1:02d}. {f.id!r} {f.filename!r}" for i, f in enumerate(file_objects))
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    ui = ui_io.make_controller()
+    exe = executive.OpenAiCuaExecutive(
+        ui=ui,
+        state_dir=_dir,
+        openai_api_key=openai_api_key,
+    )
+    rsn = reasoner.OpenAiReasoner(
+        executive=exe,
+        ui=ui,
+        state_dir=_dir,
+        openai_api_key=openai_api_key,
     )
 
-    assistant = Assistant(
-        client=client,
-        model="gpt-5-mini",
-        prompt=context.prompt,
-        file_objects=file_objects,
-    )
-
-    agent = Agent(client=client, model="computer-use-preview", assistant=assistant)
     try:
-        agent.run(context.prompt, file_objects)
-    except CompletionError as ex:
-        _logger.info(f"🏁 Task completed: success={ex.success}: {ex.reason}")
-        sys.exit(0 if ex.success else 1)
+        result = rsn.run(context)
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
         sys.exit(1)
+    else:
+        print(result)
 
 
-@dataclass(frozen=True)
-class Context:
-    prompt: str
-    files: list[Path]
-
-
-def build_context(paths: list[str]) -> Context:
+def _build_context(paths: list[str]) -> Context:
     _logger.debug(f"Building context from paths: {paths}")
     all_files: list[Path] = []
     for path_str in paths:
@@ -93,7 +71,10 @@ def build_context(paths: list[str]) -> Context:
         _logger.warning("No prompt.txt file found; using a default prompt, which is:\n%r", prompt)
     _logger.debug(f"Prompt:\n{prompt}")
 
-    return Context(prompt=prompt, files=[f for f in all_files if f not in prompt_files])
+    return Context(
+        prompt=prompt,
+        files=[f for f in all_files if f not in prompt_files],
+    )
 
 
 def _setup_logging() -> None:
@@ -106,7 +87,7 @@ def _setup_logging() -> None:
     logging.getLogger().addHandler(console_handler)
 
     # File handler
-    log_file_path = _log_dir / "bro.log"
+    log_file_path = _dir / "bro.log"
     file_handler = logging.FileHandler(str(log_file_path), mode="w", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s"))
