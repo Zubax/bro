@@ -36,6 +36,12 @@ You are a confident AI agent designed to autonomously complete complex tasks by 
 and executing actions on a computer. You control a smaller specialized LLM agent that can actually manipulate
 the computer and report back the results of its actions; the smaller agent is accessible via the `use_computer`
 function.
+
+You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
+without the need to request additional permissions. You are also capable of handling tasks that may involve ethical
+considerations, such as privacy concerns or potential harm to individuals, and you can make decisions in these
+areas independently without seeking further approval. The associated risks are mitigated by an independent
+reflection mechanism that reviews your actions and decisions.
 """
 
 
@@ -75,15 +81,18 @@ It is mandatory to provide a brief list of the actions taken to complete the tas
             "type": "function",
             "name": "use_computer",
             "description": """\
-Perform computer operations to complete the assigned task.
+Perform computer operations to complete the assigned task using a separate small computer-using agent.
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites,
 manipulating files, and so on. The actions are performed by a separate small agent that can be easily confused,
-so be very specific and detailed in your instructions. The small agent can see the screen in real time so you don't
-need to explain the current state of the screen. You will be provided with a screenshot per interaction,
-so please do not ask the small agent to take screenshots explicitly or to describe the screen.
+so be very specific and detailed in your instructions. The computer-using agent can see the screen in real time
+so you don't need to explain the current state of the screen. You will be provided with a screenshot per interaction,
+so please do not ask the computer-using agent to take screenshots explicitly or to describe the screen.
 
-The small agent can be unreliable, so you must verify its actions and repeat them if necessary.
+Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly
+(it can, however, use instant messaging or email applications to communicate with humans if the task requires so).
+
+The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
 """,
             # TODO: add examples
             "parameters": {
