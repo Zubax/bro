@@ -1,20 +1,30 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools~=80.9"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "brocui"
+name = "bro-cua"
 authors = [
     {name = "Pavel Kirienko", email = "pavel.kirienko@zubax.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.10"
+dynamic = ["version"]
 dependencies = [
-    "openai~=1.100",
+    "openai~=1.101",
     "PyAutoGUI~=0.9",
     "mss~=10.1",
     "Pillow~=11.1",
 ]
+
+[project.scripts]
+bro = "bro.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.dynamic]
+version = { attr = "bro.__version__" }
 
 # --------------------------------------------------  BLACK  --------------------------------------------------
 [tool.black]
