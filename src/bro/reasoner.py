@@ -203,7 +203,10 @@ Example 3: Open the email application and begin composing a new email to pavel.k
                 model=self._model,
                 input=self._context,
                 tools=self._tools,
-                reasoning={"effort": self._reasoning_effort},
+                reasoning={
+                    "effort": self._reasoning_effort,
+                    "summary": "detailed",
+                },
                 text={"verbosity": "low"},
             ).model_dump()
             self._save_response(response)
@@ -258,11 +261,13 @@ Example 3: Open the email application and begin composing a new email to pavel.k
                         try:
                             result = self._exe.act(task)
                         except Exception as ex:
-                            _logger.exception(f"Exception during use_computer: {ex}")
+                            _logger.exception(f"🖥️ Exception during execution: {ex}")
                             result = (
                                 f"ERROR: Exception during use_computer: {type(ex).__name__}: {ex}\n"
                                 + format_exception(ex)
                             )
+                        else:
+                            _logger.info(f"🖥️ Executive report: {result}")
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")

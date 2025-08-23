@@ -74,7 +74,7 @@ class KeyPressAction(Action):
 
 @dataclass(frozen=True)
 class WaitAction(Action):
-    duration: float = 10.0  # seconds
+    duration: float = 5.0  # seconds
 
 
 class UiObserver(ABC):
