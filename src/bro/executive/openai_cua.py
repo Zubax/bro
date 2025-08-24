@@ -1,12 +1,13 @@
 from __future__ import annotations
 import os
 import json
+import time
 from typing import Any
 import logging
 from datetime import datetime
 from pathlib import Path
 
-from openai import OpenAI
+from openai import OpenAI, InternalServerError
 
 from bro import ui_io
 from bro.executive import Executive
@@ -82,6 +83,7 @@ class OpenAiCuaExecutive(Executive):
                 ],
             },
         ]
+        self._retry_attempts = 5
 
     def act(self, goal: str) -> str:
         _logger.debug(f"🥅 OpenAI Executive goal: {goal}")
@@ -104,16 +106,30 @@ class OpenAiCuaExecutive(Executive):
         while stop is None:
             ctx = truncate(ctx)
             self._save_context(ctx)
-            # noinspection PyTypeChecker
-            response = self._client.responses.create(
-                model=self._model,
-                input=ctx,
-                tools=self._tools,
-                truncation="auto",
-                reasoning={
-                    "summary": "concise",  # "computer-use-preview" only supports "concise"
-                },
-            ).model_dump()
+            # The computer-use-preview model is still quite unstable, so we implement retries here.
+            for attempt in range(self._retry_attempts):
+                try:
+                    # noinspection PyTypeChecker
+                    response = self._client.responses.create(
+                        model=self._model,
+                        input=ctx,
+                        tools=self._tools,
+                        truncation="auto",
+                        reasoning={
+                            "summary": "concise",  # "computer-use-preview" only supports "concise"
+                        },
+                    ).model_dump()
+                except InternalServerError as exc:
+                    _logger.warning(
+                        f"OpenAI InternalServerError on attempt {attempt + 1}/{self._retry_attempts}: {exc}"
+                    )
+                    if attempt + 1 == self._retry_attempts:
+                        raise
+                else:
+                    break
+                time.sleep(2**attempt)
+            else:
+                assert False, "unreachable"
             self._save_response(response)
 
             output = response["output"]
