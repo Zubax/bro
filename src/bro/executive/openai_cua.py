@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 import json
-from abc import ABC, abstractmethod
 from typing import Any
 import logging
 from datetime import datetime
@@ -10,16 +9,11 @@ from pathlib import Path
 from openai import OpenAI
 
 from bro import ui_io
+from bro.executive import Executive
 from bro.ui_io import UiController
 from bro.util import truncate, image_to_base64
 
 _logger = logging.getLogger(__name__)
-
-
-class Executive(ABC):
-    @abstractmethod
-    def act(self, goal: str) -> str:
-        raise NotImplementedError
 
 
 _OPENAI_CUA_PROMPT = """

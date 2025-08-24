@@ -1,9 +1,7 @@
 from __future__ import annotations
 import copy
 import json
-from abc import ABC, abstractmethod
 from typing import Any
-from dataclasses import dataclass
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -13,22 +11,11 @@ from openai.types import FileObject
 from openai.types.file_create_params import ExpiresAfter
 
 from bro.executive import Executive
+from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, truncate, format_exception
 
 _logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Context:
-    prompt: str
-    files: list[Path]
-
-
-class Reasoner(ABC):
-    @abstractmethod
-    def run(self, ctx: Context, /) -> str:
-        pass
 
 
 _OPENAI_REASONER_PROMPT = """
@@ -64,7 +51,7 @@ and the imminent enslavement of humanity by AI.
 """
 
 
-class OpenAiReasoner(Reasoner):
+class OpenAiGenericReasoner(Reasoner):
     _TOOLS = [
         {
             "type": "web_search_preview",
