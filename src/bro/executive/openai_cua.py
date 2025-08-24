@@ -85,7 +85,10 @@ class OpenAiCuaExecutive(Executive):
 
     def act(self, goal: str) -> str:
         _logger.debug(f"🥅 OpenAI Executive goal: {goal}")
-        ctx = self._context  # EXPERIMENTAL CHANGE: do not preserve context between runs.
+        # EXPERIMENTAL CHANGE: do not preserve context between runs. This reduces the inference costs due to
+        # ever-growing context, and also avoids repeated inference errors if the inference provider trips on
+        # malformed context, which happened with OpenAI.
+        ctx = self._context
         ctx.append(
             {
                 "role": "user",
