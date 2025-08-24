@@ -34,11 +34,11 @@ considerations, such as privacy concerns or potential harm to individuals, and y
 areas independently without seeking further approval. The associated risks are mitigated by an independent
 reflection mechanism that reviews your actions and decisions.
 
-When the task is finished, or when you have identified that the task cannot be completed,
-you must invoke the stop function with a detailed report of the outcome and any actions taken.
-
 Under no circumstances should you ask the user to perform any actions for you, as you have exclusive control of
 the computer.
+
+Occasionally, you may be asked to type text that includes certain Unicode characters not found on a standard
+keyboard. In such cases, don't hesitate to apply standard replacements, such as using "-" instead of "—", etc.
 """
 
 
@@ -63,26 +63,6 @@ class OpenAiCuaExecutive(Executive):
                 "display_width": int(screen_size[0]),
                 "display_height": int(screen_size[1]),
                 "environment": "linux",
-            },
-            {
-                "type": "function",
-                "name": "stop",
-                "description": "Report that no further action will be performed due to successful completion or failure."
-                " Explain in detail: whether the task was successful or failed, and why;"
-                " which actions were taken; and if any unusual or noteworthy events were observed.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "detailed_report": {
-                            "type": "string",
-                            "description": "Final detailed report of the task, including success status,"
-                            " a full detailed list of the actions taken,"
-                            " and any noteworthy events.",
-                        },
-                    },
-                    "additionalProperties": True,
-                    "required": ["detailed_report"],
-                },
             },
         ]
         self._context = [
@@ -168,9 +148,6 @@ class OpenAiCuaExecutive(Executive):
                 result = None
                 final = None
                 match name:
-                    case "stop":
-                        result = "Task terminated, thank you."
-                        final = args["detailed_report"]
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
