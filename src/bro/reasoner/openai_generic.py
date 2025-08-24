@@ -126,11 +126,11 @@ It is mandatory to invoke this function before the first invocation of the `use_
             "description": """\
 Perform computer operations to complete the assigned task using a separate small computer-using agent.
 
-Use this function to perform any computer operations, such as opening applications, navigating to websites,
-manipulating files, and so on. The actions are performed by a separate small agent that can be easily confused,
-so be very specific and detailed in your instructions, and avoid instructions longer than a few steps.
-It is recommended to break down complex tasks into smaller, manageable steps and use multiple calls to this function
-to achieve the overall goal.
+Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
+files, and so on. The actions are performed by a separate small agent that can be easily confused, so be very specific
+and detailed in your instructions, and avoid instructions longer than a couple of steps or a single sentence.
+Break down complex tasks into smaller, manageable steps and use multiple calls to this function to achieve the
+overall goal.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
@@ -164,12 +164,9 @@ TASK EXAMPLES:
 
 Example 1: Click the web browser icon on the desktop to open it and navigate to example.com.
 
-Example 2: Open the file explorer, navigate to the Documents folder, create a new text file named notes.txt,
-and open it.
+Example 2: Open the file explorer, navigate to the Documents folder, and create a new text file named notes.txt.
 
-Example 3: Open the email application and begin composing a new email to pavel.kirienko@zubax.com.
-
-Example 4 (time-sensitive, hence larger task): Open the one-time passwords application,
+Example 3 (time-sensitive, hence larger task): Open the one-time passwords application,
 go to the login page for example.com in the web browser, proceed to the 2FA step,
 and enter the current one-time password for the example.com account.
 """,
