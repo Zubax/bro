@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy
 import json
+import time
 from typing import Any
 import logging
 from datetime import datetime
@@ -192,6 +193,23 @@ and enter the current one-time password for the example.com account.
             " for example, when you are waiting for a human to respond.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False, "required": []},
         },
+        {
+            "type": "function",
+            "name": "suspend",
+            "description": "When you don't have any assigned tasks or you need for a background process to complete,"
+            " use this function to temporarily suspend execution.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "duration_minutes": {
+                        "type": "number",
+                        "description": "The duration to suspend in minutes.",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["duration_minutes"],
+            },
+        },
         # TODO: add reflection!
     ]
 
@@ -354,6 +372,13 @@ and enter the current one-time password for the example.com account.
                     case "get_local_time":
                         result = get_local_time_llm()
                         _logger.info(f"🕰️ Current local time: {result}")
+                    case "suspend":
+                        duration_sec = float(args["duration_minutes"]) * 60
+                        _logger.info(f"😴 Suspending for {duration_sec} seconds...")
+                        time.sleep(duration_sec)
+                        _logger.info("😴 ...resuming")
+                        now = get_local_time_llm()
+                        result = f"Woke up after {duration_sec} seconds of suspension. The current time is: {now}"
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
