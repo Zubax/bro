@@ -14,6 +14,11 @@ class Context:
 
 
 class Reasoner(ABC):
+    """
+    The Reasoner is responsible for planning and decision-making based on the given context,
+    and controlling the Executive to perform actions in the real world.
+    """
+
     @abstractmethod
     def run(self, ctx: Context, /) -> str:
         pass
