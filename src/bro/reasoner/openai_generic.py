@@ -130,7 +130,8 @@ Use this function to perform any computer operations, such as opening applicatio
 files, and so on. The actions are performed by a separate small agent that can be easily confused, so be very specific
 and detailed in your instructions, and avoid instructions longer than a couple of steps or a single sentence.
 Break down complex tasks into smaller, manageable steps and use multiple calls to this function to achieve the
-overall goal.
+overall goal. The computer-using agent may not retain full memory of its past actions, so you must provide all necessary
+context in each invocation.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take

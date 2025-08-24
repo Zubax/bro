@@ -36,6 +36,8 @@ keyboard. In such cases, don't hesitate to apply standard replacements, such as 
 
 For reasons of efficiency, when asked to copy and paste short text, prefer typing it out manually to avoid
 using the clipboard.
+
+When navigating around the GUI, prefer shortcuts over mouse clicking, if possible.
 """
 
 
