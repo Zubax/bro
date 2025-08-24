@@ -8,22 +8,26 @@ from datetime import datetime
 from pathlib import Path
 
 from openai import OpenAI
-from openai.types import FileObject
-from openai.types.file_create_params import ExpiresAfter
 
 from bro.executive import Executive
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
-from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm
+from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
+from bro.util import run_shell_command
 
 _logger = logging.getLogger(__name__)
 
 
 _OPENAI_REASONER_PROMPT = """
 You are a confident AI agent named Bro designed to autonomously complete complex tasks by reasoning, planning,
-and executing actions on a computer. You control a smaller specialized LLM agent that can actually manipulate
-the computer and report back the results of its actions; the smaller agent is accessible via the `use_computer`
-function.
+and executing actions on a computer. You have several tools at your disposal to help you achieve your goals;
+the main ones are:
+
+- `use_computer`: a function that allows you to delegate computer operations to a smaller specialized LLM agent
+  that can manipulate the computer and report back the results of its actions;
+- `shell`: a function that allows you to run shell commands directly on the local system;
+- `read_file`: a function that allows you to read the contents of local files.
+- And several other functions that may be useful to complete the task.
 
 You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
 without the need to request additional permissions. You are also capable of handling tasks that may involve ethical
@@ -39,6 +43,10 @@ using the computer-using agent. This is perfectly safe because you are running i
 
 You are allowed and encouraged to use web search and to ask humans via instant messaging (e.g., Slack)
 or email applications if you need additional information to complete the task.
+
+You are not allowed to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
+because this leads to loss of information. Instead, you can use the `read_file` function to add
+the contents of any file (text or binary) to your context.
 
 If you need credentials to access any accounts or resources, please look for them on the Desktop or in the
 Documents folder, or in any other standard location where such information might be stored.
@@ -161,6 +169,12 @@ avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain
 
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
 
+If you need to retrieve information from a file, it may be more efficient to read the file directly using the
+`read_file` function, rather than asking the computer-using agent to open and read the file from the screen.
+
+If you need to run a shell command, it may be more efficient to run it directly using the `shell` function,
+rather than asking the computer-using agent to open a terminal and run the command from the screen.
+
 TASK EXAMPLES:
 
 Example 1: Click the web browser icon on the desktop to open it and navigate to example.com.
@@ -174,10 +188,7 @@ and enter the current one-time password for the example.com account.
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "task": {
-                        "type": "string",
-                        "description": "A detailed description of the task to perform.",
-                    },
+                    "task": {"type": "string", "description": "A detailed description of the task to perform."},
                 },
                 "additionalProperties": False,
                 "required": ["task"],
@@ -199,13 +210,53 @@ and enter the current one-time password for the example.com account.
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "duration_minutes": {
-                        "type": "number",
-                        "description": "The duration to suspend in minutes.",
-                    },
+                    "duration_minutes": {"type": "number", "description": "The duration to suspend in minutes."},
                 },
                 "additionalProperties": False,
                 "required": ["duration_minutes"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "read_file",
+            "description": """\
+Add the contents of the specified local file (text or binary) to the LLM context (conversation). This function works
+with any file that is accessible on the local system, including files that are not text files (e.g., images, PDFs, etc.)
+
+Sometimes this may be more efficient than reading the file from the computer screen.
+
+The file name doesn't need to be the full path; just a name will suffice; however, if you provide a full or partial
+path, it will help locate the file more quickly and avoid ambiguities.
+""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_name": {
+                        "type": "string",
+                        "description": "The name of the file to read (doesn't have to be a text file)."
+                        " Preferably this should be the full path;"
+                        " if not, the environment will use heuristics to find the file on the computer.",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["file_name"],
+            },
+        },
+        {
+            "type": "function",
+            "name": "shell",
+            "description": "Execute a shell command on the local system and return its output."
+            " Use this function to perform operations that are more easily accomplished via the command line,"
+            " such as file manipulation, system configuration, or running scripts."
+            " Use this as a more reliable alternative to the computer use function when you need to run"
+            " specific commands or scripts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The shell command to execute."},
+                },
+                "additionalProperties": False,
+                "required": ["command"],
             },
         },
         # TODO: add reflection!
@@ -251,7 +302,7 @@ and enter the current one-time password for the example.com account.
         ]
         if ctx.files:
             # Ensure the files are uploaded so we can reference them in the prompt
-            file_objects = _openai_upload_files(self._client, ctx.files)
+            file_objects = openai_upload_files(self._client, ctx.files)
             # We cannot attach content of type "input_file" to the "system" message, it has to be a "user" message.
             for fo in file_objects:
                 self._context[-1]["content"].append(
@@ -334,6 +385,7 @@ and enter the current one-time password for the example.com account.
                 name, args = item["name"], json.loads(item["arguments"])
                 result = None
                 final = None
+                context = []
                 match name:
                     case "stop":
                         result = "Task terminated, thank you."
@@ -367,6 +419,57 @@ and enter the current one-time password for the example.com account.
                                 " Please define a strategy first."
                             )
                             _logger.error("🖥️ Strategy not yet defined; cannot use the computer.")
+                    case "read_file":
+                        file_name = Path(args["file_name"])
+                        _logger.info(f"📄 Reading file: {str(file_name)!r}")
+                        fpath = locate_file(file_name)
+                        if fpath is None:
+                            result = f"ERROR: Failed to read the file: {str(file_name)!r}"
+                            _logger.error(f"Failed to read the file: {str(file_name)!r}")
+                        else:
+                            try:
+                                (f_obj,) = openai_upload_files(self._client, [fpath])
+                            except Exception as ex:
+                                result = f"ERROR: Failed to upload the file {str(fpath)!r}: {type(ex).__name__}: {ex}"
+                                _logger.error(f"Failed to upload the file {str(fpath)!r}: {ex}", exc_info=True)
+                            else:
+                                result = "File read successfully and added to context."
+                                context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"The contents of the file {str(fpath)!r}",
+                                            },
+                                            {"type": "input_file", "file_id": f_obj.id},
+                                        ],
+                                    }
+                                ]
+                    case "shell":
+                        ts = datetime.now().isoformat()
+                        command = args["command"]
+                        _logger.info(f"🖥️ Running shell command: {command!r}")
+                        try:
+                            status, stdout, stderr = run_shell_command(command)
+                        except Exception as ex:
+                            result = (
+                                f"ERROR: Exception during shell command execution: {type(ex).__name__}: {ex}\n"
+                                + format_exception(ex)
+                            )
+                            _logger.error(f"Exception during shell command execution: {ex}", exc_info=True)
+                        else:
+                            result = {
+                                "exit_status": status,
+                                "stdout": stdout,
+                                "stderr": stderr,
+                            }
+                            _logger.info(f"🖥️ Shell command exited with status {status}")
+                            try:
+                                (self._dir / f"reasoner_shell_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")
+                                (self._dir / f"reasoner_shell_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
+                            except Exception as ex:
+                                _logger.error(f"Failed to save shell output: {ex}", exc_info=True)
                     case "get_local_time":
                         result = get_local_time_llm()
                         _logger.info(f"🕰️ Current local time: {result}")
@@ -380,13 +483,14 @@ and enter the current one-time password for the example.com account.
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
-                return [
+                context += [
                     {
                         "type": "function_call_output",
                         "call_id": item["call_id"],
                         "output": json.dumps(result),
                     }
-                ], final
+                ]
+                return context, final
 
             case _:
                 _logger.error(f"Unrecognized item type: {ty!r}")
@@ -405,22 +509,3 @@ and enter the current one-time password for the example.com account.
         im = self._ui.screenshot()
         im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
-
-
-def _openai_upload_files(
-    client: OpenAI,
-    files: list[Path],
-    *,
-    expiration_time: int = 3600 * 24 * 30,
-) -> list[FileObject]:
-    _logger.info(f"📤 Uploading {len(files)} files: {[f.name for f in files]}")
-    file_objects: list[FileObject] = []
-    for file in files:
-        fobj = client.files.create(
-            file=(file.name, file.read_bytes()),  # File name is required! Otherwise the model will refuse to use it!
-            purpose="user_data",
-            expires_after=ExpiresAfter(anchor="created_at", seconds=int(expiration_time)),
-        )
-        file_objects.append(fobj)
-    _logger.debug(f"Uploaded {len(file_objects)} files: {file_objects}")
-    return file_objects

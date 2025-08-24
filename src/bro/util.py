@@ -4,7 +4,18 @@ import base64
 import traceback
 from io import BytesIO
 from datetime import datetime
+from pathlib import Path
+import logging
+import subprocess
+
 from PIL import Image
+
+from openai import OpenAI
+from openai.types import FileObject
+from openai.types.file_create_params import ExpiresAfter
+
+
+_logger = logging.getLogger(__name__)
 
 
 def image_to_base64(im: Image.Image) -> str:
@@ -44,3 +55,53 @@ def get_local_time_llm() -> dict[str, Any]:
         "weekday": now.isoweekday(),
         "weekday_name": now.strftime("%A"),
     }
+
+
+def openai_upload_files(
+    client: OpenAI,
+    files: list[Path],
+    *,
+    expiration_time: int = 3600 * 24 * 30,
+) -> list[FileObject]:
+    _logger.info(f"📤 Uploading {len(files)} files: {[f.name for f in files]}")
+    file_objects: list[FileObject] = []
+    for file in files:
+        fobj = client.files.create(
+            file=(file.name, file.read_bytes()),  # File name is required! Otherwise the model will refuse to use it!
+            purpose="user_data",
+            expires_after=ExpiresAfter(anchor="created_at", seconds=int(expiration_time)),
+        )
+        file_objects.append(fobj)
+    _logger.debug(f"Uploaded {len(file_objects)} files: {file_objects}")
+    return file_objects
+
+
+def locate_file(filename: str | Path) -> Path | None:
+    """
+    If the filename is absolute, return it if it exists.
+    If it's relative, search predefined locations for a matching file name.
+    Returns the resolved Path if found, otherwise None.
+    """
+    fn = Path(filename)
+    if fn.exists() and not fn.is_dir():
+        return fn.resolve()
+    if fn.is_absolute():
+        return None
+    for path in Path.home().rglob(fn.name):
+        if path.is_file() and path.name == fn.name:
+            return path.resolve()
+    return None
+
+
+def run_shell_command(cmd: str) -> tuple[int, str, str]:
+    _logger.debug(f"🖥️ Running shell command: {cmd!r}")
+    proc = subprocess.Popen(
+        cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout, stderr = proc.communicate()
+    _logger.debug(f"Command exited with status {proc.returncode}")
+    return proc.returncode, stdout, stderr
