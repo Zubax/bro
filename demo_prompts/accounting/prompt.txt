@@ -1,1 +1,9 @@
-Summarize the Estonian accounting policies in three sentences, and write them into a text file.
+We are going to do accounting for a small Estonian company. Our decisions should adhere to the Estonian accounting code, described in the documents stored in this folder. The accounting software we will be using is SimplBooks. We are not aiming for 100% correctness; rather, we are doing our best attainable with reasonable efforts.
+
+Список конто-счетов прикреплён; краткая сводка ещё доступна здесь: https://support.simplbooks.ee/ru/kasutusjuhendid/konto-scheta/
+
+Наиболее часто используемые записи: https://support.simplbooks.ee/ru/kasutusjuhendid/naibolee-tsasto-ispolsumoe-sapisi-v-buhgalterii/
+
+Taxation for businesses: https://learn.e-resident.gov.ee/hc/en-gb/articles/360000721597-Taxation-for-businesses-how-it-works
+
+Please read all of the attached and linked documents to get a good understanding of the accounting principles and practices in Estonia.
