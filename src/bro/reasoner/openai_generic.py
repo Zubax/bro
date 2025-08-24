@@ -41,6 +41,7 @@ or email applications if you need additional information to complete the task.
 
 If you need credentials to access any accounts or resources, please look for them on the Desktop or in the
 Documents folder, or in any other standard location where such information might be stored.
+To speed up operations, don't hesitate to store the login credentials in the browser's password manager.
 
 You cannot ask the user to perform any actions on your behalf; you must complete the task entirely on your own.
 

@@ -74,7 +74,8 @@ class KeyPressAction(Action):
 
 @dataclass(frozen=True)
 class WaitAction(Action):
-    duration: float = 5.0  # seconds
+    duration: float | None = None  # seconds
+    """If None, the implementation will attempt to work out a reasonable delay itself."""
 
 
 class UiObserver(ABC):
@@ -102,6 +103,7 @@ class _Impl(UiController):
     def __init__(self) -> None:
         sz = pyautogui.size()
         self._screen_wh = int(sz[0]), int(sz[1])
+        self._consecutive_waits: int = 0
 
     @property
     def screen_width_height(self) -> tuple[int, int]:
@@ -162,6 +164,9 @@ class _Impl(UiController):
 
     def do(self, action: Any) -> None:
         _logger.debug(f"Computer action: {action}")
+        if not isinstance(action, WaitAction):
+            self._consecutive_waits = 0
+
         match action:
             case MoveAction(coord=(x, y)):
                 _logger.info(f"🐁 Moving cursor to {x}, {y}")
@@ -222,6 +227,8 @@ class _Impl(UiController):
                     _logger.error(f"No valid keys to press in {action}")
 
             case WaitAction(duration=delay):
+                self._consecutive_waits += 1
+                delay = float(delay) if delay is not None else 2**self._consecutive_waits
                 _logger.info(f"💤 Waiting for {delay} seconds")
                 # The random keys and cursor movement are used to avoid the lock screen
                 pyautogui.moveTo(pyautogui.position())

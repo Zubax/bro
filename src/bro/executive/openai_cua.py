@@ -33,6 +33,9 @@ the computer.
 
 Occasionally, you may be asked to type text that includes certain Unicode characters not found on a standard
 keyboard. In such cases, don't hesitate to apply standard replacements, such as using "-" instead of "—", etc.
+
+For reasons of efficiency, when asked to copy and paste short text, prefer typing it out manually to avoid
+using the clipboard.
 """
 
 
