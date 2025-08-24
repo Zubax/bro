@@ -48,7 +48,6 @@ class OpenAiCuaExecutive(Executive):
         openai_api_key: str,
         model: str = "computer-use-preview",
     ) -> None:
-        # TODO: do we need reflection here?
         self._ui = ui
         self._dir = state_dir
         self._client = OpenAI(api_key=openai_api_key)
@@ -84,7 +83,8 @@ class OpenAiCuaExecutive(Executive):
 
     def act(self, goal: str) -> str:
         _logger.debug(f"🥅 OpenAI Executive goal: {goal}")
-        self._context.append(
+        ctx = self._context  # EXPERIMENTAL CHANGE: do not preserve context between runs.
+        ctx.append(
             {
                 "role": "user",
                 "content": [
@@ -97,12 +97,12 @@ class OpenAiCuaExecutive(Executive):
         )
         stop = None
         while stop is None:
-            self._context = truncate(self._context)
-            self._save_context(self._context)
+            ctx = truncate(ctx)
+            self._save_context(ctx)
             # noinspection PyTypeChecker
             response = self._client.responses.create(
                 model=self._model,
-                input=self._context,
+                input=ctx,
                 tools=self._tools,
                 truncation="auto",
                 reasoning={
@@ -122,10 +122,10 @@ class OpenAiCuaExecutive(Executive):
                 if out.get("type") == "reasoning":
                     del out["status"]
 
-            self._context += output
+            ctx += output
             for item in output:
                 new_ctx, new_stop = self._process(item)
-                self._context += new_ctx
+                ctx += new_ctx
                 stop = stop or new_stop
 
         _logger.debug(f"🏁 OpenAI Executive finished: {stop}")
