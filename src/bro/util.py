@@ -3,6 +3,7 @@ from typing import Any
 import base64
 import traceback
 from io import BytesIO
+from datetime import datetime
 from PIL import Image
 
 
@@ -22,3 +23,24 @@ def truncate(x: list[Any], head: int = 100, tail: int = 1000) -> list[Any]:
 
 def format_exception(exc: BaseException) -> str:
     return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+
+
+def get_local_time_llm() -> dict[str, Any]:
+    """
+    LLM-friendly current time representation.
+    """
+    now = datetime.now()
+    return {
+        "iso": now.isoformat(),
+        "posix": now.timestamp(),
+        "tz": (str(now.astimezone().tzinfo) if now.astimezone().tzinfo else "UTC"),
+        "year": now.year,
+        "month": now.month,
+        "month_name": now.strftime("%B"),
+        "day": now.day,
+        "hour": now.hour,
+        "minute": now.minute,
+        "second": now.second,
+        "weekday": now.isoweekday(),
+        "weekday_name": now.strftime("%A"),
+    }

@@ -11,7 +11,7 @@ from openai import OpenAI
 from bro import ui_io
 from bro.executive import Executive
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64
+from bro.util import truncate, image_to_base64, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
@@ -60,6 +60,14 @@ class OpenAiCuaExecutive(Executive):
                 "display_width": int(screen_size[0]),
                 "display_height": int(screen_size[1]),
                 "environment": "linux",
+            },
+            {
+                "type": "function",
+                "name": "get_local_time",
+                "description": "Get the current local date and time in multiple formats at once."
+                " You can use this function to implement timed waits and similar tasks;"
+                " for example, when you are told to wait for a certain event to occur within a specified timeframe.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False, "required": []},
             },
         ]
         self._context = [
@@ -145,6 +153,9 @@ class OpenAiCuaExecutive(Executive):
                 result = None
                 final = None
                 match name:
+                    case "get_local_time":
+                        result = get_local_time_llm()
+                        _logger.info(f"🕰️ Current local time: {result}")
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")

@@ -228,7 +228,7 @@ class _Impl(UiController):
 
             case WaitAction(duration=delay):
                 self._consecutive_waits += 1
-                delay = float(delay) if delay is not None else 2**self._consecutive_waits
+                delay = float(delay) if delay is not None else min(2**self._consecutive_waits, 300)
                 _logger.info(f"💤 Waiting for {delay} seconds")
                 # The random keys and cursor movement are used to avoid the lock screen
                 pyautogui.moveTo(pyautogui.position())

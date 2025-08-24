@@ -13,7 +13,7 @@ from openai.types.file_create_params import ExpiresAfter
 from bro.executive import Executive
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
-from bro.util import image_to_base64, truncate, format_exception
+from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
@@ -153,6 +153,10 @@ its own capabilities and limitations and it is recommended to avoid micromanagin
 how to manipulate the computer to achieve the desired outcome. The agent keeps the memory of its interactions and
 you can ask it to recall the data it saw a few steps ago.
 
+When asking the computer-using agent to type text, please avoid specifying Unicode characters that may not be
+found on a standard keyboard, as the computer-using agent may not be able to type them correctly. In particular,
+avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain ASCII characters instead.
+
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
 
 TASK EXAMPLES:
@@ -179,6 +183,14 @@ and enter the current one-time password for the example.com account.
                 "additionalProperties": False,
                 "required": ["task"],
             },
+        },
+        {
+            "type": "function",
+            "name": "get_local_time",
+            "description": "Get the current local date and time in multiple formats at once."
+            " You can use this function to implement timed waits and similar tasks;"
+            " for example, when you are waiting for a human to respond.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False, "required": []},
         },
         # TODO: add reflection!
     ]
@@ -339,6 +351,9 @@ and enter the current one-time password for the example.com account.
                                 " Please define a strategy first."
                             )
                             _logger.error("🖥️ Strategy not yet defined; cannot use the computer.")
+                    case "get_local_time":
+                        result = get_local_time_llm()
+                        _logger.info(f"🕰️ Current local time: {result}")
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
