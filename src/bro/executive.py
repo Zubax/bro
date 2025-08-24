@@ -24,7 +24,7 @@ class Executive(ABC):
 
 _OPENAI_CUA_PROMPT = """
 You are an expert in operating graphical user interfaces (GUIs) on desktop computers.
-You are given tasks to perform on a computer, such as opening applications, clicking buttons,
+You are given tasks to perform on the computer, such as opening applications, clicking buttons,
 typing text, and navigating menus. Your goal is to complete the tasks as efficiently and accurately as possible.
 You will receive a goal description and must perform the necessary actions to achieve it.
 

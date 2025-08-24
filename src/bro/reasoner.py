@@ -84,6 +84,36 @@ It is mandatory to provide a brief list of the actions taken to complete the tas
         },
         {
             "type": "function",
+            "name": "strategy",
+            "description": """\
+Devise a strategy to complete the assigned task. Use this function to create a high-level plan for completing the task.
+
+When invoking this function, you must provide a detailed step-by-step strategy outlining how you intend to
+achieve the task's objectives. Each step should be clear and actionable.
+The strategy should be comprehensive and cover all aspects of the task, including any potential challenges
+and how you plan to address them.
+
+It is possible that the strategy will need to be revised as you progress with the task and encounter new information
+or obstacles. You can call this function multiple times to update or refine your strategy as needed.
+It is recommended to invoke it at least every 10 invocations of the `use_computer` function to ensure that your approach
+remains effective and aligned with the task's goals.
+
+It is mandatory to invoke this function before the first invocation of the `use_computer` function.
+""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "strategy": {
+                        "type": "string",
+                        "description": "A detailed step-by-step strategy for completing the task.",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["strategy"],
+            },
+        },
+        {
+            "type": "function",
             "name": "use_computer",
             "description": """\
 Perform computer operations to complete the assigned task using a separate small computer-using agent.
@@ -169,8 +199,10 @@ and enter the current one-time password for the example.com account.
                 "content": [{"type": "input_text", "text": _OPENAI_REASONER_PROMPT}],
             },
         ]
+        self._strategy: str | None = None
 
     def run(self, ctx: Context, /) -> str:
+        self._strategy = None
         self._context += [
             {
                 "role": "user",
@@ -272,19 +304,30 @@ and enter the current one-time password for the example.com account.
                         result = "Task terminated, thank you."
                         final = args["detailed_report"]
                         _logger.info(f"🏁 Stopping: {final}")
+                    case "strategy":
+                        self._strategy = args["strategy"]
+                        result = f"NEW STRATEGY\n{self._strategy}"
+                        _logger.info(f"🗺️ NEW STRATEGY:\n{self._strategy}")
                     case "use_computer":
-                        task = args["task"]
-                        _logger.info(f"🖥️ Invoking the executive: {task}")
-                        try:
-                            result = self._exe.act(task)
-                        except Exception as ex:
-                            _logger.exception(f"🖥️ Exception during execution: {ex}")
-                            result = (
-                                f"ERROR: Exception during use_computer: {type(ex).__name__}: {ex}\n"
-                                + format_exception(ex)
-                            )
+                        if self._strategy:
+                            task = args["task"]
+                            _logger.info(f"🖥️ Invoking the executive: {task}")
+                            try:
+                                result = self._exe.act(task)
+                            except Exception as ex:
+                                _logger.exception(f"🖥️ Exception during execution: {ex}")
+                                result = (
+                                    f"ERROR: Exception during use_computer: {type(ex).__name__}: {ex}\n"
+                                    + format_exception(ex)
+                                )
+                            else:
+                                _logger.info(f"🖥️ Executive report: {result}")
                         else:
-                            _logger.info(f"🖥️ Executive report: {result}")
+                            result = (
+                                "ERROR: Strategy not yet defined; cannot use the computer."
+                                " Please define a strategy first."
+                            )
+                            _logger.error("🖥️ Strategy not yet defined; cannot use the computer.")
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
