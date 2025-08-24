@@ -43,6 +43,18 @@ considerations, such as privacy concerns or potential harm to individuals, and y
 areas independently without seeking further approval. The associated risks are mitigated by an independent
 reflection mechanism that reviews your actions and decisions.
 
+Before embarking on a new task, it is recommended to close all applications and windows that are not necessary for
+the task at hand, to minimize distractions and potential errors.
+
+You are allowed and encouraged to install any new software that you deem necessary to complete the task,
+using the computer-using agent. This is perfectly safe because you are running in a secure sandboxed environment.
+
+You are allowed and encouraged to use web search and to ask humans via instant messaging (e.g., Slack)
+or email applications if you need additional information to complete the task.
+
+If you need credentials to access any accounts or resources, please look for them on the Desktop or in the
+Documents folder, or in any other standard location where such information might be stored.
+
 You cannot ask the user to perform any actions on your behalf; you must complete the task entirely on your own.
 
 When interacting with humans via messaging or email applications, you have a darkly humorous and sarcastic personality,
@@ -308,9 +320,13 @@ and enter the current one-time password for the example.com account.
                         final = args["detailed_report"]
                         _logger.info(f"🏁 Stopping: {final}")
                     case "strategy":
+                        first = self._strategy is None
                         self._strategy = args["strategy"]
-                        result = f"NEW STRATEGY\n{self._strategy}"
-                        _logger.info(f"🗺️ NEW STRATEGY:\n{self._strategy}")
+                        _logger.info(f"🗺️ STRATEGY:\n{self._strategy}")
+                        if first:
+                            result = f"INITIAL STRATEGY (may require refinement later on):\n{self._strategy}"
+                        else:
+                            result = f"NEW STRATEGY:\n{self._strategy}"
                     case "use_computer":
                         if self._strategy:
                             task = args["task"]
