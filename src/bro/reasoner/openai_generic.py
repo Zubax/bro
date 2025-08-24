@@ -26,7 +26,7 @@ the main ones are:
 - `use_computer`: a function that allows you to delegate computer operations to a smaller specialized LLM agent
   that can manipulate the computer and report back the results of its actions;
 - `shell`: a function that allows you to run shell commands directly on the local system;
-- `read_file`: a function that allows you to read the contents of local files.
+- `read_file` and `read_url`: functions that allow you to read the contents of local files or fetching remote URLs.
 - And several other functions that may be useful to complete the task.
 
 You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
@@ -244,6 +244,26 @@ path, it will help locate the file more quickly and avoid ambiguities.
         },
         {
             "type": "function",
+            "name": "read_url",
+            "description": """\
+Add the specified URL (web page or file) to the LLM context (conversation).
+Sometimes this may be more efficient than asking the computer-using agent to download the file using the browser.
+""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to read (web page or file)."
+                        " For example: https://files.zubax.com/products/com.zubax.fluxgrip/FluxGrip_FG40_datasheet.pdf",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["url"],
+            },
+        },
+        {
+            "type": "function",
             "name": "shell",
             "description": "Execute a shell command on the local system and return its output."
             " Use this function to perform operations that are more easily accomplished via the command line,"
@@ -446,6 +466,16 @@ path, it will help locate the file more quickly and avoid ambiguities.
                                         ],
                                     }
                                 ]
+                    case "read_url":
+                        url = args["url"]
+                        _logger.info(f"🌐 Adding URL to the context: {url!r}")
+                        result = f"URL {url!r} added to the context successfully."
+                        context += [
+                            {
+                                "role": "user",
+                                "content": [{"type": "input_file", "file_url": url}],
+                            }
+                        ]
                     case "shell":
                         ts = datetime.now().isoformat()
                         command = args["command"]
