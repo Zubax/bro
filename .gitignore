@@ -2,7 +2,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 *.so
-.bro/logs/
+.bro
 .Python
 build/
 develop-eggs/

@@ -1,0 +1,1 @@
+Wait for 1 minute and then tell me what the current time is.
