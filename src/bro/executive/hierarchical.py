@@ -132,7 +132,7 @@ class HierarchicalExecutive(Executive):
             _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
             # The short sleep helps avoiding further waits while the UI is still updating.
             # It must happen after the last action and immediately BEFORE the next screenshot.
-            time.sleep(0.1)
+            time.sleep(0.3)
             ctx += [
                 {
                     "role": "user",

@@ -132,14 +132,12 @@ It is mandatory to invoke this function before the first invocation of the `use_
             "type": "function",
             "name": "use_computer",
             "description": """\
-Perform computer operations to complete the assigned task using a separate small computer-using agent.
+Perform computer operations to complete the assigned task using a separate computer-using agent.
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
-files, and so on. The actions are performed by a separate small agent that can be easily confused, so be very specific
-and detailed in your instructions, and avoid instructions longer than one or two steps or longer than a single sentence.
-Break down complex tasks into very small, manageable steps and use multiple calls to this function to achieve
-the overall goal. The computer-using agent may not retain full memory of its past actions, so you must provide all
-necessary context in each invocation.
+files, and so on. Be very specific and detailed in your instructions. Break down complex tasks into smaller steps and
+use multiple calls to this function to achieve the overall goal. The computer-using agent may not retain full memory
+of its past actions, so you must provide all necessary context in each invocation.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
@@ -177,7 +175,7 @@ rather than asking the computer-using agent to open a terminal and run the comma
 
 TASK EXAMPLES:
 
-Example 1: Click the web browser icon on the desktop to open it and navigate to example.com.
+Example 1: Open the web browser and navigate to example.com.
 
 Example 2: Open the file explorer, navigate to the Documents folder, and create a new text file named notes.txt.
 
