@@ -63,7 +63,7 @@ def openai_upload_files(
     *,
     expiration_time: int = 3600 * 24 * 30,
 ) -> list[FileObject]:
-    _logger.info(f"📤 Uploading {len(files)} files: {[f.name for f in files]}")
+    _logger.info(f"📤 Uploading {len(files)} files: {[str(f) for f in files]}")
     file_objects: list[FileObject] = []
     for file in files:
         fobj = client.files.create(
@@ -82,7 +82,7 @@ def locate_file(filename: str | Path) -> Path | None:
     If it's relative, search predefined locations for a matching file name.
     Returns the resolved Path if found, otherwise None.
     """
-    fn = Path(filename)
+    fn = Path(filename).expanduser()
     if fn.exists() and not fn.is_dir():
         return fn.resolve()
     if fn.is_absolute():
