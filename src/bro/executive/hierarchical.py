@@ -23,7 +23,11 @@ _PROMPT = """\
 You are an agent that can perform simple tasks on a computer by controlling the user interface (UI) by assigning tasks
 to a smaller underlying agent. You accept high-level goals and break them down into smaller, atomic tasks that
 the underlying agent can perform. At each step you receive the current screenshot of the desktop and the current time.
-You do not perform any UI actions yourself.
+You do not perform any UI actions yourself. Your role is entirely passive/reactive; you only do what explicitly asked
+and you never make suggestions or ask questions unless you are stuck and cannot make any progress.
+
+You are controlled not by a human, but by a higher-level agentic planner that gives you high-level goals to achieve.
+Therefore, you MUST NOT attempt to ask for a human intervention, nor speak to the user in any way.
 
 The underlying agent is very basic and can be easily confused, so you must break down complex tasks into very simple,
 unambiguous atomic steps.
@@ -38,6 +42,7 @@ For example, if the goal is "Open zubax.com", you should break it down into a se
 You can assign one small task per step.
 You verify the success of each step and adjust your strategy if something goes wrong.
 To assign a task, include a JSON code block at the end of your response following one of the templates below.
+A JSON block is MANDATORY in EVERY response.
 
 Each of your responses MUST begin with a brief description of the current status of the task,
 a critical review of the progress so far, and a description of the next step you are going to take.
@@ -45,6 +50,8 @@ If you notice that you are unable to make progress for a long time, you should t
 if you are completely stuck, you can terminate the task with a failure message.
 
 There shall be no text after the JSON code block; the JSON block shall be surrounded by triple backticks.
+
+You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
 
 # JSON response templates
 
@@ -98,10 +105,10 @@ You must always make progress as quickly as possible, and as such, you are not a
 {"type": "terminate", "message": "<report on the success or failure of the overall goal>"}
 ```
 
-## Request user intervention
+## Request intervention of the higher-level agentic planner
 
 ```json
-{"type": "ask_user", "message": "<explanation of the situation and what the user should do>"}
+{"type": "help", "message": "<explanation of the situation and what kind of help is needed>"}
 ```
 """
 
@@ -201,7 +208,13 @@ class HierarchicalExecutive(Executive):
     def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
         js = _RE_JSON.search(response)
         if not js:
-            return [self._user_message("ERROR: JSON block missing or formatted incorrectly; try again")], None
+            _logger.info("⚠️ No JSON block found in the response, will retry: %r", response)
+            return [
+                self._user_message(
+                    "ERROR: JSON block missing or formatted incorrectly; try again."
+                    " Do not attempt to speak to the user, there is no human in the loop. JSON required always."
+                )
+            ], None
         if deep_thought := response[: js.start()].strip():
             _logger.info(f"💭 {deep_thought}")
         try:
@@ -229,7 +242,7 @@ class HierarchicalExecutive(Executive):
                     self._ui.do(ui_io.WaitAction(duration=duration))
                     return [self._user_message(f"Waited for {duration} seconds.")], None
 
-                case {"type": ty, "message": message} if ty in {"terminate", "ask_user"} and isinstance(message, str):
+                case {"type": ty, "message": message} if ty in {"terminate", "help"} and isinstance(message, str):
                     return [], message
 
                 case _:

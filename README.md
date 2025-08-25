@@ -24,6 +24,11 @@ Warning though: **quantized edits of UI-TARS cannot be used for grounding as-is!
 The exact reasons for that elude my understanding, but quantized models tend to predict screen coordinates incorrectly
 (custom scaling factors are required).
 
+Bro does not (currently) attempt to compete in the standard CUA benchmarks because it is primarily focused
+on practical utility in real-world office tasks rather than synthetic benchmarks.
+As an example where the two are at odds, Bro is able to log into a bank account using 2FA OTP codes generated
+by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly).
+
 ## Requirements
 
 Currently, Bro uses OpenRouter and OpenAI for inference. You must have valid API keys for both services
