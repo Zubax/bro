@@ -145,7 +145,6 @@ class UiTars7bExecutive(Executive):
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            _logger.info(f"🤖 Response:\n{resp_text}")
             new_items, msg = self._process(resp_text)
             ctx += new_items
             if msg is not None:
@@ -167,6 +166,8 @@ class UiTars7bExecutive(Executive):
         m = self._RE_ACTION.match(action_line)
         if not m:
             return [], response
+        if response_sans_action:
+            _logger.info(f"💭 {response_sans_action}")
         action_name = m.group(1)
         action_args = m.group(2)
         numbers = list(map(int, self._RE_NUMBERS.findall(action_args)))
