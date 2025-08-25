@@ -115,7 +115,7 @@ class UiTars7bExecutive(Executive):
         scr_w, scr_h = self._ui.screen_width_height
         ctx = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
         for step in range(self._max_steps):
-            _logger.info(f"🤖 Step #{step+1}/{self._max_steps}...")
+            _logger.debug(f"🤖 Step #{step+1}/{self._max_steps}...")
             ctx += [
                 {
                     "role": "user",
@@ -174,7 +174,7 @@ class UiTars7bExecutive(Executive):
             _logger.info("💭 No action found in the response: %r", action_line)
             return [self._user_message("ERROR: Action not found or is not formatted correctly; try again.")], None
         if response_sans_action:
-            _logger.info(f"💭 {response_sans_action}")
+            _logger.debug(f"💭 {response_sans_action}")
         action_name = m.group(1)
         action_args = m.group(2)
         numbers = list(map(int, self._RE_NUMBERS.findall(action_args)))
