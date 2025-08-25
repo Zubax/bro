@@ -34,7 +34,7 @@ def main() -> None:
         client=openai_client,
         model="gpt-5-mini",
         reasoning_effort="minimal",
-        max_steps=15,  # low reasoning requires a low step limit to avoid loops
+        max_steps=5,  # low reasoning requires a low step limit to avoid loops
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,

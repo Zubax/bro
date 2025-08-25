@@ -46,7 +46,6 @@ Finally, there MUST be a MANDATORY JSON block enclosed in triple backticks as sp
 You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
 
 You can assign one small task per step.
-You verify the success of each step and adjust your strategy if something goes wrong.
 To assign a task, include a JSON code block at the end of your response following one of the templates below.
 A JSON block is MANDATORY in EVERY response.
 There shall be no text after the JSON code block; the JSON block SHALL BE SURROUNDED BY TRIPLE BACKTICKS.
@@ -129,7 +128,7 @@ class HierarchicalExecutive(Executive):
     type the URL, press Enter, and wait for the correct page to load.
 
     WARNING: if you are using a low reasoning setting or a low-capability model, be sure to limit the number
-    of steps to a small number (maybe about 10-20) because small models often get stuck in loops
+    of steps to a small number (maybe about 10) because small models often get stuck in loops
     or get distracted and start procrastinating. If a task fails to complete, it is usually not a problem
     because the planner can always intervene and fix things.
     """
@@ -144,7 +143,7 @@ class HierarchicalExecutive(Executive):
         model: str,
         reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
-        max_steps: int = 20,
+        max_steps: int = 10,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
