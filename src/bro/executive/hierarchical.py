@@ -30,8 +30,8 @@ For example, if the goal is "Open zubax.com", you should break it down into a se
 
 1. Click the Firefox icon on the left side of the desktop (using the `task` command).
 2. Wait until the browser window opens (using the `wait` command).
-3. Type "zubax.com" in the address bar (using the `task` command).
-4. Press Enter (using the `task` command).
+3. Type "zubax.com" in the address bar (using the `type` command).
+4. Press Enter (using the `key_press` command).
 5. Wait for the correct page to load (using the `wait` command).
 
 You can assign one small task per step.
@@ -50,6 +50,7 @@ There shall be no text after the JSON code block; the JSON block shall be surrou
 ## Perform a GUI-related atomic task
 
 Avoid tasks more complex than clicking a button, scrolling, or dragging the mouse.
+When asking the agent to click something, be sure to specify if it's a double-click, single-click, or right-click!
 Do not use this command for typing text or pressing keys; use the `type` and `key_press` commands instead.
 
 ```json
@@ -129,6 +130,9 @@ class HierarchicalExecutive(Executive):
         ctx = self._context + [{"role": "user", "content": goal}]
         for step in count():
             _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
+            # The short sleep helps avoiding further waits while the UI is still updating.
+            # It must happen after the last action and immediately BEFORE the next screenshot.
+            time.sleep(0.1)
             ctx += [
                 {
                     "role": "user",
