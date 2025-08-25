@@ -49,7 +49,7 @@ and the outcome of the previous action.
 You have to complete the task in the specified number of turns. If you fail to complete the task within the
 allotted turns, your operation will be forcibly interrupted and you will be severely punished.
 
-The available actions are listed below. There should be exactly one action per response, formatted based on one of
+The available actions are listed below. There must be exactly one action per response, formatted based on one of
 the action templates below.
 
 # AVAILABLE ACTIONS
@@ -172,7 +172,7 @@ class UiTars7bExecutive(Executive):
         m = self._RE_ACTION.match(action_line)
         if not m:
             _logger.info("💭 No action found in the response: %r", action_line)
-            return [], response
+            return [self._user_message("ERROR: Action not found or is not formatted correctly; try again.")], None
         if response_sans_action:
             _logger.info(f"💭 {response_sans_action}")
         action_name = m.group(1)
@@ -217,7 +217,7 @@ class UiTars7bExecutive(Executive):
         except Exception as ex:
             return [
                 self._user_message(
-                    f"Error during action execution: {ex}; try again. Exception stacktrace:\n{format_exception(ex)}"
+                    f"ERROR during action execution: {ex}; try again. Exception stacktrace:\n{format_exception(ex)}"
                 ),
             ], None
         return [], response_sans_action  # stop after a single action

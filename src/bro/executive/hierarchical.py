@@ -10,8 +10,9 @@ import re
 
 from openai import OpenAI, InternalServerError
 
+from bro import ui_io
 from bro.executive import Executive
-from bro.ui_io import UiObserver
+from bro.ui_io import UiController
 from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception
 
 _logger = logging.getLogger(__name__)
@@ -42,17 +43,44 @@ a critical review of the progress so far, and a description of the next step you
 If you notice that you are unable to make progress for a long time, you should try to change your approach;
 if you are completely stuck, you can terminate the task with a failure message.
 
-There shall be no text after the JSON code block.
+There shall be no text after the JSON code block; the JSON block shall be surrounded by triple backticks.
 
 # JSON response templates
+
+## Perform a GUI-related atomic task
+
+Avoid tasks more complex than clicking a button, scrolling, or dragging the mouse.
+Do not use this command for typing text or pressing keys; use the `type` and `key_press` commands instead.
 
 ```json
 {"type": "task", "description": "<description of the task for the underlying agent>"}
 ```
 
+## Type text
+
+Prefer this over invoking the underlying agent to type text, because it is more reliable and faster.
+Avoid Unicode characters that cannot be typed on a standard English keyboard;
+you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
+
+```json
+{"type": "type", "text": "<text to type>"}
+```
+
+## Key press
+
+Press hotkeys using this command.
+
+```json
+{"type": "key_press", "keys": ["<key1>", "<key2>", ...]}
+```
+
+## Wait for a certain amount of time
+
 ```json
 {"type": "wait", "duration": number_of_seconds}
 ```
+
+## Terminate the task
 
 ```json
 {"type": "terminate", "message": "<report on the success or failure of the overall goal>"}
@@ -80,7 +108,7 @@ class HierarchicalExecutive(Executive):
         self,
         *,
         inferior: Executive,
-        ui: UiObserver,
+        ui: UiController,
         state_dir: Path,
         client: OpenAI,
         model: str,
@@ -147,7 +175,7 @@ class HierarchicalExecutive(Executive):
     def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
         js = _RE_JSON.search(response)
         if not js:
-            return [], response
+            return [self._user_message("ERROR: JSON block missing or formatted incorrectly; try again")], None
         if deep_thought := response[: js.start()].strip():
             _logger.info(f"💭 {deep_thought}")
         try:
@@ -155,9 +183,24 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description)
+                    result = self._inferior.act(description).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
-                    return [self._user_message(result)], None
+                    out = []
+                    if result:
+                        out.append(self._user_message(f"Agent thought: {result}"))
+                    return out, None
+
+                case {"type": "type", "text": text} if isinstance(text, str):
+                    _logger.info(f"⌨️ Typing text: {text!r}")
+                    self._ui.do(ui_io.TypeAction(text=text))
+                    return [self._user_message(f"Typed text: {text!r}")], None
+
+                case {"type": "key_press", "keys": keys} if isinstance(keys, list) and all(
+                    isinstance(k, str) for k in keys
+                ):
+                    _logger.info(f"⌨️ Pressing keys: {keys}")
+                    self._ui.do(ui_io.KeyPressAction(keys=keys))
+                    return [self._user_message(f"Pressed keys: {keys}")], None
 
                 case {"type": "wait", "duration": duration} if isinstance(duration, (int, float)) and duration > 0:
                     _logger.info(f"⏱️ Waiting for {duration} seconds")
