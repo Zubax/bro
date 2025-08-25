@@ -195,20 +195,15 @@ class HierarchicalExecutive(Executive):
                     return out, None
 
                 case {"type": "type", "text": text} if isinstance(text, str):
-                    _logger.info(f"⌨️ Typing text: {text!r}")
                     self._ui.do(ui_io.TypeAction(text=text))
                     return [self._user_message(f"Typed text: {text!r}")], None
 
-                case {"type": "key_press", "keys": keys} if isinstance(keys, list) and all(
-                    isinstance(k, str) for k in keys
-                ):
-                    _logger.info(f"⌨️ Pressing keys: {keys}")
-                    self._ui.do(ui_io.KeyPressAction(keys=keys))
-                    return [self._user_message(f"Pressed keys: {keys}")], None
+                case {"type": "key_press", "keys": ks} if isinstance(ks, list) and all(isinstance(k, str) for k in ks):
+                    self._ui.do(ui_io.KeyPressAction(keys=ks))
+                    return [self._user_message(f"Pressed keys: {ks}")], None
 
                 case {"type": "wait", "duration": duration} if isinstance(duration, (int, float)) and duration > 0:
-                    _logger.info(f"⏱️ Waiting for {duration} seconds")
-                    time.sleep(duration)
+                    self._ui.do(ui_io.WaitAction(duration=duration))
                     return [self._user_message(f"Waited for {duration} seconds.")], None
 
                 case {"type": "terminate", "message": message} if isinstance(message, str):

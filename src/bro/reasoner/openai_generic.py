@@ -135,9 +135,10 @@ It is mandatory to invoke this function before the first invocation of the `use_
 Perform computer operations to complete the assigned task using a separate computer-using agent.
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
-files, and so on. Be very specific and detailed in your instructions. Break down complex tasks into smaller steps and
-use multiple calls to this function to achieve the overall goal. The computer-using agent may not retain full memory
-of its past actions, so you must provide all necessary context in each invocation.
+files, and so on. Be very specific and detailed in your instructions because the agent can be easily confused.
+Break down complex tasks into very small atomic steps and use multiple calls to this function to achieve the overall
+goal. The computer-using agent may not retain full memory of its past actions, so you must provide all necessary
+context in each invocation.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
@@ -166,20 +167,26 @@ found on a standard keyboard, as the computer-using agent may not be able to typ
 avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain ASCII characters instead.
 
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
+For this reason, you must not ask it to perform more than one action at a time, unless the actions are
+very closely related and can be easily verified together. For example, you can ask it to open a web browser
+and navigate to a specific URL in one step, as you can easily verify that both actions were performed correctly.
+However, you should not ask it to open a web browser, navigate to a URL, log in to an account, and download a file
+all in one step, as that would be too many actions to verify at once and it may cause the agent to make mistakes.
 
-If you need to retrieve information from a file, it may be more efficient to read the file directly using the
+If you need to retrieve information from a file, it is usually more efficient to read the file directly using the
 `read_file` function, rather than asking the computer-using agent to open and read the file from the screen.
+For example, if you need to read a PDF or a text file, you should use it directly instead of asking the agent.
 
-If you need to run a shell command, it may be more efficient to run it directly using the `shell` function,
+If you need to run a shell command, it is usually more efficient to run it directly using the `shell` function,
 rather than asking the computer-using agent to open a terminal and run the command from the screen.
+For example, if you need to find something on the file system, you should use the `shell` function instead
+of asking the agent.
 
 TASK EXAMPLES:
 
 Example 1: Open the web browser and navigate to example.com.
 
-Example 2: Open the file explorer, navigate to the Documents folder, and create a new text file named notes.txt.
-
-Example 3 (time-sensitive, hence larger task): Open the one-time passwords application,
+Example 2 (time-sensitive, hence larger task): Open the one-time passwords application,
 go to the login page for example.com in the web browser, proceed to the 2FA step,
 and enter the current one-time password for the example.com account.
 """,
