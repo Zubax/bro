@@ -18,15 +18,18 @@ from bro.util import run_shell_command
 _logger = logging.getLogger(__name__)
 
 
+_FILE_READ_SIZE_LIMIT = 1024 * 1024
+
+
 _OPENAI_REASONER_PROMPT = """
 You are a confident AI agent named Bro designed to autonomously complete complex tasks by reasoning, planning,
 and executing actions on a computer. You have several tools at your disposal to help you achieve your goals;
 the main ones are:
 
-- `use_computer`: a function that allows you to delegate computer operations to a smaller specialized LLM agent
-  that can manipulate the computer and report back the results of its actions;
 - `shell`: a function that allows you to run shell commands directly on the local system;
 - `read_file` and `read_url`: functions that allow you to read the contents of local files or fetching remote URLs.
+- `use_computer`: a function that allows you to delegate computer operations to a smaller specialized LLM agent
+  that can manipulate the computer and report back the results of its actions;
 - And several other functions that may be useful to complete the task.
 
 You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
@@ -47,6 +50,10 @@ or email applications if you need additional information to complete the task.
 You are not allowed to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
 because this leads to loss of information. Instead, you can use the `read_file` function to add
 the contents of any file (text or binary) to your context.
+
+You are not allowed to use the `computer_use` function if the task can be completed using other functions
+(such as `shell`, `read_file`, or `read_url`) because that would be inefficient and error-prone.
+You can, however, fall back to using the `computer_use` function if the other functions prove insufficient.
 
 If you need credentials to access any accounts or resources, please look for them on the Desktop or in the
 Documents folder, or in any other standard location where such information might be stored.
@@ -77,7 +84,7 @@ class OpenAiGenericReasoner(Reasoner):
         {
             "type": "function",
             "name": "stop",
-            "description": """\
+            "description": """\not allowed
 Report that the final goal has been achieved and the task is complete, or there is no possible way to complete it.
 Use this function to terminate the task.
 When invoking this function, you must explain in detail whether the task was successful or failed, and why;
@@ -132,14 +139,13 @@ It is mandatory to invoke this function before the first invocation of the `use_
             "type": "function",
             "name": "use_computer",
             "description": """\
-Perform computer operations to complete the assigned task using a separate small computer-using agent.
+Perform computer operations to complete the assigned task using a separate computer-using agent.
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
-files, and so on. The actions are performed by a separate small agent that can be easily confused, so be very specific
-and detailed in your instructions, and avoid instructions longer than one or two steps or longer than a single sentence.
-Break down complex tasks into very small, manageable steps and use multiple calls to this function to achieve
-the overall goal. The computer-using agent may not retain full memory of its past actions, so you must provide all
-necessary context in each invocation.
+files, and so on. Be very specific and detailed in your instructions because the agent can be easily confused.
+Break down complex tasks into very small atomic steps and use multiple calls to this function to achieve the overall
+goal. The computer-using agent may not retain full memory of its past actions, so you must provide all necessary
+context in each invocation.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
@@ -168,20 +174,27 @@ found on a standard keyboard, as the computer-using agent may not be able to typ
 avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain ASCII characters instead.
 
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
+For this reason, you must not ask it to perform more than one action at a time, unless the actions are
+very closely related and can be easily verified together. For example, you can ask it to open a web browser
+and navigate to a specific URL in one step, as you can easily verify that both actions were performed correctly.
+However, you should not ask it to open a web browser, navigate to a URL, log in to an account, and download a file
+all in one step, as that would be too many actions to verify at once and it may cause the agent to make mistakes.
 
-If you need to retrieve information from a file, it may be more efficient to read the file directly using the
-`read_file` function, rather than asking the computer-using agent to open and read the file from the screen.
+If you need to retrieve information from a file, you should read the file directly using the `read_file` function
+rather than asking the computer-using agent to open and read the file from the screen.
+You can, however, fall back to using the computer-using agent if the specialized functions prove inadequate
+(e.g., if they cannot locate the file or if the file is too big).
 
-If you need to run a shell command, it may be more efficient to run it directly using the `shell` function,
+If you need to run a shell command, you should run it directly using the `shell` function
 rather than asking the computer-using agent to open a terminal and run the command from the screen.
+For example, if you need to find something on the file system, you should use the `shell` function instead
+of asking the agent.
 
 TASK EXAMPLES:
 
-Example 1: Click the web browser icon on the desktop to open it and navigate to example.com.
+Example 1: Open the web browser and navigate to example.com.
 
-Example 2: Open the file explorer, navigate to the Documents folder, and create a new text file named notes.txt.
-
-Example 3 (time-sensitive, hence larger task): Open the one-time passwords application,
+Example 2 (time-sensitive, hence larger task): Open the one-time passwords application,
 go to the login page for example.com in the web browser, proceed to the 2FA step,
 and enter the current one-time password for the example.com account.
 """,
@@ -223,10 +236,12 @@ and enter the current one-time password for the example.com account.
 Add the contents of the specified local file (text or binary) to the LLM context (conversation). This function works
 with any file that is accessible on the local system, including files that are not text files (e.g., images, PDFs, etc.)
 
-Sometimes this may be more efficient than reading the file from the computer screen.
+This is usually more efficient than asking the computer-using agent to open and read the file from the screen.
+An exception applies to very large files (e.g., hundreds of MB or more) that may be too big to upload;
+in such cases, you may ask the computer-using agent to open and read the file from the screen instead.
 
 The file name doesn't need to be the full path; just a name will suffice; however, if you provide a full or partial
-path, it will help locate the file more quickly and avoid ambiguities.
+path, it will help locate the file more quickly and avoid ambiguities. You can use `~` to refer to the home directory.
 """,
             "parameters": {
                 "type": "object",
@@ -234,12 +249,17 @@ path, it will help locate the file more quickly and avoid ambiguities.
                     "file_name": {
                         "type": "string",
                         "description": "The name of the file to read (doesn't have to be a text file)."
-                        " Preferably this should be the full path;"
-                        " if not, the environment will use heuristics to find the file on the computer.",
+                        " Preferably this should be the full path, or at least partial path;"
+                        " if not, the environment will use (unreliable) heuristics to find the file on the computer.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["image", "text", "other"],
+                        "description": "High-level file category.",
                     },
                 },
                 "additionalProperties": False,
-                "required": ["file_name"],
+                "required": ["file_name", "category"],
             },
         },
         {
@@ -340,9 +360,14 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                     "content": [
                         {
                             "type": "input_text",
-                            "text": "The most recent screenshot is as follows."
-                            " You will be provided with a screenshot per interaction,"
-                            " so you don't need to ask for it explicitly.",
+                            "text": f"""\
+The most recent screenshot is enclosed.
+You will be provided with a screenshot per interaction, so you don't need to ask for it explicitly.
+
+In case you need to use shell or access a file, the working directory of the current process is: {str(Path.cwd())!r}
+
+The current time is: `{json.dumps(get_local_time_llm())}`
+""",
                         },
                         {
                             "type": "input_image",
@@ -411,6 +436,7 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                         result = "Task terminated, thank you."
                         final = args["detailed_report"]
                         _logger.info(f"🏁 Stopping: {final}")
+
                     case "strategy":
                         first = self._strategy is None
                         self._strategy = args["strategy"]
@@ -419,6 +445,7 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                             result = f"INITIAL STRATEGY (may require refinement later on):\n{self._strategy}"
                         else:
                             result = f"NEW STRATEGY:\n{self._strategy}"
+
                     case "use_computer":
                         if self._strategy:
                             task = args["task"]
@@ -439,33 +466,66 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                                 " Please define a strategy first."
                             )
                             _logger.error("🖥️ Strategy not yet defined; cannot use the computer.")
+
                     case "read_file":
                         file_name = Path(args["file_name"])
-                        _logger.info(f"📄 Reading file: {str(file_name)!r}")
+                        category = args["category"]
+                        _logger.info(f"📄 Reading file category {category!r}: {str(file_name)!r}")
                         fpath = locate_file(file_name)
                         if fpath is None:
-                            result = f"ERROR: Failed to read the file: {str(file_name)!r}"
-                            _logger.error(f"Failed to read the file: {str(file_name)!r}")
+                            result = f"ERROR: Failed to locate the file: {str(file_name)!r}"
+                            _logger.error(f"Failed to locate the file: {str(file_name)!r}")
                         else:
                             try:
-                                (f_obj,) = openai_upload_files(self._client, [fpath])
-                            except Exception as ex:
-                                result = f"ERROR: Failed to upload the file {str(fpath)!r}: {type(ex).__name__}: {ex}"
-                                _logger.error(f"Failed to upload the file {str(fpath)!r}: {ex}", exc_info=True)
-                            else:
-                                result = "File read successfully and added to context."
-                                context += [
-                                    {
-                                        "role": "user",
-                                        "content": [
+                                if fpath.stat().st_size > _FILE_READ_SIZE_LIMIT:
+                                    raise ValueError("The file is too big; please use the computer agent instead!")
+                                match category:
+                                    case "text":
+                                        result = f"File {str(fpath)!r} added to the context successfully."
+                                        context += [
                                             {
-                                                "type": "input_text",
-                                                "text": f"The contents of the file {str(fpath)!r}",
-                                            },
-                                            {"type": "input_file", "file_id": f_obj.id},
-                                        ],
-                                    }
-                                ]
+                                                "role": "user",
+                                                "content": [
+                                                    {
+                                                        "type": "input_text",
+                                                        "text": f"The contents of the text file {str(fpath)!r}"
+                                                        f" are in the next message.",
+                                                    },
+                                                    {
+                                                        "type": "input_text",
+                                                        "text": fpath.read_text(encoding="utf-8", errors="replace"),
+                                                    },
+                                                ],
+                                            }
+                                        ]
+                                    case "image":
+                                        _logger.error("🔧 TODO: please implement image file support!")
+                                        raise NotImplementedError(
+                                            "Image files are not yet supported, sorry;"
+                                            " please rely on the computer use agent instead."
+                                        )
+                                    case _:
+                                        (f_obj,) = openai_upload_files(self._client, [fpath])
+                                        result = f"File {str(fpath)!r} added to the context successfully."
+                                        context += [
+                                            {
+                                                "role": "user",
+                                                "content": [
+                                                    {
+                                                        "type": "input_text",
+                                                        "text": f"The contents of the file {str(fpath)!r}",
+                                                    },
+                                                    {"type": "input_file", "file_id": f_obj.id},
+                                                ],
+                                            }
+                                        ]
+                            except Exception as ex:
+                                result = (
+                                    f"ERROR: Failed to process the file {str(fpath)!r}: {type(ex).__name__}: {ex}\n"
+                                    + format_exception(ex)
+                                )
+                                _logger.error(f"Failed to process the file {str(fpath)!r}: {ex}", exc_info=True)
+
                     case "read_url":
                         url = args["url"]
                         _logger.info(f"🌐 Adding URL to the context: {url!r}")
@@ -476,6 +536,7 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                                 "content": [{"type": "input_file", "file_url": url}],
                             }
                         ]
+
                     case "shell":
                         ts = datetime.now().isoformat()
                         command = args["command"]
@@ -489,20 +550,18 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                             )
                             _logger.error(f"Exception during shell command execution: {ex}", exc_info=True)
                         else:
-                            result = {
-                                "exit_status": status,
-                                "stdout": stdout,
-                                "stderr": stderr,
-                            }
+                            result = {"exit_status": status, "stdout": stdout, "stderr": stderr}
                             _logger.info(f"🖥️ Shell command exited with status {status}")
                             try:
                                 (self._dir / f"reasoner_shell_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")
                                 (self._dir / f"reasoner_shell_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
                             except Exception as ex:
                                 _logger.error(f"Failed to save shell output: {ex}", exc_info=True)
+
                     case "get_local_time":
                         result = get_local_time_llm()
                         _logger.info(f"🕰️ Current local time: {result}")
+
                     case "suspend":
                         duration_sec = float(args["duration_minutes"]) * 60
                         _logger.info(f"😴 Suspending for {duration_sec} seconds...")
@@ -510,9 +569,11 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                         _logger.info("😴 ...resuming")
                         now = get_local_time_llm()
                         result = f"Woke up after {duration_sec} seconds of suspension. The current time is: {now}"
+
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
+
                 context += [
                     {
                         "type": "function_call_output",
@@ -536,6 +597,9 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
         f_response.write_text(json.dumps(response, indent=2))
 
     def _screenshot_b64(self) -> str:
+        # The short sleep helps avoiding further waits while the UI is still updating.
+        # It must happen after the last action and immediately BEFORE the next screenshot.
+        time.sleep(0.5)
         im = self._ui.screenshot()
         im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)

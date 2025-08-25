@@ -1,1 +1,3 @@
-Summarize the contents of the file "Tax rates _ Estonian Tax and Customs Board.pdf"
+Summarize the contents of the following files:
+- "Tax rates _ Estonian Tax and Customs Board.pdf"
+- accounting/prompt.txt
