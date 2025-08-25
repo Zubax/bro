@@ -120,6 +120,11 @@ class HierarchicalExecutive(Executive):
     by splitting complex tasks into smaller atomic subtasks. For example, it can convert a task like
     "Open zubax.com" into a series of subtasks: click the Firefox icon, wait for the browser to open,
     type the URL, press Enter, and wait for the correct page to load.
+
+    WARNING: if you are using a low reasoning setting or a low-capability model, be sure to limit the number
+    of steps to a small number (maybe about 10-20) because small models often get stuck in loops
+    or get distracted and start procrastinating. If a task fails to complete, it is usually not a problem
+    because the planner can always intervene and fix things.
     """
 
     def __init__(
@@ -132,7 +137,7 @@ class HierarchicalExecutive(Executive):
         model: str,
         reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
-        max_steps: int = 100,
+        max_steps: int = 20,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
@@ -224,10 +229,7 @@ class HierarchicalExecutive(Executive):
                     self._ui.do(ui_io.WaitAction(duration=duration))
                     return [self._user_message(f"Waited for {duration} seconds.")], None
 
-                case {"type": "terminate", "message": message} if isinstance(message, str):
-                    return [], message
-
-                case {"type": "ask_user", "message": message} if isinstance(message, str):
+                case {"type": ty, "message": message} if ty in {"terminate", "ask_user"} and isinstance(message, str):
                     return [], message
 
                 case _:
