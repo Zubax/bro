@@ -14,7 +14,7 @@ from openai.types import ReasoningEffort
 from bro import ui_io
 from bro.executive import Executive
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception
+from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception, get_trailing_json
 
 _logger = logging.getLogger(__name__)
 
@@ -43,13 +43,12 @@ You can assign one small task per step.
 You verify the success of each step and adjust your strategy if something goes wrong.
 To assign a task, include a JSON code block at the end of your response following one of the templates below.
 A JSON block is MANDATORY in EVERY response.
+There shall be no text after the JSON code block; the JSON block SHALL BE SURROUNDED BY TRIPLE BACKTICKS.
 
 Each of your responses MUST begin with a brief description of the current status of the task,
 a critical review of the progress so far, and a description of the next step you are going to take.
 If you notice that you are unable to make progress for a long time, you should try to change your approach;
 if you are completely stuck, you can terminate the task with a failure message.
-
-There shall be no text after the JSON code block; the JSON block shall be surrounded by triple backticks.
 
 You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
 
@@ -206,19 +205,10 @@ class HierarchicalExecutive(Executive):
         assert False
 
     def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
-        js = _RE_JSON.search(response)
-        if not js:
-            _logger.info("⚠️ No JSON block found in the response, will retry: %r", response)
-            return [
-                self._user_message(
-                    "ERROR: JSON block missing or formatted incorrectly; try again."
-                    " Do not attempt to speak to the user, there is no human in the loop. JSON required always."
-                )
-            ], None
-        if deep_thought := response[: js.start()].strip():
-            _logger.info(f"💭 {deep_thought}")
+        thought, cmd = get_trailing_json(response)
+        if thought:
+            _logger.info(f"💭 {thought}")
         try:
-            cmd = json.loads(js.group(1))
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")

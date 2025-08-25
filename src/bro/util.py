@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import Any
+import json
 import base64
 import traceback
+import re
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -105,3 +107,27 @@ def run_shell_command(cmd: str) -> tuple[int, str, str]:
     stdout, stderr = proc.communicate()
     _logger.debug(f"Command exited with status {proc.returncode}")
     return proc.returncode, stdout, stderr
+
+
+def split_trailing_json(text: str) -> tuple[str, Any]:
+    """
+    Extract parsed JSON from the end of the message. None if not found.
+    Sometimes, simple LLMs forget to generate proper Markdown code blocks, so this function attempts to be forgiving.
+    Returns the parsed JSON and the other text before it.
+    """
+    js = _RE_JSON_BACKTICKS.search(text)
+    if js is not None:
+        try:
+            return json.loads(js[1]), text[: js.start()].rstrip()
+        except Exception as ex:
+            _logger.debug(f"Failed to parse JSON from backticks: {ex}", exc_info=True)
+            return text, None
+    js = text.splitlines()[-1]
+    try:
+        return json.loads(js), text[: text.rfind(js)].rstrip()
+    except Exception as ex:
+        _logger.debug(f"Failed to parse JSON from last line: {ex}", exc_info=True)
+        return text, None
+
+
+_RE_JSON_BACKTICKS = re.compile(r"(?ims)^```(?:json)?\n(.+)\n```$")
