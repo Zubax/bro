@@ -14,7 +14,7 @@ from openai.types import ReasoningEffort
 from bro import ui_io
 from bro.executive import Executive
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception, get_trailing_json
+from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception, split_trailing_json
 
 _logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ class HierarchicalExecutive(Executive):
         assert False
 
     def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
-        thought, cmd = get_trailing_json(response)
+        thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
         try:
