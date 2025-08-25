@@ -9,7 +9,8 @@ from openai import OpenAI
 
 from bro import ui_io
 from bro.reasoner import Context
-from bro.executive.openai_cua import OpenAiCuaExecutive
+from bro.executive.hierarchical import HierarchicalExecutive
+from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
 
 
@@ -23,12 +24,17 @@ def main() -> None:
     context = _build_context(sys.argv[1:])
 
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
     ui = ui_io.make_controller()
-    exe = OpenAiCuaExecutive(
+    exe = HierarchicalExecutive(
+        inferior=UiTars7bExecutive(ui=ui, state_dir=_dir, client=openrouter_client),
         ui=ui,
         state_dir=_dir,
         client=openai_client,
+        model="gpt-5-mini",
+        reasoning_effort="minimal",
+        max_steps=15,  # low reasoning requires a low step limit to avoid loops
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,

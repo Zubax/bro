@@ -270,5 +270,5 @@ _KEYMAP = {
 
 
 def _to_pyauto_key(k: str) -> str:
-    k = k.strip()
+    k = k.strip().replace(" ", "").replace("-", "")
     return _KEYMAP.get(k.upper(), k.lower())
