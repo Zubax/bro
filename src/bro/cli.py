@@ -33,7 +33,8 @@ def main() -> None:
         state_dir=_dir,
         client=openai_client,
         model="gpt-5-mini",
-        reasoning_effort="low",
+        reasoning_effort="minimal",
+        max_steps=15,  # low reasoning requires a low step limit to avoid loops
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
