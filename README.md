@@ -37,6 +37,8 @@ As an example where the two are at odds, Bro is able to log into a bank account 
 by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly);
 also, Bro tends to be very cheap to run because it heavily relies on low-cost models and minimal UI interactions.
 
+<img src="screenshot.png" width="800" alt="">
+
 ## Requirements
 
 Currently, Bro uses OpenRouter and OpenAI for inference. You must have valid API keys for both services
