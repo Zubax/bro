@@ -102,7 +102,7 @@ class UiTars7bExecutive(Executive):
         self._model = model
         self._max_steps = max_steps
         self._retry_attempts = 5
-        self._temperature = 0.1
+        self._temperature = 0.01
         self._context = [{"role": "system", "content": _PROMPT_EXECUTIVE}]
 
     def act(self, goal: str) -> str:
@@ -165,6 +165,7 @@ class UiTars7bExecutive(Executive):
         response_sans_action = "\n".join(response.strip().splitlines()[:-1]).strip()
         m = self._RE_ACTION.match(action_line)
         if not m:
+            _logger.info("💭 No action found in the response: %r", action_line)
             return [], response
         if response_sans_action:
             _logger.info(f"💭 {response_sans_action}")

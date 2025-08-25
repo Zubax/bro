@@ -154,9 +154,9 @@ class HierarchicalExecutive(Executive):
             cmd = json.loads(js.group(1))
             match cmd:
                 case {"type": "task", "description": description}:
-                    _logger.info(f"➡️ Assigning task to the underlying agent: {description}")
+                    _logger.info(f"➡️ Delegating task: {description}")
                     result = self._inferior.act(description)
-                    _logger.info(f"✅ Underlying agent completed the task with result: {result}")
+                    _logger.info(f"🏆 Delegation result: {result}")
                     return [self._user_message(result)], None
 
                 case {"type": "wait", "duration": duration} if isinstance(duration, (int, float)) and duration > 0:
