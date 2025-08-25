@@ -11,15 +11,15 @@ However, it already useful and can be applied to low-stakes open-ended real-worl
 which we already practice at Zubax with varying degrees of success.
 
 Currently, Bro utilizes the general-purpose GPT-5 for high-level reasoning and planning,
-a fast GPT-5-Mini with a low reasoning effort setting for low-level UI action scheduling,
+a fast GPT-5-Mini with a low reasoning effort setting for low-level UI control,
 and the fast and compact UI-TARS-1.5-7B for UI grounding.
 The agent is tuned to avoid touching UI unless absolutely necessary, preferring
-direct file access and shell commands whenever possible.
+direct file access, shell commands, and hotkeys whenever possible.
 
 There is an option to replace the GPT-5-Mini & UI-TARS stack with the stock CUA model from OpenAI,
-but this is actually not recommended because it is noticeably slower and much more expensive than the UI-TARS stack.
+but this is actually not recommended because it is slower and much more expensive than the UI-TARS stack.
 
-You can even run UI-TARS locally (the 7B version only needs 32 GB of VRAM) and avoid touching OpenRouter.
+You can even run UI-TARS locally (the 7B version only needs 32 GB of VRAM) and avoid OpenRouter.
 Warning though: **quantized edits of UI-TARS cannot be used for grounding as-is!!**
 The exact reasons for that elude my understanding, but quantized models tend to predict screen coordinates incorrectly
 (custom scaling factors are required).
