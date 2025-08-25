@@ -79,6 +79,8 @@ use the PageUp/PageDown keys instead of scrolling with the mouse!
 
 ## Wait for a certain amount of time
 
+You MUST NOT use this command to request a user intervention; use the `ask_user` command instead.
+
 ```json
 {"type": "wait", "duration": number_of_seconds}
 ```
@@ -87,6 +89,12 @@ use the PageUp/PageDown keys instead of scrolling with the mouse!
 
 ```json
 {"type": "terminate", "message": "<report on the success or failure of the overall goal>"}
+```
+
+## Request user intervention
+
+```json
+{"type": "ask_user", "message": "<explanation of the situation and what the user should do>"}
 ```
 """
 
@@ -206,6 +214,9 @@ class HierarchicalExecutive(Executive):
                     return [self._user_message(f"Waited for {duration} seconds.")], None
 
                 case {"type": "terminate", "message": message} if isinstance(message, str):
+                    return [], message
+
+                case {"type": "ask_user", "message": message} if isinstance(message, str):
                     return [], message
 
                 case _:
