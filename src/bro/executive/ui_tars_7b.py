@@ -83,6 +83,12 @@ Action: <action>
 
 
 class UiTars7bExecutive(Executive):
+    """
+    This Executive is only capable of extremely simple atomic tasks, such as clicking on a specific item,
+    or typing text, etc. It cannot be paired with a Reasoner on its own; an additional hierarchical Executive
+    is required to break down complex tasks into simpler ones.
+    """
+
     _RE_ACTION = re.compile(r"\s*action:\s*(\w+)\s*\((.*)\).*", re.IGNORECASE)
     _RE_NUMBERS = re.compile(r"(\d+)\D*")
     _RE_QUOTED = re.compile(r"""['"](.+)['"]""")
@@ -94,7 +100,7 @@ class UiTars7bExecutive(Executive):
         state_dir: Path,
         client: OpenAI,
         model: str = "bytedance/ui-tars-1.5-7b",
-        max_steps: int = 10,
+        max_steps: int = 3,
     ) -> None:
         self._ui = ui
         self._dir = state_dir
@@ -102,7 +108,7 @@ class UiTars7bExecutive(Executive):
         self._model = model
         self._max_steps = max_steps
         self._retry_attempts = 5
-        self._temperature = 0.01
+        self._temperature = 0.1
         self._context = [{"role": "system", "content": _PROMPT_EXECUTIVE}]
 
     def act(self, goal: str) -> str:
