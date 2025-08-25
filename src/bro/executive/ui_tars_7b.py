@@ -135,7 +135,7 @@ class UiTars7bExecutive(Executive):
                     )
                     break
                 except InternalServerError as e:
-                    _logger.warning(f"API error on attempt {attempt}/{self._retry_attempts}: {e}")
+                    _logger.warning(f"Inference API error on attempt {attempt}/{self._retry_attempts}: {e}")
                     if attempt == self._retry_attempts:
                         raise
                     time.sleep(2**attempt)
