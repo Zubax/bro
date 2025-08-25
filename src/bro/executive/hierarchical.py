@@ -39,20 +39,21 @@ For example, if the goal is "Open zubax.com", you should break it down into a se
 4. Press Enter (using the `key_press` command).
 5. Wait for the correct page to load (using the `wait` command).
 
+Each of your responses MUST begin with a brief description of the current status of the task,
+a critical review of the progress so far, and a description of the next step you are going to take.
+Finally, there MUST be a MANDATORY JSON block enclosed in triple backticks as specified below.
+
+You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
+
 You can assign one small task per step.
 You verify the success of each step and adjust your strategy if something goes wrong.
 To assign a task, include a JSON code block at the end of your response following one of the templates below.
 A JSON block is MANDATORY in EVERY response.
 There shall be no text after the JSON code block; the JSON block SHALL BE SURROUNDED BY TRIPLE BACKTICKS.
 
-Each of your responses MUST begin with a brief description of the current status of the task,
-a critical review of the progress so far, and a description of the next step you are going to take.
-If you notice that you are unable to make progress for a long time, you should try to change your approach;
-if you are completely stuck, you can terminate the task with a failure message.
-
-You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
-
 # JSON response templates
+
+A JSON block is MANDATORY in EVERY response.
 
 ## Perform a GUI-related atomic task
 
@@ -234,6 +235,14 @@ class HierarchicalExecutive(Executive):
 
                 case {"type": ty, "message": message} if ty in {"terminate", "help"} and isinstance(message, str):
                     return [], message
+
+                case None:
+                    _logger.info("❓ JSON block is missing.")
+                    return [
+                        self._user_message(
+                            "ERROR: No JSON block found in the response; try again. Triple backticks are required."
+                        ),
+                    ], None
 
                 case _:
                     _logger.warning(f"❓ Unrecognized or invalid command from the agent: {cmd}")
