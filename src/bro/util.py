@@ -7,8 +7,6 @@ from datetime import datetime
 from pathlib import Path
 import logging
 import subprocess
-import requests
-import tempfile
 
 from PIL import Image
 

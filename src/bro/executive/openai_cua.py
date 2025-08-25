@@ -48,12 +48,12 @@ class OpenAiCuaExecutive(Executive):
         *,
         ui: UiController,
         state_dir: Path,
-        openai_api_key: str,
+        client: OpenAI,
         model: str = "computer-use-preview",
     ) -> None:
         self._ui = ui
         self._dir = state_dir
-        self._client = OpenAI(api_key=openai_api_key)
+        self._client = client
         self._model = model
         screen_size = self._ui.screen_width_height
         self._tools = [

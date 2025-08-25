@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 import sys
 
+from openai import OpenAI
+
 from bro import ui_io
 from bro.reasoner import Context
 from bro.executive.openai_cua import OpenAiCuaExecutive
@@ -20,19 +22,19 @@ def main() -> None:
     _setup_logging()
     context = _build_context(sys.argv[1:])
 
-    openai_api_key = os.getenv("OPENAI_API_KEY")
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     ui = ui_io.make_controller()
     exe = OpenAiCuaExecutive(
         ui=ui,
         state_dir=_dir,
-        openai_api_key=openai_api_key,
+        client=openai_client,
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
         state_dir=_dir,
-        openai_api_key=openai_api_key,
+        client=openai_client,
     )
 
     try:

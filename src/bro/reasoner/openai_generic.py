@@ -288,14 +288,14 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
         executive: Executive,
         ui: UiObserver,
         state_dir: Path,
-        openai_api_key: str,
+        client: OpenAI,
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
     ) -> None:
         self._exe = executive
         self._ui = ui
         self._dir = state_dir
-        self._client = OpenAI(api_key=openai_api_key)
+        self._client = client
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._tools = copy.deepcopy(self._TOOLS)
