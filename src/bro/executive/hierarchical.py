@@ -132,9 +132,6 @@ class HierarchicalExecutive(Executive):
         ctx = self._context + [{"role": "user", "content": goal}]
         for step in count():
             _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
-            # The short sleep helps avoiding further waits while the UI is still updating.
-            # It must happen after the last action and immediately BEFORE the next screenshot.
-            time.sleep(0.3)
             ctx += [
                 {
                     "role": "user",
@@ -228,6 +225,9 @@ class HierarchicalExecutive(Executive):
         return {"role": "user", "content": msg}
 
     def _screenshot_b64(self) -> str:
+        # The short sleep helps avoiding further waits while the UI is still updating.
+        # It must happen after the last action and immediately BEFORE the next screenshot.
+        time.sleep(0.5)
         im = self._ui.screenshot()
         im.save(self._dir / f"executive_hierarchical_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)

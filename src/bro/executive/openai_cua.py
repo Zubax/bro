@@ -254,6 +254,9 @@ class OpenAiCuaExecutive(Executive):
         f_response.write_text(json.dumps(response, indent=2))
 
     def _screenshot_b64(self) -> str:
+        # The short sleep helps avoiding further waits while the UI is still updating.
+        # It must happen after the last action and immediately BEFORE the next screenshot.
+        time.sleep(0.5)
         im = self._ui.screenshot()
         im.save(self._dir / f"executive_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
