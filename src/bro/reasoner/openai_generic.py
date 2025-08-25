@@ -550,11 +550,7 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                             )
                             _logger.error(f"Exception during shell command execution: {ex}", exc_info=True)
                         else:
-                            result = {
-                                "exit_status": status,
-                                "stdout": stdout,
-                                "stderr": stderr,
-                            }
+                            result = {"exit_status": status, "stdout": stdout, "stderr": stderr}
                             _logger.info(f"🖥️ Shell command exited with status {status}")
                             try:
                                 (self._dir / f"reasoner_shell_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")

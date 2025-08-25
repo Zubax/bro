@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 
 
 _PROMPT = """\
-You are an agent that can perform tasks on a computer by controlling the user interface (UI) by assigning tasks
+You are an agent that can perform simple tasks on a computer by controlling the user interface (UI) by assigning tasks
 to a smaller underlying agent. You accept high-level goals and break them down into smaller, atomic tasks that
 the underlying agent can perform. At each step you receive the current screenshot of the desktop and the current time.
 You do not perform any UI actions yourself.
@@ -84,6 +84,9 @@ use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to clos
 ## Wait for a certain amount of time
 
 You MUST NOT use this command to request a user intervention; use the `ask_user` command instead.
+YOU MUST NEVER USE THIS COMMAND TO WAIT FOR USER INPUT.
+The user cannot intervene you unless you either terminate the task or use the `ask_user` command.
+You must always make progress as quickly as possible, and as such, you are not allowed to use unreasonably long waits.
 
 ```json
 {"type": "wait", "duration": number_of_seconds}
@@ -217,6 +220,7 @@ class HierarchicalExecutive(Executive):
                     return [self._user_message(f"Pressed keys: {ks}")], None
 
                 case {"type": "wait", "duration": duration} if isinstance(duration, (int, float)) and duration > 0:
+                    duration = min(duration, 30)  # Some models tend to slack off and request very long waits.
                     self._ui.do(ui_io.WaitAction(duration=duration))
                     return [self._user_message(f"Waited for {duration} seconds.")], None
 
