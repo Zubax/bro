@@ -282,7 +282,7 @@ def _test() -> None:
     exe = OpenAiCuaExecutive(
         ui=ui_io.make_controller(),
         state_dir=state_dir,
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        client=OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
     )
     prompt = (
         " ".join(sys.argv[1:])
