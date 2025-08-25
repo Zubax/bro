@@ -1,8 +1,14 @@
-# Bro
+<h1 align="center" style="text-align:center">Bro 🤖</h1>
+<p align="center" style="text-align:center">The Practical Business Operations Robot</p>
+<div align="center">
+
+[![Forum](https://img.shields.io/discourse/https/forum.zubax.com/users.svg?color=e00000)](https://forum.zubax.com)
+
+</div>
+<hr/>
 
 Bro is an LLM computer-using agent (CUA) designed to autonomously perform mundane tasks related to business operations
 and administration, such as doing accounting, filing paperwork, and submitting applications.
-The accountant is not your bro, but Bro is.
 
 ℹ️ *"Bro" is Latvian for "one who beheads the Messiah".*
 
@@ -12,7 +18,8 @@ which we already practice at Zubax with varying degrees of success.
 
 Currently, Bro utilizes the general-purpose GPT-5 for high-level reasoning and planning,
 a fast GPT-5-Mini with a low reasoning effort setting for low-level UI control,
-and the fast and compact UI-TARS-1.5-7B for UI grounding.
+and the fast and compact UI-TARS-1.5-7B for UI grounding
+(which is used directly, without any additional OCR or object detection).
 The agent is tuned to avoid touching UI unless absolutely necessary, preferring
 direct file access, shell commands, and hotkeys whenever possible.
 
@@ -27,7 +34,8 @@ The exact reasons for that elude my understanding, but quantized models tend to 
 Bro does not (currently) attempt to compete in the standard CUA benchmarks because it is primarily focused
 on practical utility in real-world office tasks rather than synthetic benchmarks.
 As an example where the two are at odds, Bro is able to log into a bank account using 2FA OTP codes generated
-by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly).
+by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly);
+also, Bro tends to be very cheap to run because it heavily relies on low-cost models and minimal UI interactions.
 
 ## Requirements
 
@@ -67,6 +75,17 @@ Where the paths point to files or directories containing files, among which ther
 `prompt.txt` which contains the description of the task to perform.
 You can find examples under the `demo_prompts/` directory.
 
+Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
+configure a narrow screen resolution (e.g., 1280x1024), ssh there and run Bro,
+possibly in a terminal multiplexer like tmux or screen.
+
+To run Bro via SSH, be sure to `source source_ssh.sh` first.
+
 ## Testing
 
 To invoke a particular component for testing purposes, go like `python3 -m bro.executive`.
+
+## Contributing
+
+Please open a ticket or shoot us a msg on the Zubax forum.
+Pull requests are welcome.
