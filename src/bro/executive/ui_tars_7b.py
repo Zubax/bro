@@ -113,7 +113,7 @@ class UiTars7bExecutive(Executive):
 
     def act(self, goal: str) -> str:
         scr_w, scr_h = self._ui.screen_width_height
-        ctx = self._context + [{"role": "user", "content": goal}]
+        ctx = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
         for step in range(self._max_steps):
             _logger.info(f"🤖 Step #{step+1}/{self._max_steps}...")
             ctx += [
@@ -220,7 +220,7 @@ class UiTars7bExecutive(Executive):
                     f"Error during action execution: {ex}; try again. Exception stacktrace:\n{format_exception(ex)}"
                 ),
             ], None
-        return [], None
+        return [], response_sans_action  # stop after a single action
 
     @staticmethod
     def _user_message(msg: str, /) -> dict[str, Any]:
