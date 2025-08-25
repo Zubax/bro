@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from openai import OpenAI, InternalServerError
+from openai import OpenAI, InternalServerError, NOT_GIVEN, NotGiven
+from openai.types import ReasoningEffort
 
 from bro import ui_io
 from bro.executive import Executive
@@ -71,7 +72,10 @@ you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
 
 Press hotkeys using this command. Whenever possible you should prefer using hotkeys over mouse clicks,
 because they are much more reliable and faster. For example, if you need to scroll a document or a web page,
-use the PageUp/PageDown keys instead of scrolling with the mouse!
+use the PageUp/PageDown keys instead of scrolling with the mouse! Likewise, use Alt+Tab to switch applications
+instead of clicking on the taskbar, use Ctrl+T to open a new browser tab instead of clicking the "+" button,
+use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to close a window instead of clicking the
+"X" button, and so on.
 
 ```json
 {"type": "key_press", "keys": ["<key1>", "<key2>", ...]}
@@ -123,6 +127,7 @@ class HierarchicalExecutive(Executive):
         state_dir: Path,
         client: OpenAI,
         model: str,
+        reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
         max_steps: int = 100,
     ) -> None:
@@ -131,6 +136,7 @@ class HierarchicalExecutive(Executive):
         self._dir = state_dir
         self._client = client
         self._model = model
+        self._reasoning_effort = reasoning_effort
         self._temperature = temperature
         self._retry_attempts = 5
         self._max_steps = max_steps
@@ -161,6 +167,7 @@ class HierarchicalExecutive(Executive):
                     # noinspection PyTypeChecker
                     response = self._client.chat.completions.create(
                         model=self._model,
+                        reasoning_effort=self._reasoning_effort,
                         messages=ctx,
                         temperature=self._temperature,
                     )

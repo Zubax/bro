@@ -33,6 +33,7 @@ def main() -> None:
         state_dir=_dir,
         client=openai_client,
         model="gpt-5-mini",
+        reasoning_effort="minimal",
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
