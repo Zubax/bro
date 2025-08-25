@@ -265,7 +265,6 @@ class OpenAiCuaExecutive(Executive):
 
 
 def _test() -> None:
-    import logging
     import sys
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-3.3s %(name)s: %(message)s")
