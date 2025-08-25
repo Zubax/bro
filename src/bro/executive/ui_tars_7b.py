@@ -34,7 +34,148 @@ Inaccurate prediction will lead to severe punishment. Accurate prediction will b
 """
 
 _PROMPT_EXECUTIVE = """\
-Here be dragons.
+You are an AI agent that can interact with a graphical user interface (GUI) to accomplish tasks.
+You are given a description of the task, and your goal is to determine the best sequence of actions to complete it
+using the available actions specified in JSON code blocks as described below.
+
+Your responses must include a detailed free-form description of the current situation, your reasoning about
+the next steps, a detailed bullet list of the next actions to take, and a single action to perform next.
+The action must be one of the available actions listed below and formatted as a JSON code block.
+Actions can only be specified in JSON code blocks, and any other format will be considered invalid.
+
+You will be provided with a fresh screenshot of the current GUI state before each response.
+
+Each response shall contain a refined plan of the next actions to take, based on the current GUI state
+and the outcome of the previous action.
+
+The available actions are listed below. They are specified in JSON format. There should be exactly one action
+per response, formatted as a JSON code block based on one of the action templates below.
+
+# AVAILABLE ACTIONS
+
+## Move the mouse cursor to a specific position on the screen
+
+The `location` field contains a detailed description of the target GUI element to move the mouse to.
+In case multiple instances of the element are present, the description should be as specific as possible to
+avoid ambiguity.
+
+```json
+{
+    "action": "move",
+    "location": string
+}
+```
+
+For example:
+
+```json
+{
+    "action": "move",
+    "location": "the 'File' menu in the top menu bar"
+}
+```
+
+If necessary, you can describe specific coordinates on the screen (assuming they are known to you),
+for example: "Point with coordinates (512, 384)".
+
+## Click the mouse at a specific position on the screen
+
+```json
+{
+    "action": "click",
+    "location": string,
+    "button": "left" | "right" | "middle",
+    "count": integer
+}
+```
+
+The `location` field has the same meaning as in the `move` action.
+The `button` field specifies which mouse button to click (default is "left").
+The `count` field specifies how many times to click, e.g. 1 for single click, 2 for double click (default is 1).
+
+## Drag the mouse along a specified path
+
+```json
+{
+    "action": "drag",
+    "path": [string]
+}
+```
+
+The `path` field is a list of descriptions of the points to drag through, in order.
+Each point description has the same meaning as the `location` field in the `move` action.
+
+## Scroll the mouse wheel at a specific position on the screen
+
+```json
+{
+    "action": "scroll",
+    "location": string | null,  // if null, scroll at the current mouse position
+    "scroll_x": integer,   // horizontal scroll amount (positive for right, negative for left)
+    "scroll_y": integer    // vertical scroll amount (positive for up, negative for down)
+}
+```
+
+Example:
+
+```json
+{
+    "action": "scroll",
+    "location": "the main content area of the browser window",
+    "scroll_x": 0,
+    "scroll_y": -50
+}
+```
+
+## Type a sequence of characters
+
+```json
+{
+    "action": "type",
+    "text": string
+}
+```
+
+Example:
+
+```json
+{
+    "action": "type",
+    "text": "Hello, world!"
+}
+```
+
+## Press a sequence of keys
+
+```json
+{
+    "action": "key_press",
+    "keys": [string]
+}
+```
+
+Example:
+
+```json
+{
+    "action": "key_press",
+    "keys": ["ctrl", "s"]
+}
+```
+
+## Wait for a specified amount of time
+
+```json
+{
+    "action": "wait",
+    "duration": number   // duration to wait in seconds; if omitted or null, wait for a reasonable amount of time.
+}
+```
+
+## Report completion or infeasibility of the task
+
+To report that no further actions will be taken due to successful completion of the task, or infeasibility of the task,
+simply respond with a free-form explanation in plain text, without any JSON formatting.
 """
 
 
@@ -52,6 +193,7 @@ class UiTars7bExecutive(Executive):
         self._client = client
         self._model = model
         self._retry_attempts = 5
+        self._locator = _GuiLocator(client=client)
 
     def act(self, goal: str) -> str:
         raise NotImplementedError("UiTars7bExecutive.act is not implemented yet")
