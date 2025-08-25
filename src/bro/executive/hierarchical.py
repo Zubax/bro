@@ -69,7 +69,9 @@ you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
 
 ## Key press
 
-Press hotkeys using this command.
+Press hotkeys using this command. Whenever possible you should prefer using hotkeys over mouse clicks,
+because they are much more reliable and faster. For example, if you need to scroll a document or a web page,
+use the PageUp/PageDown keys instead of scrolling with the mouse!
 
 ```json
 {"type": "key_press", "keys": ["<key1>", "<key2>", ...]}
