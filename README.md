@@ -13,6 +13,6 @@ All other files will be added into the context, so the prompt can reference them
 To invoke a particular component for testing purposes, go like `python3 -m bro.executive`.
 
 CUA LLMs perform better with lower screen resolutions;
-they also could be be more efficient with more square aspect ratios.
+they also could be more efficient with more square aspect ratios.
 The resolution certainly should not be greater than 1920x1080;
 particularly good results with OpenAI computer-use-preview were observed at 1280x1024.
