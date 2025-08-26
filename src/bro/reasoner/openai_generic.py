@@ -13,7 +13,7 @@ from bro.executive import Executive
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
-from bro.util import run_shell_command
+from bro.util import run_shell_command, run_python_code
 
 _logger = logging.getLogger(__name__)
 
@@ -78,10 +78,6 @@ class OpenAiGenericReasoner(Reasoner):
             "type": "web_search_preview",
             "user_location": {"type": "approximate"},
             "search_context_size": "low",
-        },
-        {
-            "type": "code_interpreter",
-            "container": {"type": "auto"},
         },
         {
             "type": "function",
@@ -292,6 +288,30 @@ Sometimes this may be more efficient than asking the computer-using agent to dow
                 "required": ["command"],
             },
         },
+        {
+            "type": "function",
+            "name": "python",
+            "description": """\
+Execute a snippet of Python code in a separate process on the same computer and return the process exit code,
+stdout, and stderr. Use this function to perform complex computations, data processing, REST API access,
+or any task that can be efficiently accomplished with Python code.
+If necessary, you can install arbitrary pip packages using the `shell` function.
+Since this function runs on the same computer, you can use GUI libraries such as Tkinter, Matplotlib, etc.
+Hint: you can also run existing Python scripts by invoking the Python interpreter using the `shell` function.
+This function is safe for security-sensitive tasks.
+""",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Python code to execute.",
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["code"],
+            },
+        },
         # TODO: add reflection!
     ]
 
@@ -395,9 +415,26 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                     del x["status"]
 
             for item in output:
-                new_ctx, new_stop = self._process(item)
+                try:
+                    new_ctx, new_stop = self._process(item)
+                    stop = stop or new_stop
+                except Exception as ex:
+                    _logger.exception(f"Exception during item processing: {ex}")
+                    new_ctx = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": (
+                                        f"ERROR: Exception during processing: {type(ex).__name__}: {ex}\n"
+                                        + format_exception(ex)
+                                    ),
+                                }
+                            ],
+                        }
+                    ]
                 self._context += new_ctx
-                stop = stop or new_stop
 
         _logger.info(f"🧠 OpenAI Reasoner has finished 🏁")
         return stop
@@ -550,6 +587,29 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                                 (self._dir / f"reasoner_shell_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
                             except Exception as ex:
                                 _logger.error(f"Failed to save shell output: {ex}", exc_info=True)
+
+                    case "python":
+                        code = args["code"]
+                        demo_snippet = "\n".join(code.strip().splitlines()[:5])
+                        _logger.info(f"🐍 Running Python code (first few lines):\n{demo_snippet}\n...")
+                        try:
+                            status, stdout, stderr = run_python_code(code)
+                        except Exception as ex:
+                            result = (
+                                f"ERROR: Failed to start Python interpreter due to an environment error"
+                                f" (this error is not related to the provided code): {type(ex).__name__}: {ex}\n"
+                                + format_exception(ex)
+                            )
+                            _logger.error(f"Failed to start Python interpreter: {ex}", exc_info=True)
+                        else:
+                            result = {"exit_status": status, "stdout": stdout, "stderr": stderr}
+                            _logger.info(f"🐍 Python code exited with status {status}")
+                            try:
+                                ts = datetime.now().isoformat()
+                                (self._dir / f"reasoner_python_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")
+                                (self._dir / f"reasoner_python_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
+                            except Exception as ex:
+                                _logger.error(f"Failed to save Python output: {ex}", exc_info=True)
 
                     case "get_local_time":
                         result = get_local_time_llm()

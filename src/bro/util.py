@@ -1,5 +1,8 @@
 from __future__ import annotations
 from typing import Any
+import os
+import sys
+import tempfile
 import json
 import base64
 import traceback
@@ -107,6 +110,24 @@ def run_shell_command(cmd: str) -> tuple[int, str, str]:
     stdout, stderr = proc.communicate()
     _logger.debug(f"Command exited with status {proc.returncode}")
     return proc.returncode, stdout, stderr
+
+
+def run_python_code(code: str) -> tuple[int, str, str]:
+    """
+    Execute Python source in a child process using the current interpreter.
+    Returns (exit_code, stdout, stderr).
+    """
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write(code)
+        path = f.name
+    try:
+        proc = subprocess.run([sys.executable, path], capture_output=True, text=True)
+        return proc.returncode, proc.stdout, proc.stderr
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def split_trailing_json(text: str) -> tuple[str, Any]:
