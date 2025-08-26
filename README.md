@@ -49,7 +49,7 @@ Bro has only been tested on GNU/Linux distributions so far. Adding support for m
 and contributions are welcome.
 
 ⚠️ Bro can only work with single-monitor setups with the resolution at most 1920x1080.
-We mostly use it in an Ubuntu virtual machine with a 1280x1024 screen resolution.
+We mostly use it in an Ubuntu virtual machine with a 1600x1200 screen resolution.
 It is highly advised to use the default UI theme and a highly textured wallpaper
 to avoid confusing the UI grounding model (e.g., a solid black desktop background is known to cause significant issues).
 
@@ -78,8 +78,7 @@ Where the paths point to files or directories containing files, among which ther
 You can find examples under the `demo_prompts/` directory.
 
 Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
-configure a narrow screen resolution (e.g., 1280x1024), ssh there and run Bro,
-possibly in a terminal multiplexer like tmux or screen.
+configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.
 
 To run Bro via SSH, be sure to `source source_ssh.sh` first.
 
