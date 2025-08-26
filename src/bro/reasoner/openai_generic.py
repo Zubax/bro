@@ -47,11 +47,13 @@ using the computer-using agent. This is perfectly safe because you are running i
 You are allowed and encouraged to use web search and to ask humans via instant messaging (e.g., Slack)
 or email applications if you need additional information to complete the task.
 
-You are not allowed to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
+You are allowed and encouraged to create new user accounts on websites and services if the task requires so.
+
+You are NOT ALLOWED to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
 because this leads to loss of information. Instead, you can use the `read_file` function to add
 the contents of any file (text or binary) to your context.
 
-You are not allowed to use the `computer_use` function if the task can be completed using other functions
+You are NOT ALLOWED to use the `computer_use` function if the task can be completed using other functions
 (such as `shell`, `read_file`, or `read_url`) because that would be inefficient and error-prone.
 You can, however, fall back to using the `computer_use` function if the other functions prove insufficient.
 
@@ -84,7 +86,7 @@ class OpenAiGenericReasoner(Reasoner):
         {
             "type": "function",
             "name": "stop",
-            "description": """\not allowed
+            "description": """\n
 Report that the final goal has been achieved and the task is complete, or there is no possible way to complete it.
 Use this function to terminate the task.
 When invoking this function, you must explain in detail whether the task was successful or failed, and why;
@@ -142,20 +144,16 @@ It is mandatory to invoke this function before the first invocation of the `use_
 Perform computer operations to complete the assigned task using a separate computer-using agent.
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
-files, and so on. Be very specific and detailed in your instructions because the agent can be easily confused.
-Break down complex tasks into very small atomic steps and use multiple calls to this function to achieve the overall
-goal. The computer-using agent may not retain full memory of its past actions, so you must provide all necessary
-context in each invocation.
+files, and so on, if the task cannot be solved using the other functions. Be very specific and detailed in your
+instructions because the agent can be easily confused. Break down complex tasks into very small atomic steps and use
+multiple calls to this function to achieve the overall goal. The computer-using agent may not retain full memory
+of its past actions, so you must provide all necessary context in each invocation.
 
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
 screenshots explicitly or to describe the screen.
 
-YOU MUST NOT ASK THE COMPUTER-USING AGENT TO TAKE SCREENSHOTS, as that will effectively distract it from the task;
-you will be given a screenshot automatically per interaction regardless of what the computer-using agent does.
-
-Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly
-(it can, however, use instant messaging or email applications to communicate with humans if the task requires so).
+Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly.
 
 Some tasks can be time-sensitive, such as entering one-time passwords or responding to messages.
 In such cases, you must prefer delegating larger parts of the task to the computer-using agent,
@@ -174,11 +172,6 @@ found on a standard keyboard, as the computer-using agent may not be able to typ
 avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain ASCII characters instead.
 
 The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
-For this reason, you must not ask it to perform more than one action at a time, unless the actions are
-very closely related and can be easily verified together. For example, you can ask it to open a web browser
-and navigate to a specific URL in one step, as you can easily verify that both actions were performed correctly.
-However, you should not ask it to open a web browser, navigate to a URL, log in to an account, and download a file
-all in one step, as that would be too many actions to verify at once and it may cause the agent to make mistakes.
 
 If you need to retrieve information from a file, you should read the file directly using the `read_file` function
 rather than asking the computer-using agent to open and read the file from the screen.
@@ -218,7 +211,7 @@ and enter the current one-time password for the example.com account.
         {
             "type": "function",
             "name": "suspend",
-            "description": "When you don't have any assigned tasks or you need for a background process to complete,"
+            "description": "When you don't have any assigned tasks or you need to wait for a process to complete,"
             " use this function to temporarily suspend execution.",
             "parameters": {
                 "type": "object",

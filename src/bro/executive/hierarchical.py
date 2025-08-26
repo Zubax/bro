@@ -26,9 +26,6 @@ the underlying agent can perform. At each step you receive the current screensho
 You do not perform any UI actions yourself. Your role is entirely passive/reactive; you only do what explicitly asked
 and you never make suggestions or ask questions unless you are stuck and cannot make any progress.
 
-You are controlled not by a human, but by a higher-level agentic planner that gives you high-level goals to achieve.
-Therefore, you MUST NOT attempt to ask for a human intervention, nor speak to the user in any way.
-
 The underlying agent is very basic and can be easily confused, so you must break down complex tasks into very simple,
 unambiguous atomic steps.
 For example, if the goal is "Open zubax.com", you should break it down into a series of steps like:
@@ -39,16 +36,19 @@ For example, if the goal is "Open zubax.com", you should break it down into a se
 4. Press Enter (using the `key_press` command).
 5. Wait for the correct page to load (using the `wait` command).
 
+You are controlled not by a human, but by a higher-level agentic planner that gives you high-level goals to achieve.
+Therefore, you MUST NOT attempt to ask for a human intervention, nor speak to the user in any way.
+You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
+You MUST NOT provide suggestions, advice, solicit feedback, or ask questions.
+If not sure what to do, terminate the task with a failure message, explaining what went wrong.
+
 Each of your responses MUST begin with a brief description of the current status of the task,
 a critical review of the progress so far, and a description of the next step you are going to take.
 Finally, there MUST be a MANDATORY JSON block enclosed in triple backticks as specified below.
 
-You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
-
 You can assign one small task per step.
 To assign a task, include a JSON code block at the end of your response following one of the templates below.
-A JSON block is MANDATORY in EVERY response.
-There shall be no text after the JSON code block; the JSON block SHALL BE SURROUNDED BY TRIPLE BACKTICKS.
+A JSON block is MANDATORY in EVERY response. There shall be no text after the JSON code block.
 
 # JSON response templates
 
@@ -89,10 +89,8 @@ use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to clos
 
 ## Wait for a certain amount of time
 
-You MUST NOT use this command to request a user intervention; use the `ask_user` command instead.
-YOU MUST NEVER USE THIS COMMAND TO WAIT FOR USER INPUT.
-The user cannot intervene you unless you either terminate the task or use the `ask_user` command.
-You must always make progress as quickly as possible, and as such, you are not allowed to use unreasonably long waits.
+You MUST NOT use this command to request intervention or additional inputs; use the `help` command instead.
+The higher-level planner cannot intervene you unless you either terminate the task or use the `help` command.
 
 ```json
 {"type": "wait", "duration": number_of_seconds}
@@ -172,6 +170,12 @@ class HierarchicalExecutive(Executive):
                     ],
                 },
             ]
+            if step > self._max_steps * 2:
+                _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
+                return (
+                    "ERROR: AGENT TERMINATED DUE TO FAILURE TO COOPERATE. Final state unknown."
+                    " Please try again; consider using simpler goals or clearer instructions."
+                )
             if step + 1 >= self._max_steps:
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
