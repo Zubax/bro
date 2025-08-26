@@ -74,11 +74,7 @@ and the imminent enslavement of humanity by AI.
 
 class OpenAiGenericReasoner(Reasoner):
     _TOOLS = [
-        {
-            "type": "web_search_preview",
-            "user_location": {"type": "approximate"},
-            "search_context_size": "low",
-        },
+        {"type": "web_search_preview", "user_location": {"type": "approximate"}, "search_context_size": "low"},
         {
             "type": "function",
             "name": "stop",
@@ -366,6 +362,7 @@ This function is safe for security-sensitive tasks.
                 )
         _logger.info("🧠 OpenAI Reasoner is ready to dazzle 🫠")
         stop = None
+        last_failed = False
         while stop is None:
             self._context += [
                 {
@@ -419,6 +416,9 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                     new_ctx, new_stop = self._process(item)
                     stop = stop or new_stop
                 except Exception as ex:
+                    if last_failed:
+                        raise
+                    last_failed = True
                     _logger.exception(f"Exception during item processing: {ex}")
                     new_ctx = [
                         {
@@ -435,6 +435,8 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                         }
                     ]
                 self._context += new_ctx
+            else:
+                last_failed = False
 
         _logger.info(f"🧠 OpenAI Reasoner has finished 🏁")
         return stop
