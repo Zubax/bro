@@ -113,20 +113,19 @@ def split_trailing_json(text: str) -> tuple[str, Any]:
     """
     Extract parsed JSON from the end of the message. None if not found.
     Sometimes, simple LLMs forget to generate proper Markdown code blocks, so this function attempts to be forgiving.
+    VERY FORGIVING! Garbage in, garbage out; be sure to validate the output JSON schema.
     Returns the parsed JSON and the other text before it.
     """
-    if (js := _RE_JSON_BACKTICKS.search(text)) is not None:
-        try:
-            return text[: js.start()].rstrip(), json.loads(js[1])
-        except Exception as ex:
-            _logger.debug(f"Failed to parse JSON from backticks: {ex}", exc_info=True)
-            return text, None
-    js = text.splitlines()[-1]
-    try:
-        return text[: text.rfind(js)].rstrip(), json.loads(js)
-    except Exception as ex:
-        _logger.debug(f"Failed to parse JSON from last line: {ex}", exc_info=True)
-        return text, None
+    for regexp in _RE_TRAILING_JSON_WONKY:
+        if (js := regexp.search(text)) is not None and js[1]:
+            try:
+                return text[: js.start()].rstrip(), json.loads(js[1])
+            except ValueError:
+                pass
+    return text, None
 
 
-_RE_JSON_BACKTICKS = re.compile(r"(?ims)^```(?:json)?\n(.+)\n```$")
+_RE_TRAILING_JSON_WONKY = [
+    re.compile(r"(?is)`+(?:json)?\n(.+?)\n*`*\s*$"),
+    re.compile(r"(?i)(.+?)\s*$"),
+]

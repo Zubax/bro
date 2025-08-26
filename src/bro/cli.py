@@ -27,14 +27,14 @@ def main() -> None:
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
     ui = ui_io.make_controller()
+    # Low-capability models require a low max step limit because they tend to go off the rails.
     exe = HierarchicalExecutive(
         inferior=UiTars7bExecutive(ui=ui, state_dir=_dir, client=openrouter_client),
         ui=ui,
         state_dir=_dir,
         client=openai_client,
-        model="gpt-5-mini",
+        model="gpt-5",
         reasoning_effort="minimal",
-        max_steps=5,  # low reasoning requires a low step limit to avoid loops
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
