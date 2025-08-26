@@ -35,6 +35,7 @@ def main() -> None:
         client=openai_client,
         model="gpt-5",
         reasoning_effort="minimal",
+        max_steps=15,
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
