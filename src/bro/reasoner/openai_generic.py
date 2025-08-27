@@ -169,10 +169,6 @@ The computer-using agent can be unreliable, so you must verify its actions and c
 If the agent fails to complete the task, try again with smaller steps and simpler instructions,
 breaking the task down into even smaller parts if necessary until it can be completed successfully.
 
-The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
-You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
-screenshots explicitly or to describe the screen.
-
 Do not ask the computer-using agent to interact with a human (e.g. "ask the user to...") as it cannot do that directly.
 
 Some tasks can be time-sensitive, such as entering one-time passwords or responding to messages.
@@ -202,6 +198,10 @@ of asking the agent.
 If you need to access an online resource, consider doing so via a REST API or alternative machine-friendly means
 before resorting to using the web browser.
 
+The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
+You will be provided with a screenshot after each invocation of this function to help you verify the agent's actions.
+You can also take additional screenshots at any time using the `screenshot` function.
+
 TASK EXAMPLES:
 
 Example 1: Open the web browser and navigate to example.com.
@@ -227,6 +227,18 @@ If not given explicitly, this parameter is false by default.
                 "additionalProperties": False,
                 "required": ["task"],
             },
+        },
+        {
+            "type": "function",
+            "name": "screenshot",
+            "description": "Take a screenshot of the current screen and add it to the context.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "type": "function",
+            "name": "get_local_time",
+            "description": "Get the current local time and date.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
         {
             "type": "function",
@@ -387,30 +399,11 @@ This function is safe for security-sensitive tasks.
                         "file_id": fo.id,  # The file under this ID must have been uploaded with a valid name!
                     }
                 )
+        self._context += self._screenshot()  # Add the initial screenshot
         _logger.info("🧠 OpenAI Reasoner is ready to dazzle 🫠")
         stop = None
         last_failed = False
         while stop is None:
-            self._context += [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": f"""\
-The most recent screenshot is enclosed.
-You will be provided with a screenshot per interaction, so you don't need to ask for it explicitly.
-
-The current time is: `{json.dumps(get_local_time_llm())}`
-""",
-                        },
-                        {
-                            "type": "input_image",
-                            "image_url": f"data:image/png;base64,{self._screenshot_b64()}",
-                        },
-                    ],
-                }
-            ]
             self._context = truncate(self._context)
             self._save_context(self._context)
             # noinspection PyTypeChecker
@@ -545,6 +538,17 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                                 " Please define a strategy first."
                             )
                             _logger.error("🖥️ Strategy not yet defined; cannot use the computer.")
+                        # Always add a screenshot after using the computer.
+                        context += self._screenshot()
+
+                    case "screenshot":
+                        _logger.info("📸 Taking an explicit screenshot")
+                        context += self._screenshot()
+                        result = "Screenshot added to the context successfully."
+
+                    case "get_local_time":
+                        result = get_local_time_llm()
+                        _logger.info(f"🕰️ {result}")
 
                     case "read_file":
                         file_name = Path(args["file_name"])
@@ -609,12 +613,7 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                         url = args["url"]
                         _logger.info(f"🌐 Adding URL to the context: {url!r}")
                         result = f"URL {url!r} added to the context successfully."
-                        context += [
-                            {
-                                "role": "user",
-                                "content": [{"type": "input_file", "file_url": url}],
-                            }
-                        ]
+                        context += [{"role": "user", "content": [{"type": "input_file", "file_url": url}]}]
 
                     case "shell":
                         ts = datetime.now().isoformat()
@@ -672,13 +671,7 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
-                context += [
-                    {
-                        "type": "function_call_output",
-                        "call_id": item["call_id"],
-                        "output": json.dumps(result),
-                    }
-                ]
+                context += [{"type": "function_call_output", "call_id": item["call_id"], "output": json.dumps(result)}]
                 return context, final
 
             case "web_search_call":
@@ -690,6 +683,22 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                 _logger.debug(f"Full item: {item}")
                 return [], None
 
+    def _screenshot(self) -> list[dict[str, Any]]:
+        # The short sleep helps avoiding further waits while the UI is still updating.
+        # It must happen after the last action and immediately BEFORE the next screenshot.
+        time.sleep(0.5)
+        im = self._ui.screenshot()
+        im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "The most recent screenshot is enclosed."},
+                    {"type": "input_image", "image_url": f"data:image/png;base64,{image_to_base64(im)}"},
+                ],
+            }
+        ]
+
     def _save_context(self, context: list[dict[str, Any]]) -> None:
         f_context = self._dir / "reasoner_context.json"
         f_context.write_text(json.dumps(context, indent=2))
@@ -697,11 +706,3 @@ The current time is: `{json.dumps(get_local_time_llm())}`
     def _save_response(self, response: dict[str, Any]) -> None:
         f_response = self._dir / "reasoner_response.json"
         f_response.write_text(json.dumps(response, indent=2))
-
-    def _screenshot_b64(self) -> str:
-        # The short sleep helps avoiding further waits while the UI is still updating.
-        # It must happen after the last action and immediately BEFORE the next screenshot.
-        time.sleep(0.5)
-        im = self._ui.screenshot()
-        im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
-        return image_to_base64(im)
