@@ -1,12 +1,10 @@
 from __future__ import annotations
 import time
-import json
 from typing import Any
 from itertools import count
 import logging
 from datetime import datetime
 from pathlib import Path
-import re
 
 from openai import OpenAI, InternalServerError, NOT_GIVEN, NotGiven
 from openai.types import ReasoningEffort
@@ -114,8 +112,6 @@ You have exhausted the maximum number of steps allowed.
 You must terminate the task immediately with a failure message.
 Explain what you managed to achieve and what went wrong.
 """
-
-_RE_JSON = re.compile(r"(?ims)^```(?:json)?\n(.+)\n```$")
 
 
 class HierarchicalExecutive(Executive):

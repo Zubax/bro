@@ -213,7 +213,7 @@ class _Impl(UiController):
 
             case TypeAction(text=text):
                 _logger.info(f"⌨️ Typing {text!r}")
-                # We can't use PyAutoGUI here becauuse it can't type non-ASCII characters.
+                # We can't use PyAutoGUI here because it can't type non-ASCII characters.
                 # There is still a problem with Unicode though: Python iterates over Unicode codepoints,
                 # but some characters (e.g. emojis) are represented as multiple codepoints.
                 # This may cause an invalid split that may cause pynput to fail to type the character.
