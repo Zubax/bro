@@ -51,7 +51,10 @@ and contributions are welcome.
 ⚠️ Bro can only work with single-monitor setups with the resolution at most 1920x1080.
 We mostly use it in an Ubuntu virtual machine with a 1280x1024 screen resolution.
 It is highly advised to use the default UI theme and a highly textured wallpaper
-to avoid confusing the UI grounding model (e.g., a solid black desktop background is known to cause significant issues).
+to avoid confusing the UI grounding model (e.g., a solid black desktop background is known to cause issues).
+Disable spell checking everywhere. Disable popups. Ensure scroll bars are always visible.
+Use light themes everywhere. Disable tools that inject context menus, like the ChatGPT integration in Firefox,
+Grammarly, etc.
 
 ## Installation
 

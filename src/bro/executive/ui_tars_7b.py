@@ -58,6 +58,8 @@ Click(start_box='(x,y)') -- Click the mouse at the specified screen coordinates 
 
 LeftDouble(start_box='(x,y)') -- Double-click the left mouse button at (x, y).
 
+LeftTriple(start_box='(x,y)') -- Triple-click the left mouse button at (x, y).
+
 RightSingle(start_box='(x,y)') -- Right-click the mouse at (x, y).
 
 Drag(start_box='(x,y)', end_box='(x,y)') -- Drag the mouse from start to the end point.
@@ -108,7 +110,7 @@ class UiTars7bExecutive(Executive):
         self._model = model
         self._max_steps = max_steps
         self._retry_attempts = 5
-        self._temperature = 0.1
+        self._temperature = 0.1  # Higher temps cause the model to do weird things
         self._context = [{"role": "system", "content": _PROMPT_EXECUTIVE}]
 
     def act(self, goal: str) -> str:
@@ -184,9 +186,15 @@ class UiTars7bExecutive(Executive):
                 case "click" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y)))
+                case "leftsingle" if len(numbers) == 2:  # We don't give this explicitly but the model generalizes
+                    x, y = numbers
+                    self._ui.do(ui_io.ClickAction((x, y)))
                 case "leftdouble" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y), count=2))
+                case "lefttriple" if len(numbers) == 2:
+                    x, y = numbers
+                    self._ui.do(ui_io.ClickAction((x, y), count=3))
                 case "rightsingle" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y), button=ui_io.ClickAction.BUTTON_RIGHT))
