@@ -10,7 +10,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from bro.executive import Executive
+from bro.executive import Executive, Mode as ExecutiveMode
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
@@ -214,6 +214,15 @@ and enter the current one-time password for the example.com account.
                 "type": "object",
                 "properties": {
                     "task": {"type": "string", "description": "A detailed description of the task to perform."},
+                    "fast": {
+                        "type": "boolean",
+                        "description": """\
+If true, the task is time-sensitive and must be performed as fast as possible, at the risk of making mistakes.
+An example of a time-sensitive task is entering a one-time password during authentication,
+or responding to a message in a chat application, or submitting a form before a deadline, etc.
+If not given explicitly, this parameter is false by default.
+""",
+                    },
                 },
                 "additionalProperties": False,
                 "required": ["task"],
@@ -514,9 +523,11 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                     case "use_computer":
                         if self._strategy:
                             task = args["task"]
-                            _logger.info(f"🖥️ Invoking the executive: {task}")
+                            fast = args.get("fast", False)
+                            mode = ExecutiveMode.FAST if fast else ExecutiveMode.THOROUGH
+                            _logger.info(f"🖥️ Invoking the executive [mode={mode.value}]: {task}")
                             try:
-                                result = self._exe.act(task)
+                                result = self._exe.act(task, mode)
                             except Exception as ex:
                                 _logger.exception(f"🖥️ Exception during execution: {ex}")
                                 result = (

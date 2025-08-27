@@ -10,7 +10,7 @@ from pathlib import Path
 from openai import OpenAI, InternalServerError
 
 from bro import ui_io
-from bro.executive import Executive
+from bro.executive import Executive, Mode
 from bro.ui_io import UiController
 from bro.util import truncate, image_to_base64, get_local_time_llm
 
@@ -85,8 +85,8 @@ class OpenAiCuaExecutive(Executive):
         ]
         self._retry_attempts = 5
 
-    def act(self, goal: str) -> str:
-        _logger.debug(f"🥅 OpenAI Executive goal: {goal}")
+    def act(self, goal: str, mode: Mode) -> str:
+        _logger.debug(f"🥅 OpenAI Executive goal [mode={mode.value}]: {goal}")
         # EXPERIMENTAL CHANGE: do not preserve context between runs. This reduces the inference costs due to
         # ever-growing context, and also avoids repeated inference errors if the inference provider trips on
         # malformed context, which happened with OpenAI.
@@ -291,7 +291,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt))
+    print(exe.act(prompt, Mode.FAST))
 
 
 if __name__ == "__main__":

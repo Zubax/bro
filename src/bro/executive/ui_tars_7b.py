@@ -13,7 +13,7 @@ from openai import OpenAI, InternalServerError
 from PIL import Image
 
 from bro import ui_io
-from bro.executive import Executive
+from bro.executive import Executive, Mode
 from bro.ui_io import UiController
 from bro.util import image_to_base64, format_exception, get_local_time_llm
 
@@ -113,7 +113,8 @@ class UiTars7bExecutive(Executive):
         self._temperature = 0.1  # Higher temps cause the model to do weird things
         self._context = [{"role": "system", "content": _PROMPT_EXECUTIVE}]
 
-    def act(self, goal: str) -> str:
+    def act(self, goal: str, mode: Mode) -> str:
+        _ = mode  # This implementation currently does not use the mode
         scr_w, scr_h = self._ui.screen_width_height
         ctx = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
         for step in range(self._max_steps):
@@ -274,7 +275,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt))
+    print(exe.act(prompt, Mode.FAST))
 
 
 class _GuiLocator:

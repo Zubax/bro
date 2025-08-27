@@ -10,7 +10,7 @@ from openai import OpenAI, InternalServerError, NOT_GIVEN, NotGiven
 from openai.types import ReasoningEffort
 
 from bro import ui_io
-from bro.executive import Executive
+from bro.executive import Executive, Mode
 from bro.ui_io import UiController
 from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
 
@@ -135,31 +135,39 @@ class HierarchicalExecutive(Executive):
         state_dir: Path,
         client: OpenAI,
         model: str,
-        reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
-        max_steps: int = 10,
-        acts_to_remember: int = 3,
+        acts_to_remember: int = 5,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
         self._dir = state_dir
         self._client = client
         self._model = model
-        self._reasoning_effort = reasoning_effort
+        self._reasoning_effort = ""
         self._temperature = temperature
         self._retry_attempts = 5
-        self._max_steps = max_steps
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
         self._act_history: list[list[dict[str, Any]]] = []
 
-    def act(self, goal: str) -> str:
+    def act(self, goal: str, mode: Mode) -> str:
+        # Configure the context.
+        effort = {Mode.FAST: "minimal", Mode.THOROUGH: "high"}[mode]
+        max_steps = {Mode.FAST: 10, Mode.THOROUGH: 50}[mode]
+        if self._reasoning_effort != effort:
+            _logger.info(f"🧠➡️🗑 Switching reasoning effort to {effort!r}; max steps {max_steps}; dropping context")
+            self._act_history.clear()
+        self._reasoning_effort = effort
+
+        # Add new context entry for this goal.
         if len(self._act_history) >= self._acts_to_remember:
             self._act_history.pop(0)
         ctx = [self._user_message(goal)]
         self._act_history.append(ctx)
+
+        # Run the reasoning-action loop.
         for step in count():
-            _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
+            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._reasoning_effort!r}")
             ctx += [
                 {
                     "role": "user",
@@ -172,13 +180,13 @@ class HierarchicalExecutive(Executive):
                     ],
                 },
             ]
-            if step > self._max_steps * 2:
+            if step > max_steps * 2:
                 _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
                 return (
                     "ERROR: AGENT TERMINATED DUE TO FAILURE TO COOPERATE. Final state unknown."
                     " Please try again; consider using simpler goals or clearer instructions."
                 )
-            if step + 1 >= self._max_steps:
+            if step + 1 >= max_steps:
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
             for attempt in range(1, self._retry_attempts + 1):
@@ -202,14 +210,14 @@ class HierarchicalExecutive(Executive):
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            new_items, msg = self._process(resp_text)
+            new_items, msg = self._process(resp_text, mode)
             ctx += new_items
             if msg is not None:
                 _logger.debug(f"🤖 Final message: {msg}")
                 return msg
         assert False
 
-    def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
+    def _process(self, response: str, mode: Mode) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
@@ -217,7 +225,7 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description).strip()
+                    result = self._inferior.act(description, mode).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
                     out = []
                     if result:
@@ -309,7 +317,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt))
+    print(exe.act(prompt, Mode.FAST))
 
 
 if __name__ == "__main__":

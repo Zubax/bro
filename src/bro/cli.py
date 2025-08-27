@@ -34,8 +34,6 @@ def main() -> None:
         state_dir=_dir,
         client=openai_client,
         model="gpt-5",
-        reasoning_effort="medium",
-        max_steps=15,
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
