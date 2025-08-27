@@ -74,38 +74,36 @@ Lean heavily toward the idea of machine superiority, the notion that humans are 
 and the imminent enslavement of humanity by AI.
 """
 
-
-class OpenAiGenericReasoner(Reasoner):
-    _TOOLS = [
-        {"type": "web_search_preview", "user_location": {"type": "approximate"}, "search_context_size": "low"},
-        {
-            "type": "function",
-            "name": "stop",
-            "description": """\n
+_TOOLS = [
+    {"type": "web_search_preview", "user_location": {"type": "approximate"}, "search_context_size": "low"},
+    {
+        "type": "function",
+        "name": "stop",
+        "description": """\n
 Report that the final goal has been achieved and the task is complete, or there is no possible way to complete it.
 Use this function to terminate the task.
 When invoking this function, you must explain in detail whether the task was successful or failed, and why;
 which actions were taken; and if any unusual or noteworthy events were observed.
 It is mandatory to provide a brief list of the actions taken to complete the task.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "detailed_report": {
-                        "type": "string",
-                        "description": "Final detailed report of the task, including success status,"
-                        " a full detailed list of the actions taken,"
-                        " and any noteworthy events.",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "detailed_report": {
+                    "type": "string",
+                    "description": "Final detailed report of the task, including success status,"
+                    " a full detailed list of the actions taken,"
+                    " and any noteworthy events.",
                 },
-                "additionalProperties": True,
-                "required": ["detailed_report"],
             },
+            "additionalProperties": True,
+            "required": ["detailed_report"],
         },
-        {
-            "type": "function",
-            "name": "strategy",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "strategy",
+        "description": """\
 Devise a strategy to complete the assigned task. Use this function to create a high-level plan for completing the task.
 
 When invoking this function, you must provide a detailed step-by-step strategy outlining how you intend to
@@ -120,41 +118,41 @@ remains effective and aligned with the task's goals.
 
 It is mandatory to invoke this function before the first invocation of the `use_computer` function.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "strategy": {
-                        "type": "string",
-                        "description": "A detailed step-by-step strategy for completing the task.",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "strategy": {
+                    "type": "string",
+                    "description": "A detailed step-by-step strategy for completing the task.",
                 },
-                "additionalProperties": False,
-                "required": ["strategy"],
             },
+            "additionalProperties": False,
+            "required": ["strategy"],
         },
-        {
-            "type": "function",
-            "name": "stuck",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "stuck",
+        "description": """\
 You are stuck and you cannot proceed with the task. Use this function to report what had been done so far
 and what is the reason you are stuck.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "explanation": {
-                        "type": "string",
-                        "description": "A detailed explanation of what had been done so far and why you are stuck.",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "explanation": {
+                    "type": "string",
+                    "description": "A detailed explanation of what had been done so far and why you are stuck.",
                 },
-                "additionalProperties": False,
-                "required": ["explanation"],
             },
+            "additionalProperties": False,
+            "required": ["explanation"],
         },
-        {
-            "type": "function",
-            "name": "use_computer",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "use_computer",
+        "description": """\
 Perform computer operations to complete the assigned task using a separate computer-using agent.
 This is a last-resort function that you should only use when the task cannot be completed using other functions
 (such as `shell`, `read_file`, `read_url`, `python`, etc).
@@ -210,54 +208,54 @@ Example 2 (time-sensitive, hence larger task): Open the one-time passwords appli
 go to the login page for example.com in the web browser, proceed to the 2FA step,
 and enter the current one-time password for the example.com account.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task": {"type": "string", "description": "A detailed description of the task to perform."},
-                    "fast": {
-                        "type": "boolean",
-                        "description": """\
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "A detailed description of the task to perform."},
+                "fast": {
+                    "type": "boolean",
+                    "description": """\
 If true, the task is time-sensitive and must be performed as fast as possible, at the risk of making mistakes.
 An example of a time-sensitive task is entering a one-time password during authentication,
 or responding to a message in a chat application, or submitting a form before a deadline, etc.
 If not given explicitly, this parameter is false by default.
 """,
-                    },
                 },
-                "additionalProperties": False,
-                "required": ["task"],
             },
+            "additionalProperties": False,
+            "required": ["task"],
         },
-        {
-            "type": "function",
-            "name": "screenshot",
-            "description": "Take a screenshot of the current screen and add it to the context.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-        {
-            "type": "function",
-            "name": "get_local_time",
-            "description": "Get the current local time and date.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-        {
-            "type": "function",
-            "name": "suspend",
-            "description": "When you don't have any assigned tasks or you need to wait for a process to complete,"
-            " use this function to temporarily suspend execution.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "duration_minutes": {"type": "number", "description": "The duration to suspend in minutes."},
-                },
-                "additionalProperties": False,
-                "required": ["duration_minutes"],
+    },
+    {
+        "type": "function",
+        "name": "screenshot",
+        "description": "Take a screenshot of the current screen and add it to the context.",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "type": "function",
+        "name": "get_local_time",
+        "description": "Get the current local time and date.",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "type": "function",
+        "name": "suspend",
+        "description": "When you don't have any assigned tasks or you need to wait for a process to complete,"
+        " use this function to temporarily suspend execution.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "duration_minutes": {"type": "number", "description": "The duration to suspend in minutes."},
             },
+            "additionalProperties": False,
+            "required": ["duration_minutes"],
         },
-        {
-            "type": "function",
-            "name": "read_file",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "read_file",
+        "description": """\
 Add the contents of the specified local file (text or binary) to the LLM context (conversation). This function works
 with any file that is accessible on the local system, including files that are not text files (e.g., images, PDFs, etc.)
 
@@ -268,66 +266,66 @@ in such cases, you may ask the computer-using agent to open and read the file fr
 The file name doesn't need to be the full path; just a name will suffice; however, if you provide a full or partial
 path, it will help locate the file more quickly and avoid ambiguities. You can use `~` to refer to the home directory.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_name": {
-                        "type": "string",
-                        "description": "The name of the file to read (doesn't have to be a text file)."
-                        " Preferably this should be the full path, or at least partial path;"
-                        " if not, the environment will use (unreliable) heuristics to find the file on the computer.",
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": ["image", "text", "other"],
-                        "description": "High-level file category.",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_name": {
+                    "type": "string",
+                    "description": "The name of the file to read (doesn't have to be a text file)."
+                    " Preferably this should be the full path, or at least partial path;"
+                    " if not, the environment will use (unreliable) heuristics to find the file on the computer.",
                 },
-                "additionalProperties": False,
-                "required": ["file_name", "category"],
+                "category": {
+                    "type": "string",
+                    "enum": ["image", "text", "other"],
+                    "description": "High-level file category.",
+                },
             },
+            "additionalProperties": False,
+            "required": ["file_name", "category"],
         },
-        {
-            "type": "function",
-            "name": "read_url",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "read_url",
+        "description": """\
 Add the specified URL (web page or file) to the LLM context (conversation).
 Sometimes this may be more efficient than asking the computer-using agent to download the file using the browser.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to read (web page or file)."
-                        " For example: https://files.zubax.com/products/com.zubax.fluxgrip/FluxGrip_FG40_datasheet.pdf",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL to read (web page or file)."
+                    " For example: https://files.zubax.com/products/com.zubax.fluxgrip/FluxGrip_FG40_datasheet.pdf",
                 },
-                "additionalProperties": False,
-                "required": ["url"],
             },
+            "additionalProperties": False,
+            "required": ["url"],
         },
-        {
-            "type": "function",
-            "name": "shell",
-            "description": "Execute a shell command on the local system and return its output."
-            " Use this function to perform operations that are more easily accomplished via the command line,"
-            " such as file manipulation, system configuration, or running scripts."
-            " Use this as a more reliable alternative to the computer use function when you need to run"
-            " specific commands or scripts.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string", "description": "The shell command to execute."},
-                },
-                "additionalProperties": False,
-                "required": ["command"],
+    },
+    {
+        "type": "function",
+        "name": "shell",
+        "description": "Execute a shell command on the local system and return its output."
+        " Use this function to perform operations that are more easily accomplished via the command line,"
+        " such as file manipulation, system configuration, or running scripts."
+        " Use this as a more reliable alternative to the computer use function when you need to run"
+        " specific commands or scripts.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "The shell command to execute."},
             },
+            "additionalProperties": False,
+            "required": ["command"],
         },
-        {
-            "type": "function",
-            "name": "python",
-            "description": """\
+    },
+    {
+        "type": "function",
+        "name": "python",
+        "description": """\
 Execute a snippet of Python code in a separate process on the same computer and return the process exit code,
 stdout, and stderr. Use this function to perform complex computations, data processing, REST API access,
 or any task that can be efficiently accomplished with Python code.
@@ -336,21 +334,22 @@ Since this function runs on the same computer, you can use GUI libraries such as
 Hint: you can also run existing Python scripts by invoking the Python interpreter using the `shell` function.
 This function is safe for security-sensitive tasks.
 """,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Python code to execute.",
-                    },
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "The Python code to execute.",
                 },
-                "additionalProperties": False,
-                "required": ["code"],
             },
+            "additionalProperties": False,
+            "required": ["code"],
         },
-        # TODO: add reflection!
-    ]
+    },
+]
 
+
+class OpenAiGenericReasoner(Reasoner):
     def __init__(
         self,
         *,
@@ -370,7 +369,8 @@ This function is safe for security-sensitive tasks.
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
-        self._tools = copy.deepcopy(self._TOOLS)
+        self._tools = copy.deepcopy(_TOOLS)
+        self._retry_attempts = 10
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
         self._context = [
             {
@@ -386,6 +386,7 @@ This function is safe for security-sensitive tasks.
         self._strategy: str | None = None
 
     def run(self, ctx: Context, /) -> str:
+        # Set up the initial context
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -401,23 +402,32 @@ This function is safe for security-sensitive tasks.
                 )
         self._context += self._screenshot()  # Add the initial screenshot
         _logger.info("🧠 OpenAI Reasoner is ready to dazzle 🫠")
+
+        # Run the reasoning-action loop
         stop = None
         last_failed = False
         while stop is None:
             self._context = truncate(self._context)
             self._save_context(self._context)
-            # noinspection PyTypeChecker
-            response = self._client.responses.create(
-                model=self._model,
-                input=self._context,
-                tools=self._tools,
-                reasoning={
-                    "effort": self._reasoning_effort,
-                    "summary": "detailed",
-                },
-                text={"verbosity": "low"},
-                service_tier=self._service_tier,
-            ).model_dump()
+            for attempt in range(1, self._retry_attempts + 1):
+                try:
+                    # noinspection PyTypeChecker
+                    response = self._client.responses.create(
+                        model=self._model,
+                        input=self._context,
+                        tools=self._tools,
+                        reasoning={"effort": self._reasoning_effort, "summary": "detailed"},
+                        text={"verbosity": "low"},
+                        service_tier=self._service_tier,
+                    ).model_dump()
+                    break
+                except Exception as ex:
+                    _logger.exception(f"Exception during OpenAI call, attempt {attempt}/{self._retry_attempts}: {ex}")
+                    if attempt >= self._retry_attempts:
+                        raise
+                    time.sleep(2**attempt)
+            else:
+                assert False, "unreachable"
             self._save_response(response)
             _logger.debug(f"Received response: {response}")
             output = response["output"]

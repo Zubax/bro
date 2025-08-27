@@ -145,7 +145,7 @@ class HierarchicalExecutive(Executive):
         self._model = model
         self._reasoning_effort = ""
         self._temperature = temperature
-        self._retry_attempts = 5
+        self._retry_attempts = 10
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
         self._act_history: list[list[dict[str, Any]]] = []
@@ -200,8 +200,8 @@ class HierarchicalExecutive(Executive):
                     )
                     break
                 except InternalServerError as e:
-                    _logger.warning(f"Inference API error on attempt {attempt}/{self._retry_attempts}: {e}")
-                    if attempt == self._retry_attempts:
+                    _logger.exception(f"Inference API error on attempt {attempt}/{self._retry_attempts}: {e}")
+                    if attempt >= self._retry_attempts:
                         raise
                     time.sleep(2**attempt)
             else:
