@@ -338,7 +338,7 @@ This function is safe for security-sensitive tasks.
         state_dir: Path,
         client: OpenAI,
         model: str = "gpt-5",
-        reasoning_effort: str = "medium",
+        reasoning_effort: str = "high",
         service_tier: str = "default",
     ) -> None:
         self._exe = executive
@@ -666,6 +666,10 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                     }
                 ]
                 return context, final
+
+            case "web_search_call":
+                _logger.info(f"🔍 Web search {item.get('status')!r}, action: {item.get('action')!r}")
+                return [], None
 
             case _:
                 _logger.error(f"Unrecognized item type: {ty!r}")
