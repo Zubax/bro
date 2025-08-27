@@ -138,6 +138,7 @@ class UiTars7bExecutive(Executive):
                         model=self._model,
                         messages=ctx,
                         temperature=self._temperature,
+                        max_tokens=500,
                     )
                     break
                 except InternalServerError as e:
