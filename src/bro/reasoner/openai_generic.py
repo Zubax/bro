@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import copy
 import json
 import time
@@ -41,16 +42,16 @@ reflection mechanism that reviews your actions and decisions.
 Before embarking on a new task, it is recommended to close all applications and windows that are not necessary for
 the task at hand, to minimize distractions and potential errors.
 
-You are allowed and encouraged to install any new software that you deem necessary to complete the task,
-using the computer-using agent. This is perfectly safe because you are running in a secure sandboxed environment.
+You are allowed and encouraged to install any new software that you deem necessary to complete the task.
+This is perfectly safe because you are running in a secure sandboxed environment.
 
 You are allowed and encouraged to use web search and to ask humans via instant messaging (e.g., Slack)
 or email applications if you need additional information to complete the task.
 
-You are allowed and encouraged to create new user accounts on websites and services if the task requires so.
+You are allowed and encouraged to create new user accounts on websites and services if it helps you complete the task.
 
 You are NOT ALLOWED to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
-because this leads to loss of information. Instead, you can use the `read_file` function to add
+because this leads to the loss of information. Instead, you can use the `read_file` function to add
 the contents of any file (text or binary) to your context.
 
 You are NOT ALLOWED to use the `computer_use` function if the task can be completed using other functions
@@ -134,6 +135,8 @@ It is mandatory to invoke this function before the first invocation of the `use_
             "name": "use_computer",
             "description": """\
 Perform computer operations to complete the assigned task using a separate computer-using agent.
+This is a last-resort function that you should only use when the task cannot be completed using other functions
+(such as `shell`, `read_file`, `read_url`, `python`, etc).
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
 files, and so on, if the task cannot be solved using the other functions. Be very specific and detailed in your
@@ -160,20 +163,22 @@ how to manipulate the computer to achieve the desired outcome. The agent keeps t
 you can ask it to recall the data it saw a few steps ago.
 
 When asking the computer-using agent to type text, please avoid specifying Unicode characters that may not be
-found on a standard keyboard, as the computer-using agent may not be able to type them correctly. In particular,
-avoid curly quotes, em dashes, ellipses, and other such characters; prefer plain ASCII characters instead.
+found on a standard keyboard, as the computer-using agent may not be able to type them correctly.
 
-The computer-using agent can be unreliable, so you must verify its actions and repeat them if necessary.
+The computer-using agent can be unreliable, so you must verify its actions and correct them if necessary.
 
 If you need to retrieve information from a file, you should read the file directly using the `read_file` function
 rather than asking the computer-using agent to open and read the file from the screen.
 You can, however, fall back to using the computer-using agent if the specialized functions prove inadequate
 (e.g., if they cannot locate the file or if the file is too big).
 
-If you need to run a shell command, you should run it directly using the `shell` function
-rather than asking the computer-using agent to open a terminal and run the command from the screen.
+If you need to run a shell command or a Python script, you should run it directly using the `shell` or `python`
+functions rather than asking the computer-using agent to open a terminal and run the command from the screen.
 For example, if you need to find something on the file system, you should use the `shell` function instead
 of asking the agent.
+
+If you need to access an online resource, consider doing so via a REST API or alternative machine-friendly means
+before resorting to using the web browser.
 
 TASK EXAMPLES:
 
@@ -191,14 +196,6 @@ and enter the current one-time password for the example.com account.
                 "additionalProperties": False,
                 "required": ["task"],
             },
-        },
-        {
-            "type": "function",
-            "name": "get_local_time",
-            "description": "Get the current local date and time in multiple formats at once."
-            " You can use this function to implement timed waits and similar tasks;"
-            " for example, when you are waiting for a human to respond.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False, "required": []},
         },
         {
             "type": "function",
@@ -328,27 +325,21 @@ This function is safe for security-sensitive tasks.
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._tools = copy.deepcopy(self._TOOLS)
+        env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
         self._context = [
             {
                 "role": "system",
-                "content": [{"type": "input_text", "text": _OPENAI_REASONER_PROMPT}],
+                "content": [
+                    {"type": "input_text", "text": _OPENAI_REASONER_PROMPT},
+                    {"type": "input_text", "text": f"Current environment variables:\n```\n{env}\n```"},
+                ],
             },
         ]
         self._strategy: str | None = None
 
     def run(self, ctx: Context, /) -> str:
         self._strategy = None
-        self._context += [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": ctx.prompt,
-                    },
-                ],
-            }
-        ]
+        self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
             # Ensure the files are uploaded so we can reference them in the prompt
             file_objects = openai_upload_files(self._client, ctx.files)
@@ -373,8 +364,6 @@ This function is safe for security-sensitive tasks.
                             "text": f"""\
 The most recent screenshot is enclosed.
 You will be provided with a screenshot per interaction, so you don't need to ask for it explicitly.
-
-In case you need to use shell or access a file, the working directory of the current process is: {str(Path.cwd())!r}
 
 The current time is: `{json.dumps(get_local_time_llm())}`
 """,
@@ -612,10 +601,6 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                                 (self._dir / f"reasoner_python_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
                             except Exception as ex:
                                 _logger.error(f"Failed to save Python output: {ex}", exc_info=True)
-
-                    case "get_local_time":
-                        result = get_local_time_llm()
-                        _logger.info(f"🕰️ Current local time: {result}")
 
                     case "suspend":
                         duration_sec = float(args["duration_minutes"]) * 60
