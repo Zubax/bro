@@ -3,7 +3,7 @@ requires = ["setuptools~=80.9"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bro-cua"
+name = "zubax-bro"
 authors = [
     {name = "Pavel Kirienko", email = "pavel.kirienko@zubax.com"},
 ]
