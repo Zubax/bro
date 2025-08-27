@@ -165,6 +165,9 @@ instructions because the agent can be easily confused. Break down complex tasks 
 multiple calls to this function to achieve the overall goal. The computer-using agent may not retain full memory
 of its past actions, so you must provide all necessary context in each invocation.
 
+If the agent fails to complete the task, try again with smaller steps and simpler instructions,
+breaking the task down into even smaller parts if necessary until it can be completed successfully.
+
 The computer-using agent can see the screen in real time so you don't need to explain the current state of the screen.
 You will be provided with a screenshot per interaction, so you must not ask the computer-using agent to take
 screenshots explicitly or to describe the screen.
@@ -180,8 +183,7 @@ for humans may be suboptimal for the computer-using agent. For example, usually 
 text, as the computer-using agent can type very fast and accurately. Similarly, using keyboard shortcuts
 is usually preferable to using the mouse, as it is faster and more reliable. The computer-using agent is aware of
 its own capabilities and limitations and it is recommended to avoid micromanaging its actions, allowing it to decide
-how to manipulate the computer to achieve the desired outcome. The agent keeps the memory of its interactions and
-you can ask it to recall the data it saw a few steps ago.
+how to manipulate the computer to achieve the desired outcome.
 
 When asking the computer-using agent to type text, please avoid specifying Unicode characters that may not be
 found on a standard keyboard, as the computer-using agent may not be able to type them correctly.
