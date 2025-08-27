@@ -317,6 +317,7 @@ This function is safe for security-sensitive tasks.
         client: OpenAI,
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
+        service_tier: str = "default",
     ) -> None:
         self._exe = executive
         self._ui = ui
@@ -324,6 +325,7 @@ This function is safe for security-sensitive tasks.
         self._client = client
         self._model = model
         self._reasoning_effort = reasoning_effort
+        self._service_tier = service_tier
         self._tools = copy.deepcopy(self._TOOLS)
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
         self._context = [
@@ -387,6 +389,7 @@ The current time is: `{json.dumps(get_local_time_llm())}`
                     "summary": "detailed",
                 },
                 text={"verbosity": "low"},
+                service_tier=self._service_tier,
             ).model_dump()
             self._save_response(response)
             _logger.debug(f"Received response: {response}")
