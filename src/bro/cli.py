@@ -23,6 +23,9 @@ def main() -> None:
     _setup_logging()
     context = _build_context(sys.argv[1:])
 
+    system_prompt_path = Path.home() / ".bro.txt"
+    user_system_prompt = system_prompt_path.read_text() if system_prompt_path.is_file() else None
+
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
@@ -40,6 +43,7 @@ def main() -> None:
         ui=ui,
         state_dir=_dir,
         client=openai_client,
+        user_system_prompt=user_system_prompt,
     )
 
     try:

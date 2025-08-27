@@ -70,6 +70,10 @@ Currently, we only provide a very rudimentary CLI interface. We are going to pro
 messaging services like Slack, email, and Telegram in the future, so that you could leave Bro running in the
 background and just send it tasks as messages, like you would with a fleshy team member.
 
+If provided, Bro will read `~/.bro.txt` and add the contents to the system prompt, after its internal system prompt.
+Use this to describe the operational environment (e.g., where to find certain files,
+what software and online services to use, desirable personality traits, etc).
+
 At the moment, you invoke Bro as follows:
 
 ```bash

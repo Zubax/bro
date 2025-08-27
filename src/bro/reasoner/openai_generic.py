@@ -346,6 +346,7 @@ This function is safe for security-sensitive tasks.
         ui: UiObserver,
         state_dir: Path,
         client: OpenAI,
+        user_system_prompt: str | None = None,
         model: str = "gpt-5",
         reasoning_effort: str = "high",
         service_tier: str = "default",
@@ -368,6 +369,8 @@ This function is safe for security-sensitive tasks.
                 ],
             },
         ]
+        if user_system_prompt:
+            self._context[0]["content"].append({"type": "input_text", "text": user_system_prompt})
         self._strategy: str | None = None
 
     def run(self, ctx: Context, /) -> str:
