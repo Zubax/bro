@@ -15,7 +15,7 @@ from PIL import Image
 from bro import ui_io
 from bro.executive import Executive
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, format_exception, get_local_time_llm
+from bro.util import image_to_base64, format_exception, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
@@ -129,7 +129,6 @@ class UiTars7bExecutive(Executive):
                     ],
                 },
             ]
-            ctx = truncate(ctx, head=10, tail=200)
             self._save_context(ctx)
             for attempt in range(1, self._retry_attempts + 1):
                 try:

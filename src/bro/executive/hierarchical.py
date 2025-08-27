@@ -12,7 +12,7 @@ from openai.types import ReasoningEffort
 from bro import ui_io
 from bro.executive import Executive
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception, split_trailing_json
+from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
 
 _logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
 
 Press hotkeys using this command. Whenever possible you should prefer using hotkeys over mouse clicks,
 because they are much more reliable and faster. For example, if you need to scroll a document or a web page,
-use the PageUp/PageDown keys instead of scrolling with the mouse! Likewise, use Alt+Tab to switch applications
+use the arrows or PageUp/PageDown keys instead of scrolling with the mouse! Likewise, use Alt+Tab to switch applications
 instead of clicking on the taskbar, use Ctrl+T to open a new browser tab instead of clicking the "+" button,
 use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to close a window instead of clicking the
 "X" button, and so on.
@@ -138,6 +138,7 @@ class HierarchicalExecutive(Executive):
         reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
         max_steps: int = 10,
+        acts_to_remember: int = 3,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
@@ -149,9 +150,14 @@ class HierarchicalExecutive(Executive):
         self._retry_attempts = 5
         self._max_steps = max_steps
         self._context = [{"role": "system", "content": _PROMPT}]
+        self._acts_to_remember = acts_to_remember
+        self._act_history: list[list[dict[str, Any]]] = []
 
     def act(self, goal: str) -> str:
-        ctx = self._context + [{"role": "user", "content": goal}]
+        if len(self._act_history) >= self._acts_to_remember:
+            self._act_history.pop(0)
+        ctx = [self._user_message(goal)]
+        self._act_history.append(ctx)
         for step in count():
             _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
             ctx += [
@@ -175,14 +181,13 @@ class HierarchicalExecutive(Executive):
             if step + 1 >= self._max_steps:
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
-            ctx = truncate(ctx, head=100, tail=1000)
             for attempt in range(1, self._retry_attempts + 1):
                 try:
                     # noinspection PyTypeChecker
                     response = self._client.chat.completions.create(
                         model=self._model,
                         reasoning_effort=self._reasoning_effort,
-                        messages=ctx,
+                        messages=self._context + sum(self._act_history, []),
                         temperature=self._temperature,
                     )
                     break
