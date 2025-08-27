@@ -13,6 +13,7 @@ dynamic = ["version"]
 dependencies = [
     "openai~=1.101",
     "PyAutoGUI~=0.9",
+    "pynput~=1.8",
     "mss~=10.1",
     "Pillow~=11.1",
 ]
