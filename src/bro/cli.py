@@ -107,11 +107,7 @@ def _build_context(paths: list[str]) -> tuple[Context, Path]:
         raise ValueError(f"Multiple snapshots found: {snapshot_files}")
     snapshot = snapshot_files[0] if len(snapshot_files) == 1 else (prompt_files[0].parent / SNAPSHOT_NAME)
 
-    # Remove unwanted files from context: prompt, snapshot, all .bak files
-    unwanted = {f for f in all_files if f.suffix == ".bak"}
-    unwanted += prompt_files
-    unwanted += {snapshot}
-
+    unwanted = {f for f in all_files if f.suffix == ".bak"} | set(prompt_files) | {snapshot}
     return Context(prompt=prompt, files=[f for f in all_files if f not in unwanted]), snapshot
 
 
