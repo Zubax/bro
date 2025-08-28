@@ -483,8 +483,10 @@ class OpenAiGenericReasoner(Reasoner):
                 "user_system_prompt": user_system_prompt,
                 "context": context,
             } if (
-                isinstance(version, str)
-                and version[:2] == __version_info__[:2]
+                isinstance(version, list)
+                and len(version) >= 2
+                and version[0] == __version_info__[0]
+                and version[1] == __version_info__[1]
                 and isinstance(model, str)
                 and isinstance(context, list)
                 and all(isinstance(x, dict) for x in context)
