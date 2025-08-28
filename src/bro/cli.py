@@ -65,14 +65,24 @@ def main() -> None:
     _logger.info("🚀 START")
     try:
         while True:
-            result = rsn.step()
-            snap = rsn.snapshot()
-            snap_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-            if result is not None:
-                _logger.info("🏁 " * 40 + "\n" + result)
-                _logger.info("🛑 Awaiting user response; enter next task or Ctrl-C to quit.")
-                next_task = input("> ").strip()
-                rsn.task(Context(prompt=next_task, files=[]))
+            try:
+                result = rsn.step()
+                snap = rsn.snapshot()
+                snap_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+                if result is not None:
+                    _logger.info("🏁 " * 40 + "\n" + result)
+                    _logger.info("🛑 Awaiting user response; enter next task or Ctrl-C to quit.")
+                    next_task = input("> ").strip()
+                    rsn.task(Context(prompt=next_task, files=[]))
+            except KeyboardInterrupt:
+                _logger.info(
+                    "🚫 Step aborted by user. Please do either:\n"
+                    "1. Press Enter to resume the current task unchanged.\n"
+                    "2. Type a new message to the agent (possibly a new task).\n"
+                    "3. Ctrl-C again to quit."
+                )
+                if msg := input("> ").strip():
+                    rsn.task(Context(prompt=msg, files=[]))
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
 

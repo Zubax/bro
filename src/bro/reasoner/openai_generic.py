@@ -507,6 +507,7 @@ class OpenAiGenericReasoner(Reasoner):
         retry=(retry_if_exception_type(openai.OpenAIError)),
     )
     def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
+        _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(
             model=self._model,
