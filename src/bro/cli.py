@@ -1,11 +1,15 @@
 from __future__ import annotations
 import os
 import time
-from typing import Any
 import json
 import logging
 from pathlib import Path
 import sys
+
+try:
+    import libreadline
+except ImportError:
+    pass
 
 from openai import OpenAI
 
@@ -59,22 +63,18 @@ def main() -> None:
         rsn.task(context)
 
     _logger.info("🚀 START")
-    result = None
     try:
-        while result is None:
+        while True:
             result = rsn.step()
             snap = rsn.snapshot()
             snap_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+            if result is not None:
+                _logger.info("🏁\n" + result)
+                _logger.info("🛑 Awaiting user response; enter next task or Ctrl-C to quit.")
+                next_task = input("> ").strip()
+                rsn.task(Context(prompt=next_task, files=[]))
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
-        sys.exit(1)
-    else:
-        # The snapshot is no longer needed, so move it into a final backup and remove the working copy.
-        snap_file.with_name(snap_file.name + ".completed.bak").write_text(
-            snap_file.read_text(encoding="utf-8"), encoding="utf-8"
-        )
-        snap_file.unlink(missing_ok=True)
-        print(result)
 
 
 def _build_context(paths: list[str]) -> tuple[Context, Path]:
