@@ -52,13 +52,13 @@ def main() -> None:
     )
     if snap_file.is_file():
         _logger.warning(f"♻️ Restoring snapshot from {snap_file}")
-        rsn.restore(json.loads(snap_file.read_text(encoding="utf-8")))
         snap_file.with_name(snap_file.name + ".bak").write_text(snap_file.read_text(encoding="utf-8"), encoding="utf-8")
+        rsn.restore(json.loads(snap_file.read_text(encoding="utf-8")))
     else:
         _logger.info(f"🔴 Starting fresh: no snapshot at {snap_file}")
+        rsn.task(context)
 
     _logger.info("🚀 START")
-    rsn.task(context)
     result = None
     try:
         while result is None:
@@ -69,6 +69,11 @@ def main() -> None:
         _logger.info("🚫 Task aborted by user")
         sys.exit(1)
     else:
+        # The snapshot is no longer needed, so move it into a final backup and remove the working copy.
+        snap_file.with_name(snap_file.name + ".completed.bak").write_text(
+            snap_file.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        snap_file.unlink(missing_ok=True)
         print(result)
 
 

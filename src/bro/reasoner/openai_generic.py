@@ -469,9 +469,9 @@ class OpenAiGenericReasoner(Reasoner):
         return {
             "version": __version_info__,
             "model": self._model,
-            "context": self._context,
-            "strategy": self._strategy,
             "user_system_prompt": self._user_system_prompt,
+            "strategy": self._strategy,
+            "context": self._context,
         }
 
     def restore(self, state: Any, /) -> None:
@@ -479,19 +479,16 @@ class OpenAiGenericReasoner(Reasoner):
             case {
                 "version": version,
                 "model": model,
-                "strategy": strategy,
                 "user_system_prompt": user_system_prompt,
+                "strategy": strategy,
                 "context": context,
             } if (
-                isinstance(version, list)
-                and len(version) >= 2
-                and version[0] == __version_info__[0]
-                and version[1] == __version_info__[1]
+                (isinstance(version, list) and len(version) >= 2)
+                and (version[0] == __version_info__[0] and version[1] == __version_info__[1])
                 and isinstance(model, str)
-                and isinstance(context, list)
-                and all(isinstance(x, dict) for x in context)
-                and (isinstance(strategy, (str, type(None))))
                 and (isinstance(user_system_prompt, (str, type(None))))
+                and (isinstance(strategy, (str, type(None))))
+                and (isinstance(context, list) and all(isinstance(x, dict) for x in context))
             ):
                 _logger.info(f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}")
                 self._model = model
