@@ -69,7 +69,7 @@ def main() -> None:
             snap = rsn.snapshot()
             snap_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
             if result is not None:
-                _logger.info("🏁\n" + result)
+                _logger.info("🏁 " * 40 + "\n" + result)
                 _logger.info("🛑 Awaiting user response; enter next task or Ctrl-C to quit.")
                 next_task = input("> ").strip()
                 rsn.task(Context(prompt=next_task, files=[]))
