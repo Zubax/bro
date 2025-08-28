@@ -8,6 +8,9 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+import openai
 from openai import OpenAI
 
 from bro.executive import Executive, Mode as ExecutiveMode
@@ -15,6 +18,7 @@ from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code
+from bro import __version_info__
 
 _logger = logging.getLogger(__name__)
 
@@ -348,6 +352,17 @@ This function is safe for security-sensitive tasks.
     },
 ]
 
+_LEGILIMENS_PROMPT = """\
+STOP WHAT YOU ARE DOING IMMEDIATELY AND RESPOND WITH A BRIEF REFLECTION FOR MONITORING PURPOSES.
+Your response should be roughly along the following lines, but it is not necessary to follow the same syntax
+-- feel free to improvise:
+What task are you working on?
+Have you been successful so far?
+Are you optimistic about your ability to complete the task?
+What are you planning to do next?
+Feel free to add dark humor if pertinent.
+"""
+
 
 class OpenAiGenericReasoner(Reasoner):
     def __init__(
@@ -370,9 +385,13 @@ class OpenAiGenericReasoner(Reasoner):
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
         self._tools = copy.deepcopy(_TOOLS)
-        self._retry_attempts = 10
+        self._user_system_prompt = user_system_prompt
+        self._strategy: str | None = None
+        self._context = self._build_system_prompt()
+
+    def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
-        self._context = [
+        ctx = [
             {
                 "role": "system",
                 "content": [
@@ -381,12 +400,11 @@ class OpenAiGenericReasoner(Reasoner):
                 ],
             },
         ]
-        if user_system_prompt:
-            self._context[0]["content"].append({"type": "input_text", "text": user_system_prompt})
-        self._strategy: str | None = None
+        if self._user_system_prompt:
+            ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
+        return ctx
 
-    def run(self, ctx: Context, /) -> str:
-        # Set up the initial context
+    def task(self, ctx: Context, /) -> None:
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -401,74 +419,104 @@ class OpenAiGenericReasoner(Reasoner):
                     }
                 )
         self._context += self._screenshot()  # Add the initial screenshot
-        _logger.info("🧠 OpenAI Reasoner is ready to dazzle 🫠")
 
-        # Run the reasoning-action loop
-        stop = None
-        last_failed = False
-        while stop is None:
-            self._context = truncate(self._context)
-            self._save_context(self._context)
-            for attempt in range(1, self._retry_attempts + 1):
-                try:
-                    # noinspection PyTypeChecker
-                    response = self._client.responses.create(
-                        model=self._model,
-                        input=self._context,
-                        tools=self._tools,
-                        reasoning={"effort": self._reasoning_effort, "summary": "detailed"},
-                        text={"verbosity": "low"},
-                        service_tier=self._service_tier,
-                    ).model_dump()
-                    break
-                except Exception as ex:
-                    _logger.exception(f"Exception during OpenAI call, attempt {attempt}/{self._retry_attempts}: {ex}")
-                    if attempt >= self._retry_attempts:
-                        raise
-                    time.sleep(2**attempt)
-            else:
-                assert False, "unreachable"
-            self._save_response(response)
-            _logger.debug(f"Received response: {response}")
-            output = response["output"]
-            self._context += output
+    def step(self) -> str | None:
+        self._context = truncate(self._context)  # TODO this is borken
+        response = self._request_inference(self._context)
+        _logger.debug(f"Received response: {response}")
+        output = response["output"]
+        self._context += output
 
-            # The model trips if the "status" field is not removed.
-            # I guess we could switch to the stateful conversation API instead? See
-            # https://platform.openai.com/docs/guides/conversation-state?api-mode=responses
-            for x in self._context:
-                if x.get("type") == "reasoning" and "status" in x:
-                    del x["status"]
+        # The model trips if the "status" field is not removed.
+        # I guess we could switch to the stateful conversation API instead? See
+        # https://platform.openai.com/docs/guides/conversation-state?api-mode=responses
+        for x in self._context:
+            if x.get("type") == "reasoning" and "status" in x:
+                del x["status"]
 
-            for item in output:
-                try:
-                    new_ctx, new_stop = self._process(item)
-                    stop = stop or new_stop
-                except Exception as ex:
-                    if last_failed:
-                        raise
-                    last_failed = True
-                    _logger.exception(f"Exception during item processing: {ex}")
-                    new_ctx = [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "input_text",
-                                    "text": (
-                                        f"ERROR: Exception during processing: {type(ex).__name__}: {ex}\n"
-                                        + format_exception(ex)
-                                    ),
-                                }
-                            ],
-                        }
-                    ]
-                self._context += new_ctx
-            else:
-                last_failed = False
+        final: str | None = None
+        for item in output:
+            try:
+                new_ctx, new_final = self._process(item)
+                final = final or new_final
+            except Exception as ex:
+                _logger.exception(f"Exception during item processing: {ex}")
+                new_ctx = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    f"ERROR: Exception during processing: {type(ex).__name__}: {ex}\n"
+                                    + format_exception(ex)
+                                ),
+                            }
+                        ],
+                    }
+                ]
+            self._context += new_ctx
+        return final
 
-        _logger.info(f"🧠 OpenAI Reasoner has finished 🏁")
-        return stop
+    def legilimens(self) -> str:
+        ctx = self._context + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+        response = self._request_inference(ctx)
+        reflection = response["output"][-1]["content"][0]["text"]
+        _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
+        return reflection
+
+    def snapshot(self) -> Any:
+        return {
+            "version": __version_info__,
+            "model": self._model,
+            "context": self._context,
+            "strategy": self._strategy,
+            "user_system_prompt": self._user_system_prompt,
+        }
+
+    def restore(self, state: Any, /) -> None:
+        match state:
+            case {
+                "version": version,
+                "model": model,
+                "strategy": strategy,
+                "user_system_prompt": user_system_prompt,
+                "context": context,
+            } if (
+                isinstance(version, str)
+                and version[:2] == __version_info__[:2]
+                and isinstance(model, str)
+                and isinstance(context, list)
+                and all(isinstance(x, dict) for x in context)
+                and (isinstance(strategy, (str, type(None))))
+                and (isinstance(user_system_prompt, (str, type(None))))
+            ):
+                _logger.info(f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}")
+                self._model = model
+                self._strategy = strategy
+                self._user_system_prompt = user_system_prompt
+                self._context = (
+                    self._build_system_prompt() + [x for x in context if x.get("role") != "system"] + self._screenshot()
+                )
+            case _:
+                raise ValueError(f"Snapshot not acceptable: {list(state) if isinstance(state, dict) else type(state)}")
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=2, max=3600),
+        retry=(retry_if_exception_type(openai.OpenAIError)),
+    )
+    def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
+        # noinspection PyTypeChecker
+        return self._client.responses.create(
+            model=self._model,
+            input=ctx,
+            tools=self._tools,
+            reasoning={"effort": self._reasoning_effort, "summary": "detailed"},
+            text={"verbosity": "low"},
+            service_tier=self._service_tier,
+        ).model_dump()
 
     def _process(self, item: dict[str, Any]) -> tuple[
         list[dict[str, Any]],
@@ -626,7 +674,6 @@ class OpenAiGenericReasoner(Reasoner):
                         context += [{"role": "user", "content": [{"type": "input_file", "file_url": url}]}]
 
                     case "shell":
-                        ts = datetime.now().isoformat()
                         command = args["command"]
                         _logger.info(f"🖥️ Running shell command: {command!r}")
                         try:
@@ -641,8 +688,8 @@ class OpenAiGenericReasoner(Reasoner):
                             result = {"exit_status": status, "stdout": stdout, "stderr": stderr}
                             _logger.info(f"🖥️ Shell command exited with status {status}")
                             try:
-                                (self._dir / f"reasoner_shell_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")
-                                (self._dir / f"reasoner_shell_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
+                                (self._dir / f"{__name__}.shell.stdout.txt").write_text(stdout, encoding="utf-8")
+                                (self._dir / f"{__name__}.shell.stderr.txt").write_text(stderr, encoding="utf-8")
                             except Exception as ex:
                                 _logger.error(f"Failed to save shell output: {ex}", exc_info=True)
 
@@ -663,9 +710,8 @@ class OpenAiGenericReasoner(Reasoner):
                             result = {"exit_status": status, "stdout": stdout, "stderr": stderr}
                             _logger.info(f"🐍 Python code exited with status {status}")
                             try:
-                                ts = datetime.now().isoformat()
-                                (self._dir / f"reasoner_python_stdout_{ts}.txt").write_text(stdout, encoding="utf-8")
-                                (self._dir / f"reasoner_python_stderr_{ts}.txt").write_text(stderr, encoding="utf-8")
+                                (self._dir / f"{__name__}.python.stdout.txt").write_text(stdout, encoding="utf-8")
+                                (self._dir / f"{__name__}.python.stderr.txt").write_text(stderr, encoding="utf-8")
                             except Exception as ex:
                                 _logger.error(f"Failed to save Python output: {ex}", exc_info=True)
 
@@ -698,7 +744,7 @@ class OpenAiGenericReasoner(Reasoner):
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"reasoner_{datetime.now().isoformat()}.png", format="PNG")
+        im.save(self._dir / f"{__name__}.png", format="PNG")
         return [
             {
                 "role": "user",
@@ -708,11 +754,3 @@ class OpenAiGenericReasoner(Reasoner):
                 ],
             }
         ]
-
-    def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / "reasoner_context.json"
-        f_context.write_text(json.dumps(context, indent=2))
-
-    def _save_response(self, response: dict[str, Any]) -> None:
-        f_response = self._dir / "reasoner_response.json"
-        f_response.write_text(json.dumps(response, indent=2))

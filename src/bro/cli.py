@@ -1,6 +1,8 @@
 from __future__ import annotations
 import os
 import time
+from typing import Any
+import json
 import logging
 from pathlib import Path
 import sys
@@ -14,6 +16,9 @@ from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
 
 
+SNAPSHOT_NAME = "bro_snapshot.json"
+PROMPT_NAME = "prompt.txt"
+
 _logger = logging.getLogger(__name__)
 _dir = Path(f".bro/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
 _dir.mkdir(exist_ok=True, parents=True)
@@ -21,7 +26,7 @@ _dir.mkdir(exist_ok=True, parents=True)
 
 def main() -> None:
     _setup_logging()
-    context = _build_context(sys.argv[1:])
+    context, snap_file = _build_context(sys.argv[1:])
 
     system_prompt_path = Path.home() / ".bro.txt"
     user_system_prompt = system_prompt_path.read_text() if system_prompt_path.is_file() else None
@@ -45,9 +50,21 @@ def main() -> None:
         client=openai_client,
         user_system_prompt=user_system_prompt,
     )
+    if snap_file.is_file():
+        _logger.warning(f"♻️ Restoring snapshot from {snap_file}")
+        rsn.restore(json.loads(snap_file.read_text(encoding="utf-8")))
+        snap_file.with_name(snap_file.name + ".bak").write_text(snap_file.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        _logger.info(f"🔴 Starting fresh: no snapshot at {snap_file}")
 
+    _logger.info("🚀 START")
+    rsn.task(context)
+    result = None
     try:
-        result = rsn.run(context)
+        while result is None:
+            result = rsn.step()
+            snap = rsn.snapshot()
+            snap_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
         sys.exit(1)
@@ -55,7 +72,7 @@ def main() -> None:
         print(result)
 
 
-def _build_context(paths: list[str]) -> Context:
+def _build_context(paths: list[str]) -> tuple[Context, Path]:
     _logger.debug(f"Building context from paths: {paths}")
     all_files: list[Path] = []
     for path_str in paths:
@@ -72,7 +89,7 @@ def _build_context(paths: list[str]) -> Context:
     _logger.info(f"🗂️ Context files:\n" + "\n".join(f"{i+1:02d}. {f}" for i, f in enumerate(all_files)))
 
     # Read the prompt and exclude it from the context
-    prompt_files = [f for f in all_files if f.name == "prompt.txt"]
+    prompt_files = [f for f in all_files if f.name == PROMPT_NAME]
     if len(prompt_files) > 1:
         raise ValueError(f"Multiple prompt.txt files found: {prompt_files}")
     if len(prompt_files) == 1:
@@ -81,14 +98,21 @@ def _build_context(paths: list[str]) -> Context:
         except Exception as e:
             raise RuntimeError(f"Failed to read {prompt_files[0]}: {e}")
     else:
-        prompt = "Summarize the files."
-        _logger.warning("No prompt.txt file found; using a default prompt, which is:\n%r", prompt)
+        raise ValueError("No prompt.txt file found in the provided paths.")
     _logger.debug(f"Prompt:\n{prompt}")
 
-    return Context(
-        prompt=prompt,
-        files=[f for f in all_files if f not in prompt_files],
-    )
+    # Find existing snapshot or default location
+    snapshot_files = [f for f in all_files if f.name == SNAPSHOT_NAME]
+    if len(snapshot_files) > 1:
+        raise ValueError(f"Multiple snapshots found: {snapshot_files}")
+    snapshot = snapshot_files[0] if len(snapshot_files) == 1 else (prompt_files[0].parent / SNAPSHOT_NAME)
+
+    # Remove unwanted files from context: prompt, snapshot, all .bak files
+    unwanted = {f for f in all_files if f.suffix == ".bak"}
+    unwanted += prompt_files
+    unwanted += {snapshot}
+
+    return Context(prompt=prompt, files=[f for f in all_files if f not in unwanted]), snapshot
 
 
 def _setup_logging() -> None:

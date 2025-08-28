@@ -45,8 +45,8 @@ Currently, Bro uses OpenRouter and OpenAI for inference. You must have valid API
 exported as environment variables `OPENROUTER_API_KEY` and `OPENAI_API_KEY`.
 In the future we may add other models and other inference backends.
 
-Bro has only been tested on GNU/Linux distributions so far. Adding support for macOS and Windows should be trivial
-and contributions are welcome.
+Bro has only been tested on GNU/Linux distributions so far with X11 (Wayland may not work).
+Adding support for macOS and Windows should be trivial  and contributions are welcome.
 
 ⚠️ Bro can only work with single-monitor setups with the resolution at most 1920x1080.
 We mostly use it in an Ubuntu virtual machine with a 1280x1024 screen resolution.

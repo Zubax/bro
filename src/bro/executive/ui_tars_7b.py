@@ -236,7 +236,7 @@ class UiTars7bExecutive(Executive):
         return {"role": "user", "content": msg}
 
     def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / "executive_context.json"
+        f_context = self._dir / f"{__name__}.json"
         f_context.write_text(json.dumps(context, indent=2))
 
     def _screenshot_b64(self) -> str:
@@ -244,7 +244,7 @@ class UiTars7bExecutive(Executive):
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"executive_{datetime.now().isoformat()}.png", format="PNG")
+        im.save(self._dir / f"{__name__}.png", format="PNG")
         return image_to_base64(im)
 
 
