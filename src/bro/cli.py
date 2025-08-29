@@ -112,7 +112,7 @@ def _setup_logging() -> None:
     console_handler = colorlog.StreamHandler(sys.stderr)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(
-        colorlog.ColoredFormatter("%(asctime)s %(levelname)-3.3s %(name)s: %(message)s", "%H:%M:%S")
+        colorlog.ColoredFormatter("%(asctime)s %(levelname)-3.3s %(name)s: %(message)s", "%H:%M:%S", force_color=True)
     )
     logging.getLogger().addHandler(console_handler)
 
