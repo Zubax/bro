@@ -18,6 +18,7 @@ dependencies = [
     "Pillow~=11.1",
     "tenacity~=9.1",
     "prompt-toolkit~=3.0",
+    "colorlog~=6.9",
 ]
 
 [project.scripts]
