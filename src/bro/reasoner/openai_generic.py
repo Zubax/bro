@@ -206,23 +206,33 @@ You can also take additional screenshots at any time using the `screenshot` func
 
 TASK EXAMPLES:
 
-Example 1: Open the web browser and navigate to example.com.
+Example 1 (effort="low" due to simplicity unless previous attempt failed):
+    Open the web browser and navigate to example.com.
 
-Example 2 (time-sensitive, hence larger task): Open the one-time passwords application,
-go to the login page for example.com in the web browser, proceed to the 2FA step,
-and enter the current one-time password for the example.com account.
+Example 2 (effort="low" due to time sensitivity):
+    Enter the one-time password displayed in the Authenticator app into the login form on the screen.
 """,
         "parameters": {
             "type": "object",
             "properties": {
                 "task": {"type": "string", "description": "A detailed description of the task to perform."},
-                "fast": {
-                    "type": "boolean",
+                "effort": {
+                    "type": "string",
+                    "enum": ["low", "high"],
                     "description": """\
-If true, the task is time-sensitive and must be performed as fast as possible, at the risk of making mistakes.
-An example of a time-sensitive task is entering a one-time password during authentication,
-or responding to a message in a chat application, or submitting a form before a deadline, etc.
-If not given explicitly, this parameter is false by default.
+Select the reasoning effort to apply; use the guidelines below to choose the appropriate level.
+
+Select "low" if the task is either time-sensitive or very simple and straightforward,
+involving not more than one trivial step, such as clicking a visible button on screen or entering a text.
+An example of a time-sensitive task is entering a one-time password to complete a login process.
+
+Select "high" for all other tasks, especially if they are complex and involve multiple steps,
+or if the "low" effort level has already been tried and failed. The "high" setting takes much more time
+and is more expensive, but it is also more reliable and capable of solving complex tasks.
+
+If uncertain, try "low" first, and if it fails, try again with "high".
+Rely on your previous experience to choose the appropriate level.
+If not given explicitly, the default effort level is "high".
 """,
                 },
             },
@@ -577,8 +587,14 @@ class OpenAiGenericReasoner(Reasoner):
                     case "use_computer":
                         if self._strategy:
                             task = args["task"]
-                            fast = args.get("fast", False)
-                            mode = ExecutiveMode.FAST if fast else ExecutiveMode.THOROUGH
+                            match effort := args.get("effort", "high"):
+                                case "low" | None:
+                                    mode = ExecutiveMode.FAST
+                                case "high":
+                                    mode = ExecutiveMode.THOROUGH
+                                case _:
+                                    _logger.error(f"Invalid effort level: {effort!r}, using default")
+                                    mode = ExecutiveMode.THOROUGH
                             _logger.info(f"🖥️ Invoking the executive [mode={mode.value}]: {task}")
                             try:
                                 result = self._exe.act(task, mode)

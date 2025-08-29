@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 try:
-    import libreadline
+    import readline
 except ImportError:
     pass
 

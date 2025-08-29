@@ -152,8 +152,10 @@ class HierarchicalExecutive(Executive):
 
     def act(self, goal: str, mode: Mode) -> str:
         # Configure the context.
+        # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
+        # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
         effort = {Mode.FAST: "minimal", Mode.THOROUGH: "high"}[mode]
-        max_steps = {Mode.FAST: 10, Mode.THOROUGH: 50}[mode]
+        max_steps = {Mode.FAST: 10, Mode.THOROUGH: 100}[mode]
         if self._reasoning_effort != effort:
             _logger.info(f"🧠➡️🗑 Switching reasoning effort to {effort!r}; max steps {max_steps}; dropping context")
             self._act_history.clear()
