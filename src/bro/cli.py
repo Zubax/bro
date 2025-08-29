@@ -99,7 +99,7 @@ def main() -> None:
 
 
 def _prompt(ps: PromptSession) -> Context:
-    txt = ps.prompt("🛑[Alt+Enter]>>> ", multiline=True)
+    txt = ps.prompt("🛑[Alt+Enter]>>> ", multiline=True).strip()
     return Context(prompt=txt, files=[])
 
 
