@@ -29,12 +29,15 @@ USER_SYSTEM_PROMPT_FILE = BRODIR / "system_prompt.txt"
 SNAPSHOT_FILE = Path("state.bro.json")
 
 _logger = logging.getLogger(__name__)
-_dir = Path(f".bro/{time.strftime('%Y-%m-%d-%H-%M-%S')}")
-_dir.mkdir(exist_ok=True, parents=True)
 
 
 def main() -> None:
-    _setup_logging()
+    log_dir = Path(f".bro/")
+    if log_dir.exists():
+        shutil.rmtree(log_dir, ignore_errors=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    _setup_logging(log_dir)
     ps = PromptSession(history=FileHistory(PROMPT_HISTORY_FILE))
 
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
@@ -46,16 +49,16 @@ def main() -> None:
     # Construct the system
     ui = ui_io.make_controller()
     exe = HierarchicalExecutive(
-        inferior=UiTars7bExecutive(ui=ui, state_dir=_dir, client=openrouter_client),
+        inferior=UiTars7bExecutive(ui=ui, state_dir=log_dir, client=openrouter_client),
         ui=ui,
-        state_dir=_dir,
+        state_dir=log_dir,
         client=openai_client,
         model="gpt-5",
     )
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
-        state_dir=_dir,
+        state_dir=log_dir,
         client=openai_client,
         user_system_prompt=user_system_prompt,
     )
@@ -105,7 +108,7 @@ def _prompt(ps: PromptSession) -> Context:
     return Context(prompt=txt, files=[])
 
 
-def _setup_logging() -> None:
+def _setup_logging(log_dir: Path) -> None:
     logging.getLogger().setLevel(logging.DEBUG)
 
     # Console handler
@@ -119,7 +122,7 @@ def _setup_logging() -> None:
     logging.getLogger().addHandler(console_handler)
 
     # File handler
-    log_file_path = _dir / "bro.log"
+    log_file_path = log_dir / "bro.log"
     file_handler = logging.FileHandler(str(log_file_path), mode="w", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s"))
