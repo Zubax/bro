@@ -3,11 +3,12 @@ import time
 from typing import Any
 from itertools import count
 import logging
-from datetime import datetime
 from pathlib import Path
 
-from openai import OpenAI, InternalServerError, NOT_GIVEN, NotGiven
-from openai.types import ReasoningEffort
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+
+import openai
+from openai import OpenAI
 
 from bro import ui_io
 from bro.executive import Executive, Mode
@@ -200,23 +201,7 @@ class HierarchicalExecutive(Executive):
             if step + 1 >= max_steps:
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
-            for attempt in range(1, self._retry_attempts + 1):
-                try:
-                    # noinspection PyTypeChecker
-                    response = self._client.chat.completions.create(
-                        model=self._model,
-                        reasoning_effort=self._reasoning_effort,
-                        messages=self._context + sum(self._act_history, []),
-                        temperature=self._temperature,
-                    )
-                    break
-                except InternalServerError as e:
-                    _logger.exception(f"Inference API error on attempt {attempt}/{self._retry_attempts}: {e}")
-                    if attempt >= self._retry_attempts:
-                        raise
-                    time.sleep(2**attempt)
-            else:
-                assert False, "Unreachable"
+            response = self._request_inference(self._context + sum(self._act_history, []))
             _logger.debug("Response: %s", response)
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
@@ -227,6 +212,23 @@ class HierarchicalExecutive(Executive):
                 _logger.debug(f"🤖 Final message: {msg}")
                 return msg
         assert False
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=2, max=3600),
+        retry=(retry_if_exception_type(openai.OpenAIError)),
+        before_sleep=before_sleep_log(_logger, logging.ERROR),
+    )
+    def _request_inference(self, ctx: list[dict[str, Any]]) -> Any:
+        _logger.debug(f"Requesting inference with {len(ctx)} context items...")
+        # noinspection PyTypeChecker
+        return self._client.chat.completions.create(
+            model=self._model,
+            reasoning_effort=self._reasoning_effort,
+            messages=ctx,
+            temperature=self._temperature,
+        )
 
     def _process(self, response: str, mode: Mode) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
