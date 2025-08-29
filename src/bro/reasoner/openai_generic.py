@@ -397,6 +397,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
+        self._step_number = 0
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
@@ -430,6 +431,9 @@ class OpenAiGenericReasoner(Reasoner):
         self._context += self._screenshot()  # Add the initial screenshot
 
     def step(self) -> str | None:
+        _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
+        self._step_number += 1
+
         self._context = truncate(self._context)  # TODO this is borken
         response = self._request_inference(self._context)
         _logger.debug(f"Received response: {response}")
