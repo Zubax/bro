@@ -2,12 +2,14 @@
   <dictionary name="project">
     <words>
       <w>atype</w>
+      <w>brodir</w>
       <w>calluser</w>
       <w>fobj</w>
       <w>leftdouble</w>
       <w>leftsingle</w>
       <w>lefttriple</w>
       <w>legilimens</w>
+      <w>protip</w>
       <w>remmina</w>
       <w>rightsingle</w>
       <w>scrot</w>
