@@ -1,1 +1,0 @@
-Plot a sinewave using matplotlib.

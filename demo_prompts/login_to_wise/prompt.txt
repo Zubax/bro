@@ -1,1 +1,0 @@
-Log into Wise using the credentials on the desktop using the OTP app.
