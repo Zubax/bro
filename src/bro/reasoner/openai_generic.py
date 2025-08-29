@@ -5,10 +5,9 @@ import json
 import time
 from typing import Any
 import logging
-from datetime import datetime
 from pathlib import Path
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 import openai
 from openai import OpenAI
@@ -515,6 +514,7 @@ class OpenAiGenericReasoner(Reasoner):
         stop=stop_after_attempt(10),
         wait=wait_exponential(multiplier=1, min=2, max=3600),
         retry=(retry_if_exception_type(openai.OpenAIError)),
+        before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
     def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")

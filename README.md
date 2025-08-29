@@ -17,13 +17,13 @@ However, it already useful and can be applied to low-stakes open-ended real-worl
 which we already practice at Zubax with varying degrees of success.
 
 Currently, Bro utilizes the general-purpose GPT-5 for high-level reasoning and planning,
-a fast GPT-5-Mini with a low reasoning effort setting for low-level UI control,
+GPT-5(-mini) with auto-adjusted reasoning effort setting for GUI manipulation,
 and the fast and compact UI-TARS-1.5-7B for UI grounding
 (which is used directly, without any additional OCR or object detection).
 The agent is tuned to avoid touching UI unless absolutely necessary, preferring
-direct file access, shell commands, and hotkeys whenever possible.
+direct file access, shell commands, Python scripting, and hotkeys whenever possible.
 
-There is an option to replace the GPT-5-Mini & UI-TARS stack with the stock CUA model from OpenAI,
+There is an option to replace the GPT & UI-TARS stack with the stock CUA model from OpenAI,
 but this is actually not recommended because it is slower and much more expensive than the UI-TARS stack.
 
 You can even run UI-TARS locally (the 7B version only needs 32 GB of VRAM) and avoid OpenRouter.
@@ -31,7 +31,7 @@ Warning though: **quantized edits of UI-TARS cannot be used for grounding as-is!
 The exact reasons for that elude my understanding, but quantized models tend to predict screen coordinates incorrectly
 (custom scaling factors are required).
 
-Bro does not (currently) attempt to compete in the standard CUA benchmarks because it is primarily focused
+Bro does not attempt to compete in the standard CUA benchmarks because it is primarily focused
 on practical utility in real-world office tasks rather than synthetic benchmarks.
 As an example where the two are at odds, Bro is able to log into a bank account using 2FA OTP codes generated
 by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly);
@@ -70,19 +70,12 @@ Currently, we only provide a very rudimentary CLI interface. We are going to pro
 messaging services like Slack, email, and Telegram in the future, so that you could leave Bro running in the
 background and just send it tasks as messages, like you would with a fleshy team member.
 
-If provided, Bro will read `~/.bro.txt` and add the contents to the system prompt, after its internal system prompt.
+If provided, Bro will read `~/.bro/system_prompt.txt` and add the contents to the system prompt,
+after its internal system prompt.
 Use this to describe the operational environment (e.g., where to find certain files,
-what software and online services to use, desirable personality traits, etc).
+what software and online services to use, etc), desirable personality traits, and so on.
 
-At the moment, you invoke Bro as follows:
-
-```bash
-bro path1 path2 ...
-```
-
-Where the paths point to files or directories containing files, among which there must be exactly one file named
-`prompt.txt` which contains the description of the task to perform.
-You can find examples under the `demo_prompts/` directory.
+To call Bro you just say `bro` confidently.
 
 Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
 configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.
@@ -91,7 +84,7 @@ To run Bro via SSH, be sure to `source source_ssh.sh` first.
 
 ## Testing
 
-To invoke a particular component for testing purposes, go like `python3 -m bro.executive`.
+To invoke a particular component for testing purposes, go like `python3 -m bro.executive.ui_tars_7b`.
 
 ## Contributing
 
