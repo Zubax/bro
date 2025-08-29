@@ -70,12 +70,13 @@ Currently, we only provide a very rudimentary CLI interface. We are going to pro
 messaging services like Slack, email, and Telegram in the future, so that you could leave Bro running in the
 background and just send it tasks as messages, like you would with a fleshy team member.
 
-If provided, Bro will read `~/.bro/system_prompt.txt` and add the contents to the system prompt,
+Bro keeps some state and configuration in the BRODIR, which is `~/.bro/`.
+If provided, Bro will read `$BRODIR/system_prompt.txt` and add the contents to the system prompt,
 after its internal system prompt.
 Use this to describe the operational environment (e.g., where to find certain files,
 what software and online services to use, etc), desirable personality traits, and so on.
 
-To call Bro you just say `bro` confidently.
+To invoke Bro you just say `bro` confidently.
 
 Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
 configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.
