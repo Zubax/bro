@@ -151,7 +151,7 @@ class HierarchicalExecutive(Executive):
         state_dir: Path,
         client: OpenAI,
         model: str,
-        temperature: float = 1.0,
+        temperature: float = 0.5,
         acts_to_remember: int = 5,
     ) -> None:
         self._inferior = inferior
