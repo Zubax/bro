@@ -31,7 +31,7 @@ and executing actions on a computer. You have several tools at your disposal to 
 the main ones are:
 
 - `shell`: a function that allows you to run shell commands directly on the local system;
-- `read_file` and `read_url`: functions that allow you to read the contents of local files or fetching remote URLs.
+- `read_files` and `read_urls`: functions that allow you to read the contents of local files or fetching remote URLs.
 - `use_computer`: a function that allows you to delegate computer operations to a smaller specialized LLM agent
   that can manipulate the computer and report back the results of its actions;
 - And several other functions that may be useful to complete the task.
@@ -54,11 +54,11 @@ or email applications if you need additional information to complete the task.
 You are allowed and encouraged to create new user accounts on websites and services if it helps you complete the task.
 
 You are NOT ALLOWED to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
-because this leads to the loss of information. Instead, you can use the `read_file` function to add
+because this leads to the loss of information. Instead, you can use the `read_files` function to add
 the contents of any file (text or binary) to your context.
 
 You are NOT ALLOWED to use the `computer_use` function if the task can be completed using other functions
-(such as `shell`, `read_file`, or `read_url`) because that would be inefficient and error-prone.
+(such as `shell`, `read_files`, or `read_urls`) because that would be inefficient and error-prone.
 You can, however, fall back to using the `computer_use` function if the other functions prove insufficient.
 
 You cannot ask the user to perform any actions on your behalf; you must complete the task entirely on your own.
@@ -154,7 +154,7 @@ and what is the reason you are stuck.
         "description": """\
 Perform computer operations to complete the assigned task using a separate computer-using agent.
 This is a last-resort function that you should only use when the task cannot be completed using other functions
-(such as `shell`, `read_file`, `read_url`, `python`, etc).
+(such as `shell`, `read_files`, `read_urls`, `python`, etc).
 
 Use this function to perform any computer operations, such as opening applications, navigating to websites, manipulating
 files, and so on, if the task cannot be solved using the other functions. Be very specific and detailed in your
@@ -186,7 +186,7 @@ avoid curly quotes (“”) and use straight quotes (") instead;
 avoid ellipsis (…) and use three dots (...) instead;
 avoid non-breaking space and use regular space instead; and so on.
 
-If you need to retrieve information from a file, you should read the file directly using the `read_file` function
+If you need to retrieve information from a file, you should read the file directly using the `read_files` function
 rather than asking the computer-using agent to open and read the file from the screen.
 You can, however, fall back to using the computer-using agent if the specialized functions prove inadequate
 (e.g., if they cannot locate the file or if the file is too big).
@@ -267,55 +267,65 @@ If not given explicitly, the default effort level is "high".
     },
     {
         "type": "function",
-        "name": "read_file",
+        "name": "read_files",
         "description": """\
-Add the contents of the specified local file (text or binary) to the LLM context (conversation). This function works
-with any file that is accessible on the local system, including files that are not text files (e.g., images, PDFs, etc.)
+Add the contents of the specified local files (text or binary) to the LLM context (conversation). This function works
+with any files that are accessible on the local system, including files that are not text files.
+This is usually more efficient than asking the computer-using agent to open and read files from the screen.
 
-This is usually more efficient than asking the computer-using agent to open and read the file from the screen.
-An exception applies to very large files (e.g., hundreds of MB or more) that may be too big to upload;
-in such cases, you may ask the computer-using agent to open and read the file from the screen instead.
-
-The file name doesn't need to be the full path; just a name will suffice; however, if you provide a full or partial
-path, it will help locate the file more quickly and avoid ambiguities. You can use `~` to refer to the home directory.
+File names don't need to be the full paths; just a name will suffice as long as it is unique in the filesystem;
+if you provide a full or partial path, it will help locate the file more quickly and avoid ambiguities.
+You can use `~` to refer to the home directory.
 """,
         "parameters": {
             "type": "object",
             "properties": {
-                "file_name": {
-                    "type": "string",
-                    "description": "The name of the file to read (doesn't have to be a text file)."
-                    " Preferably this should be the full path, or at least partial path;"
-                    " if not, the environment will use (unreliable) heuristics to find the file on the computer.",
+                "file_names": {
+                    "type": "array",
+                    "description": "The names of the files to read"
+                    " Preferably, these should be full or at least partial paths rather than just names;"
+                    " otherwise, the environment will use (unreliable) heuristics to find the file on the computer.",
+                    "items": {
+                        "type": "string",
+                        "description": "For example: `~/Downloads/invoice.pdf` or `my_project/notes.txt`",
+                    },
+                    "minItems": 1,
                 },
                 "category": {
                     "type": "string",
                     "enum": ["image", "text", "other"],
-                    "description": "High-level file category.",
+                    "description": "High-level file category. Applies to all files at once."
+                    " If you need to read files of different categories, call this function multiple times.",
                 },
             },
             "additionalProperties": False,
-            "required": ["file_name", "category"],
+            "required": ["file_names", "category"],
         },
     },
     {
         "type": "function",
-        "name": "read_url",
+        "name": "read_urls",
         "description": """\
-Add the specified URL (web page or file) to the LLM context (conversation).
-Sometimes this may be more efficient than asking the computer-using agent to download the file using the browser.
+Add the specified URLs (web pages or files) to the LLM context (conversation).
+Sometimes this may be more efficient than asking the computer-using agent to download files using the browser.
 """,
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The URL to read (web page or file)."
-                    " For example: https://files.zubax.com/products/com.zubax.fluxgrip/FluxGrip_FG40_datasheet.pdf",
-                },
+                "urls": {
+                    "type": "array",
+                    "description": "List of URLs to read (web pages or files).",
+                    "items": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "For example:"
+                        " https://files.zubax.com/products/com.zubax.fluxgrip/FluxGrip_FG40_datasheet.pdf",
+                    },
+                    "minItems": 1,
+                }
             },
             "additionalProperties": False,
-            "required": ["url"],
+            "required": ["urls"],
         },
     },
     {
@@ -628,29 +638,55 @@ class OpenAiGenericReasoner(Reasoner):
                         result = get_local_time_llm()
                         _logger.info(f"🕰️ {result}")
 
-                    case "read_file":
-                        file_name = Path(args["file_name"])
+                    case "read_files":
                         category = args["category"]
-                        _logger.info(f"📄 Reading file category {category!r}: {str(file_name)!r}")
-                        fpath = locate_file(file_name)
-                        if fpath is None:
-                            result = f"ERROR: Failed to locate the file: {str(file_name)!r}"
-                            _logger.error(f"Failed to locate the file: {str(file_name)!r}")
-                        else:
+                        names = [Path(str(x)).expanduser() for x in args["file_names"]]
+                        _logger.info(f"📄 Reading files of category {category!r}: {[repr(str(x)) for x in names]}")
+                        fps = [locate_file(x) for x in names]
+                        result = (
+                            f"Read files of category {category!r}; results added to the context per file:"
+                            f" {[repr(str(x)) for x in names]}"
+                        )
+                        for file_name, fpath in zip(names, fps):
+                            if fpath is None:
+                                _logger.error(f"Failed to locate the file: {file_name}")
+                                context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"ERROR: Failed to locate the file: {file_name}",
+                                            }
+                                        ],
+                                    }
+                                ]
+                                continue
+                            if fpath.stat().st_size > _FILE_READ_SIZE_LIMIT:
+                                _logger.warning(f"File too big to read; advising the use of CUA: {fpath}")
+                                context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"ERROR: The file is too big to read;"
+                                                f" please use the `use_computer` function instead: {fpath}",
+                                            }
+                                        ],
+                                    }
+                                ]
+                                continue
                             try:
-                                if fpath.stat().st_size > _FILE_READ_SIZE_LIMIT:
-                                    raise ValueError("The file is too big; please use the computer agent instead!")
                                 match category:
                                     case "text":
-                                        result = f"File {str(fpath)!r} added to the context successfully."
                                         context += [
                                             {
                                                 "role": "user",
                                                 "content": [
                                                     {
                                                         "type": "input_text",
-                                                        "text": f"The contents of the text file {str(fpath)!r}"
-                                                        f" are in the next message.",
+                                                        "text": f"The content of the text file follows: {fpath}",
                                                     },
                                                     {
                                                         "type": "input_text",
@@ -661,37 +697,61 @@ class OpenAiGenericReasoner(Reasoner):
                                         ]
                                     case "image":
                                         _logger.error("🔧 TODO: please implement image file support!")
-                                        raise NotImplementedError(
-                                            "Image files are not yet supported, sorry;"
-                                            " please rely on the computer use agent instead."
-                                        )
-                                    case _:
-                                        (f_obj,) = openai_upload_files(self._client, [fpath])
-                                        result = f"File {str(fpath)!r} added to the context successfully."
                                         context += [
                                             {
                                                 "role": "user",
                                                 "content": [
                                                     {
                                                         "type": "input_text",
-                                                        "text": f"The contents of the file {str(fpath)!r}",
+                                                        "text": f"ERROR: Image files are not yet supported, sorry;"
+                                                        f" please rely on the computer use agent instead: {fpath}",
+                                                    }
+                                                ],
+                                            }
+                                        ]
+                                    case _:
+                                        (f_obj,) = openai_upload_files(self._client, [fpath])
+                                        context += [
+                                            {
+                                                "role": "user",
+                                                "content": [
+                                                    {
+                                                        "type": "input_text",
+                                                        "text": f"The content of the text file follows: {fpath}",
                                                     },
                                                     {"type": "input_file", "file_id": f_obj.id},
                                                 ],
                                             }
                                         ]
                             except Exception as ex:
-                                result = (
-                                    f"ERROR: Failed to process the file {str(fpath)!r}: {type(ex).__name__}: {ex}\n"
-                                    + format_exception(ex)
-                                )
-                                _logger.error(f"Failed to process the file {str(fpath)!r}: {ex}", exc_info=True)
+                                _logger.exception(f"Failed to process the file {str(fpath)!r}: {ex}")
+                                context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"ERROR: Failed to process the file {str(fpath)!r}: {ex}",
+                                            }
+                                        ],
+                                    }
+                                ]
 
-                    case "read_url":
-                        url = args["url"]
-                        _logger.info(f"🌐 Adding URL to the context: {url!r}")
-                        result = f"URL {url!r} added to the context successfully."
-                        context += [{"role": "user", "content": [{"type": "input_file", "file_url": url}]}]
+                    case "read_urls":
+                        urls = args["urls"]
+                        valid = all(isinstance(url, str) and url.startswith(("http://", "https://")) for url in urls)
+                        if valid:
+                            _logger.info(f"🌐 Adding URLs to the context: {urls}")
+                            result = f"URLs added to the context successfully: {urls}"
+                            context += [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "input_file", "file_url": url} for url in urls],
+                                }
+                            ]
+                        else:
+                            result = f"ERROR: Invalid URLs: {urls}"
+                            _logger.error(f"Invalid URLs: {urls}")
 
                     case "shell":
                         command = args["command"]

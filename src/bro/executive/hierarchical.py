@@ -163,7 +163,7 @@ class HierarchicalExecutive(Executive):
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
         if self._acts_to_remember < 1:
-            raise ValueError("The executive must remember at least one past act to function properly.")
+            raise ValueError("The executive should remember at least one past act to avoid loops.")
         self._act_history: list[list[dict[str, Any]]] = []
 
     def act(self, goal: str, mode: Mode) -> str:
