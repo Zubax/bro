@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass
 
 import pyautogui
+import pynput.keyboard  # PyAutoGUI cannot type non-ASCII characters
 import mss
 from PIL import Image
 
@@ -101,13 +102,13 @@ def make_controller() -> UiController:
 
 class _Impl(UiController):
     def __init__(self) -> None:
-        sz = pyautogui.size()
-        self._screen_wh = int(sz[0]), int(sz[1])
+        self._kbd = pynput.keyboard.Controller()
         self._consecutive_waits: int = 0
 
     @property
     def screen_width_height(self) -> tuple[int, int]:
-        return self._screen_wh
+        sz = pyautogui.size()
+        return int(sz[0]), int(sz[1])
 
     def screenshot(self) -> Image.Image:
         im = None
@@ -212,7 +213,16 @@ class _Impl(UiController):
 
             case TypeAction(text=text):
                 _logger.info(f"⌨️ Typing {text!r}")
-                pyautogui.write(text, interval=0.03)
+                # We can't use PyAutoGUI here because it can't type non-ASCII characters.
+                # There is still a problem with Unicode though: Python iterates over Unicode codepoints,
+                # but some characters (e.g. emojis) are represented as multiple codepoints.
+                # This may cause an invalid split that may cause pynput to fail to type the character.
+                for c in text:
+                    try:
+                        self._kbd.type(c)
+                    except Exception as ex:
+                        _logger.exception("Failed to type character %r: %s", c, ex)
+                    time.sleep(0.1)  # limit input rate to avoid missing characters in slow programs
                 if not text:
                     _logger.warning(f"Typed empty text in {action}")
 

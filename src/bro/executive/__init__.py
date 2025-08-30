@@ -1,5 +1,12 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import enum
+
+
+class Effort(enum.IntEnum):
+    LOW = 0
+    MEDIUM = 1
+    HIGH = 2
 
 
 class Executive(ABC):
@@ -13,5 +20,5 @@ class Executive(ABC):
     """
 
     @abstractmethod
-    def act(self, goal: str) -> str:
+    def act(self, goal: str, effort: Effort) -> str:
         raise NotImplementedError
