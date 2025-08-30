@@ -293,7 +293,8 @@ You can use `~` to refer to the home directory.
                 },
                 "category": {
                     "type": "string",
-                    "enum": ["image", "text", "other"],
+                    # We have explicit "pdf" here because sometimes LLM attempts to read it as an image
+                    "enum": ["image", "text", "pdf", "other"],
                     "description": "High-level file category. Applies to all files at once."
                     " If you need to read files of different categories, call this function multiple times.",
                 },
@@ -709,7 +710,7 @@ class OpenAiGenericReasoner(Reasoner):
                                                 ],
                                             }
                                         ]
-                                    case _:
+                                    case _:  # "pdf" or "other"
                                         (f_obj,) = openai_upload_files(self._client, [fpath])
                                         context += [
                                             {
