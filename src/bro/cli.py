@@ -65,7 +65,7 @@ def main() -> None:
     # Restore from snapshot if available
     snapshot_file = SNAPSHOT_FILE.resolve()
     if snapshot_file.is_file():
-        _logger.warning(f"♻️ Restoring state from {snapshot_file}; delete the file to start fresh")
+        _logger.warning(f"⚠️♻️⚠️ RESTORING STATE ⚠️♻️⚠️ from {snapshot_file}; delete the file to start fresh")
         bak = snapshot_file.with_name(snapshot_file.name + ".bak")
         bak.unlink(missing_ok=True)
         shutil.copy(snapshot_file, bak)
@@ -74,7 +74,7 @@ def main() -> None:
         if (ctx := _prompt(ps)).prompt:
             rsn.task(ctx)
     else:
-        _logger.info(f"🔴 Starting fresh because file not available: {snapshot_file}")
+        _logger.info(f"🍃 Starting fresh because file not available: {snapshot_file}")
         _logger.info("💡 Protip: the prompt can reference local files and URLs")
         rsn.task(_prompt(ps))
 
@@ -86,9 +86,6 @@ def main() -> None:
                 result = rsn.step()
                 snap = rsn.snapshot()
                 snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-                if result is not None:
-                    _logger.info("🏁 " * 40 + "\n" + result)
-                    rsn.task(_prompt(ps))
             except KeyboardInterrupt:
                 _logger.info(
                     "🚫 Step aborted by user. Please do either:\n"
@@ -98,6 +95,10 @@ def main() -> None:
                 )
                 if (ctx := _prompt(ps)).prompt:
                     rsn.task(ctx)
+            else:
+                if result is not None:
+                    _logger.info("🏁 " * 40 + "\n" + result)
+                    rsn.task(_prompt(ps))
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
 

@@ -717,7 +717,7 @@ class OpenAiGenericReasoner(Reasoner):
                                                 "content": [
                                                     {
                                                         "type": "input_text",
-                                                        "text": f"The content of the text file follows: {fpath}",
+                                                        "text": f"The content of the file follows: {fpath}",
                                                     },
                                                     {"type": "input_file", "file_id": f_obj.id},
                                                 ],
