@@ -77,6 +77,7 @@ Use this to describe the operational environment (e.g., where to find certain fi
 what software and online services to use, etc), desirable personality traits, and so on.
 
 To invoke Bro you just say `bro` confidently.
+If you want to resume a previous session, use `bro --resume`.
 
 Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
 configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.

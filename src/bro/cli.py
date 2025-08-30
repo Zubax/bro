@@ -5,6 +5,7 @@ import logging
 import shutil
 from pathlib import Path
 import sys
+import argparse
 
 import colorlog
 
@@ -37,6 +38,11 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     _setup_logging(log_dir)
+
+    parser = argparse.ArgumentParser(description="Run Bro")
+    parser.add_argument("--resume", action="store_true", help="Resume from existing state file if available.")
+    args = parser.parse_args()
+
     ps = PromptSession(history=FileHistory(PROMPT_HISTORY_FILE))
 
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
@@ -62,10 +68,13 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
     )
 
-    # Restore from snapshot if available
+    # Restore from snapshot or start fresh
     snapshot_file = SNAPSHOT_FILE.resolve()
-    if snapshot_file.is_file():
-        _logger.warning(f"⚠️♻️⚠️ RESTORING STATE ⚠️♻️⚠️ from {snapshot_file}; delete the file to start fresh")
+    if args.resume:
+        if not snapshot_file.is_file():
+            _logger.error(f"Cannot resume because file not found: {snapshot_file}")
+            sys.exit(1)
+        _logger.warning(f"Resuming {snapshot_file}")
         bak = snapshot_file.with_name(snapshot_file.name + ".bak")
         bak.unlink(missing_ok=True)
         shutil.copy(snapshot_file, bak)
@@ -74,7 +83,7 @@ def main() -> None:
         if (ctx := _prompt(ps)).prompt:
             rsn.task(ctx)
     else:
-        _logger.info(f"🍃 Starting fresh because file not available: {snapshot_file}")
+        _logger.info(f"🍃 Starting fresh; use --resume to resume from a state snapshot if available")
         _logger.info("💡 Protip: the prompt can reference local files and URLs")
         rsn.task(_prompt(ps))
 
