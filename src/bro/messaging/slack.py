@@ -1,56 +1,41 @@
 import os
-import requests
-from dataclasses import dataclass
-from typing import Any
+from time import sleep
 
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_sdk import WebClient
+from slack_sdk.socket_mode import SocketModeClient
+from slack_sdk.socket_mode.request import SocketModeRequest
+from slack_sdk.socket_mode.response import SocketModeResponse
 
-token=os.environ["SLACK_BOT_TOKEN"]=os.environ["SLACK_BOT_TOKEN"]
-app = App(token=token)
+from bro.messaging import Messaging, Channel, ReceivedMessage, Message
 
-@dataclass
-class SlackFile:
-    id: str
-    name: str
-    filetype: str
-    user: str
-    size: int
+bot_token = os.environ["SLACK_BOT_TOKEN"]
+app_token = os.environ["SLACK_APP_TOKEN"]
 
-    def __init__(self, file: dict[str, Any]) -> None:
-        self.id = file["id"]
-        self.name = file["name"]
-        self.filetype = file["filetype"]
-        self.user = file["user"]
-        self.size = file["size"]
-        self.slack_link = file["url_private"] or file["url_private_download"]
+class SlackMessaging(Messaging):
+    def __init__(self) -> None:
+        self.web_client=WebClient(token=bot_token)
+        self.client = SocketModeClient(
+            app_token=app_token,
+            web_client=self.web_client
+        )
+        #self.send(Message("hello", []), Channel("general"))
+        self.client.socket_mode_request_listeners.append(self._process_message)
+        self.client.connect()
 
-    def get_file(self):
-        data = requests.get(url=self.slack_link, headers={"Authorization": f"Bearer {token}"})
-        return data.content
+    def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
+        if req.type == "events_api":
+            response = SocketModeResponse(envelope_id=req.envelope_id)
+            client.send_socket_mode_response(response)
+            print(req)
 
-@dataclass
-class SlackMessage:
-    text: str = None
-    sender: str = None
-    channel: str = None
+    def list_channels(self) -> list[Channel]:
+        pass
 
-    def __init__(self, message: dict[str, Any]) -> None:
-        self.text = message["text"]
-        self.sender = message["user"]
-        self.channel = message["channel"]
+    def poll(self) -> list[ReceivedMessage]:
+        raise NotImplementedError
 
-@app.event("message")
-def handle_text_message(message, say):
-    msg = SlackMessage(message)
-    say(f"Hey there <@{msg.sender}>!")
-
-@app.event("file_shared")
-def handle_file_attachment(body, say):
-    file_id = body["event"]["file_id"]
-    file_obj = app.client.files_info(file=file_id)["file"]
-    file_data = SlackFile(file_obj).get_file()
-    say(f"Fetched file content: {file_data}")
-
-if __name__ == "__main__":
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    def send(self, message: Message, via: Channel) -> None:
+        self.web_client.chat_postMessage(
+            channel=via.name,
+            text=message.text,
+        )
