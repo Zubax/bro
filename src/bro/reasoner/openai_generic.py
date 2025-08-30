@@ -218,7 +218,11 @@ Example 2 (effort="low" due to time sensitivity):
                 "effort": {
                     "type": "integer",
                     "description": """\
-Effort vs. speed trade off: 0 -- low effort, fast execution; 1 -- balanced, 2 -- high effort, slow execution.
+Effort vs. speed trade off:
+0 -- low effort, fast execution;
+1 -- balanced;
+2 -- high effort, slow execution.
+
 By default, try the low effort level (value zero). Select a higher level if the task could not be completed
 using the lower level. For time-sensitive tasks, such as entering one-time passwords or responding to messages,
 prefer lower levels to maximize speed.
@@ -227,7 +231,7 @@ You will need to develop a good sense of which effort level is appropriate for e
                 },
             },
             "additionalProperties": False,
-            "required": ["task"],
+            "required": ["task", "effort"],
         },
     },
     {
@@ -352,10 +356,7 @@ This function is safe for security-sensitive tasks.
         "parameters": {
             "type": "object",
             "properties": {
-                "code": {
-                    "type": "string",
-                    "description": "The Python code to execute.",
-                },
+                "code": {"type": "string", "description": "The Python code to execute."},
             },
             "additionalProperties": False,
             "required": ["code"],
