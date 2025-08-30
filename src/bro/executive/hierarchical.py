@@ -11,7 +11,7 @@ import openai
 from openai import OpenAI
 
 from bro import ui_io
-from bro.executive import Executive, Mode
+from bro.executive import Executive, Effort
 from bro.ui_io import UiController
 from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
 
@@ -166,16 +166,18 @@ class HierarchicalExecutive(Executive):
             raise ValueError("The executive should remember at least one past act to avoid loops.")
         self._act_history: list[list[dict[str, Any]]] = []
 
-    def act(self, goal: str, mode: Mode) -> str:
+    def act(self, goal: str, effort: Effort) -> str:
         # Configure the context.
         # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
         # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
-        effort = {Mode.FAST: "minimal", Mode.THOROUGH: "high"}[mode]
-        max_steps = {Mode.FAST: 10, Mode.THOROUGH: 100}[mode]
-        if self._reasoning_effort != effort:
-            _logger.info(f"🧠➡️🗑 Switching reasoning effort to {effort!r}; max steps {max_steps}; dropping context")
-            self._act_history.clear()
-        self._reasoning_effort = effort
+        reasoning_effort = ("minimal", "low", "high")[effort.value]
+        max_steps = (10, 20, 100)[effort.value]
+        if self._reasoning_effort != reasoning_effort:
+            _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
+            if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.
+                _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
+                self._act_history.clear()
+        self._reasoning_effort = reasoning_effort
 
         # Add new context entry for this goal.
         if len(self._act_history) >= self._acts_to_remember:
@@ -212,7 +214,7 @@ class HierarchicalExecutive(Executive):
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            new_items, msg = self._process(resp_text, mode)
+            new_items, msg = self._process(resp_text, effort)
             ctx += new_items
             if msg is not None:
                 _logger.debug(f"🤖 Final message: {msg}")
@@ -236,7 +238,7 @@ class HierarchicalExecutive(Executive):
             temperature=self._temperature,
         )
 
-    def _process(self, response: str, mode: Mode) -> tuple[list[dict[str, Any]], str | None]:
+    def _process(self, response: str, effort: Effort) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
@@ -244,7 +246,7 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description, mode).strip()
+                    result = self._inferior.act(description, effort).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
                     out = []
                     if result:
@@ -336,7 +338,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt, Mode.FAST))
+    print(exe.act(prompt, Effort.MEDIUM))
 
 
 if __name__ == "__main__":

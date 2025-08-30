@@ -12,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 import openai
 from openai import OpenAI
 
-from bro.executive import Executive, Mode as ExecutiveMode
+from bro.executive import Executive, Effort as ExecutiveEffort
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
@@ -216,22 +216,13 @@ Example 2 (effort="low" due to time sensitivity):
             "properties": {
                 "task": {"type": "string", "description": "A detailed description of the task to perform."},
                 "effort": {
-                    "type": "string",
-                    "enum": ["low", "high"],
+                    "type": "integer",
                     "description": """\
-Select the reasoning effort to apply; use the guidelines below to choose the appropriate level.
-
-Select "low" if the task is either time-sensitive or very simple and straightforward,
-involving not more than one trivial step, such as clicking a visible button on screen or entering a text.
-An example of a time-sensitive task is entering a one-time password to complete a login process.
-
-Select "high" for all other tasks, especially if they are complex and involve multiple steps,
-or if the "low" effort level has already been tried and failed. The "high" setting takes much more time
-and is more expensive, but it is also more reliable and capable of solving complex tasks.
-
-If uncertain, try "low" first, and if it fails, try again with "high".
-Rely on your previous experience to choose the appropriate level.
-If not given explicitly, the default effort level is "high".
+Effort vs. speed trade off: 0 -- low effort, fast execution; 1 -- balanced, 2 -- high effort, slow execution.
+By default, try the low effort level (value zero). Select a higher level if the task could not be completed
+using the lower level. For time-sensitive tasks, such as entering one-time passwords or responding to messages,
+prefer lower levels to maximize speed.
+You will need to develop a good sense of which effort level is appropriate for each task based on trial and error.
 """,
                 },
             },
@@ -602,17 +593,14 @@ class OpenAiGenericReasoner(Reasoner):
                     case "use_computer":
                         if self._strategy:
                             task = args["task"]
-                            match effort := args.get("effort", "high"):
-                                case "low" | None:
-                                    mode = ExecutiveMode.FAST
-                                case "high":
-                                    mode = ExecutiveMode.THOROUGH
-                                case _:
-                                    _logger.error(f"Invalid effort level: {effort!r}, using default")
-                                    mode = ExecutiveMode.THOROUGH
-                            _logger.info(f"🖥️ Invoking the executive [mode={mode.value}]: {task}")
                             try:
-                                result = self._exe.act(task, mode)
+                                eff = ExecutiveEffort(args.get("effort", 2))
+                            except ValueError as ex:
+                                _logger.error("Invalid effort value; using maximum effort instead: {ex}")
+                                eff = ExecutiveEffort.HIGH
+                            _logger.info(f"🖥️ Invoking the executive [effort={eff.value}]: {task}")
+                            try:
+                                result = self._exe.act(task, eff)
                             except Exception as ex:
                                 _logger.exception(f"🖥️ Exception during execution: {ex}")
                                 result = (

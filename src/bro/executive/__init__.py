@@ -3,9 +3,10 @@ from abc import ABC, abstractmethod
 import enum
 
 
-class Mode(enum.Enum):
-    FAST = "fast"
-    THOROUGH = "thorough"
+class Effort(enum.IntEnum):
+    LOW = 0
+    MEDIUM = 1
+    HIGH = 2
 
 
 class Executive(ABC):
@@ -19,11 +20,5 @@ class Executive(ABC):
     """
 
     @abstractmethod
-    def act(self, goal: str, mode: Mode) -> str:
-        """
-        If switching the mode affects the reasoning level or other generation parameters of the Executive,
-        then the Executive should drop the context of the current conversation to avoid context contamination.
-        Earlier low-effort tokens anchor style and search, and once the model sees a short token budget,
-        it rarely expands reasoning depth reliably.
-        """
+    def act(self, goal: str, effort: Effort) -> str:
         raise NotImplementedError
