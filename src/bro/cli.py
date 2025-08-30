@@ -68,28 +68,28 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
     )
 
-    # Restore from snapshot or start fresh
-    snapshot_file = SNAPSHOT_FILE.resolve()
-    if args.resume:
-        if not snapshot_file.is_file():
-            _logger.error(f"Cannot resume because file not found: {snapshot_file}")
-            sys.exit(1)
-        _logger.warning(f"Resuming {snapshot_file}")
-        bak = snapshot_file.with_name(snapshot_file.name + ".bak")
-        bak.unlink(missing_ok=True)
-        shutil.copy(snapshot_file, bak)
-        rsn.restore(json.loads(snapshot_file.read_text(encoding="utf-8")))
-        _logger.info("Optionally, enter a new prompt to change the task, or submit an empty prompt to resume as-is")
-        if (ctx := _prompt(ps)).prompt:
-            rsn.task(ctx)
-    else:
-        _logger.info(f"🍃 Starting fresh; use --resume to resume from a state snapshot if available")
-        _logger.info("💡 Protip: the prompt can reference local files and URLs")
-        rsn.task(_prompt(ps))
-
-    # Main loop
-    _logger.info("🚀 START")
     try:
+        # Restore from snapshot or start fresh
+        snapshot_file = SNAPSHOT_FILE.resolve()
+        if args.resume:
+            if not snapshot_file.is_file():
+                _logger.error(f"Cannot resume because file not found: {snapshot_file}")
+                sys.exit(1)
+            _logger.warning(f"Resuming {snapshot_file}")
+            bak = snapshot_file.with_name(snapshot_file.name + ".bak")
+            bak.unlink(missing_ok=True)
+            shutil.copy(snapshot_file, bak)
+            rsn.restore(json.loads(snapshot_file.read_text(encoding="utf-8")))
+            _logger.info("Optionally, enter a new prompt to change the task, or submit an empty prompt to resume as-is")
+            if (ctx := _prompt(ps)).prompt:
+                rsn.task(ctx)
+        else:
+            _logger.info(f"🍃 Starting fresh; use --resume to resume from a state snapshot if available")
+            _logger.info("💡 Protip: the prompt can reference local files and URLs")
+            rsn.task(_prompt(ps))
+
+        # Main loop
+        _logger.info("🚀 START")
         while True:
             try:
                 result = rsn.step()
