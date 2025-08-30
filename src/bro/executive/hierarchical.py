@@ -49,6 +49,8 @@ If not sure what to do, terminate the task with a failure message, explaining wh
 
 Each of your responses MUST begin with a brief description of the current status of the task,
 a critical review of the progress so far, and a description of the next step you are going to take.
+Each response MUST contain a detailed description of what is visible in the screenshot,
+including the names of visible windows, buttons, icons, text fields, and other UI elements.
 Finally, there MUST be a SINGLE MANDATORY JSON block enclosed in triple backticks as specified below,
 containing EXACTLY ONE command to execute. There shall be no text after the JSON block.
 
