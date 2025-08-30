@@ -222,7 +222,7 @@ class _Impl(UiController):
                         self._kbd.type(c)
                     except Exception as ex:
                         _logger.exception("Failed to type character %r: %s", c, ex)
-                    time.sleep(0.03)  # avoid missing characters
+                    time.sleep(0.1)  # limit input rate to avoid missing characters in slow programs
                 if not text:
                     _logger.warning(f"Typed empty text in {action}")
 

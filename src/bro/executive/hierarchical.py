@@ -71,6 +71,10 @@ Do not use this command for typing text or pressing keys; use the `type` and `ke
 Prefer this over invoking the underlying agent to type text, because it is more reliable and faster.
 Avoid Unicode characters that cannot be typed on a keyboard;
 you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
+For example, avoid emdash (—) and use a double hyphen (--) instead;
+avoid curly quotes (“”) and use straight quotes (") instead;
+avoid ellipsis (…) and use three dots (...) instead;
+avoid non-breaking space and use regular space instead; and so on.
 
 ```json
 {"type": "type", "text": "<text to type>"}
@@ -158,6 +162,8 @@ class HierarchicalExecutive(Executive):
         self._retry_attempts = 10
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
+        if self._acts_to_remember < 1:
+            raise ValueError("The executive must remember at least one past act to function properly.")
         self._act_history: list[list[dict[str, Any]]] = []
 
     def act(self, goal: str, mode: Mode) -> str:

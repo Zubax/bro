@@ -179,8 +179,12 @@ is usually preferable to using the mouse, as it is faster and more reliable. The
 its own capabilities and limitations and it is recommended to avoid micromanaging its actions, allowing it to decide
 how to manipulate the computer to achieve the desired outcome.
 
-When asking the computer-using agent to type text, please avoid specifying Unicode characters that may not be
+When asking the computer-using agent to type specific text, please avoid specifying Unicode characters that may not be
 found on a standard keyboard, as the computer-using agent may not be able to type them correctly.
+For example, avoid emdash (—) and use a double hyphen (--) instead;
+avoid curly quotes (“”) and use straight quotes (") instead;
+avoid ellipsis (…) and use three dots (...) instead;
+avoid non-breaking space and use regular space instead; and so on.
 
 If you need to retrieve information from a file, you should read the file directly using the `read_file` function
 rather than asking the computer-using agent to open and read the file from the screen.
@@ -554,7 +558,7 @@ class OpenAiGenericReasoner(Reasoner):
                     case "stop":
                         result = "Task terminated, thank you."
                         final = args["detailed_report"]
-                        _logger.info(f"🏁 Stopping: {final}")
+                        _logger.debug(f"🏁 Stopping: {final}")
 
                     case "strategy":
                         first = self._strategy is None
