@@ -113,7 +113,10 @@ def main() -> None:
 
 
 def _prompt(ps: PromptSession) -> Context:
-    txt = ps.prompt("🛑[Alt+Enter]>>> ", multiline=True).strip()
+    try:
+        txt = ps.prompt("🛑[Alt+Enter]>>> ", multiline=True).strip()
+    except EOFError:
+        raise KeyboardInterrupt
     return Context(prompt=txt, files=[])
 
 
