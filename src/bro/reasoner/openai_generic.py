@@ -221,9 +221,9 @@ Example 2 (effort="low" due to time sensitivity):
                     "type": "integer",
                     "description": """\
 Effort vs. speed trade off:
-0 -- low effort, fast execution;
+0 -- low effort, fast execution, simple or time-critical tasks;
 1 -- balanced;
-2 -- high effort, slow execution.
+2 -- high effort, slow execution, highly complex tasks with multi-step reasoning.
 
 By default, try the low effort level (value zero). Select a higher level if the task could not be completed
 using the lower level. For time-sensitive tasks, such as entering one-time passwords or responding to messages,
