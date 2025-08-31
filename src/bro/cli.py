@@ -5,6 +5,7 @@ import logging
 import shutil
 import sys
 import argparse
+import sqlite3
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -106,7 +107,7 @@ class WebController(web_ui.Controller):
     def __init__(self, ui: ui_io.UiObserver, rsn: OpenAiGenericReasoner) -> None:
         self._ui = ui
         self._rsn = rsn
-        self._db = logs.sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True, check_same_thread=False)
+        self._db = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True, check_same_thread=False)
 
     def get_screenshot(self) -> ui_io.Image.Image:
         return self._ui.screenshot()
@@ -114,7 +115,7 @@ class WebController(web_ui.Controller):
     def get_reflection(self) -> str:
         return self._rsn.legilimens()
 
-    def get_db(self) -> logs.sqlite3.Connection:
+    def get_db(self) -> sqlite3.Connection:
         return self._db
 
 
