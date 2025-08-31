@@ -479,7 +479,11 @@ class OpenAiGenericReasoner(Reasoner):
 
     def legilimens(self) -> str:
         ctx = self._context + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
-        response = self._request_inference(ctx)
+        response = self._request_inference(
+            ctx,
+            model="gpt-5-mini",
+            reasoning_effort="minimal",
+        )
         reflection = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
@@ -505,8 +509,8 @@ class OpenAiGenericReasoner(Reasoner):
                 (isinstance(version, list) and len(version) >= 2)
                 and (version[0] == __version_info__[0] and version[1] == __version_info__[1])
                 and isinstance(model, str)
-                and (isinstance(user_system_prompt, (str, type(None))))
-                and (isinstance(strategy, (str, type(None))))
+                and isinstance(user_system_prompt, (str, type(None)))
+                and isinstance(strategy, (str, type(None)))
                 and (isinstance(context, list) and all(isinstance(x, dict) for x in context))
             ):
                 _logger.info(f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}")
@@ -526,14 +530,24 @@ class OpenAiGenericReasoner(Reasoner):
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
+    def _request_inference(
+        self,
+        ctx: list[dict[str, Any]],
+        /,
+        *,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(
-            model=self._model,
+            model=model or self._model,
             input=ctx,
             tools=self._tools,
-            reasoning={"effort": self._reasoning_effort, "summary": "detailed"},
+            reasoning={
+                "effort": reasoning_effort or self._reasoning_effort,
+                "summary": "detailed",
+            },
             text={"verbosity": "low"},
             service_tier=self._service_tier,
         ).model_dump()

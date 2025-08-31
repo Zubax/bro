@@ -41,6 +41,7 @@ def setup(*, log_file: Path, db_file: Path) -> None:
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("pyautogui").setLevel(logging.WARNING)
     logging.getLogger("mss").setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 
 class _SqliteHandler(logging.Handler):
@@ -63,7 +64,7 @@ CREATE TABLE IF NOT EXISTS logs (
 
     def __init__(self, db_path: Path) -> None:
         super().__init__()
-        self._conn = sqlite3.connect(db_path)
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         with self._conn:
             self._conn.execute(self._SCHEMA)
 
