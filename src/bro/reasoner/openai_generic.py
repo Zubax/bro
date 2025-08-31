@@ -207,10 +207,10 @@ You can also take additional screenshots at any time using the `screenshot` func
 
 TASK EXAMPLES:
 
-Example 1 (effort="low" due to simplicity unless previous attempt failed):
+Example 1 (effort=0 due to simplicity unless previous attempt failed):
     Open the web browser and navigate to example.com.
 
-Example 2 (effort="low" due to time sensitivity):
+Example 2 (effort=0 due to time sensitivity, as OTPs expire quickly):
     Enter the one-time password displayed in the Authenticator app into the login form on the screen.
 """,
         "parameters": {
@@ -221,13 +221,14 @@ Example 2 (effort="low" due to time sensitivity):
                     "type": "integer",
                     "description": """\
 Effort vs. speed trade off:
-0 -- low effort, fast execution, simple or time-critical tasks;
-1 -- balanced;
-2 -- high effort, slow execution, highly complex tasks with multi-step reasoning.
+0 -- Low effort, fast execution, simple or time-critical tasks; default choice for most tasks.
+1 -- Balanced, if the task could not be completed using low effort.
+2 -- High effort, slow execution, highly complex tasks with multi-step reasoning; choose if previous attempts failed.
 
-By default, try the low effort level (value zero). Select a higher level if the task could not be completed
-using the lower level. For time-sensitive tasks, such as entering one-time passwords or responding to messages,
+By default, try the low effort level (value 0). Use higher levels only if the task could not be completed
+using lower levels. For time-sensitive tasks, such as entering one-time passwords or responding to messages,
 prefer lower levels to maximize speed.
+
 You will need to develop a good sense of which effort level is appropriate for each task based on trial and error.
 """,
                 },
@@ -599,7 +600,7 @@ class OpenAiGenericReasoner(Reasoner):
                             try:
                                 eff = ExecutiveEffort(args.get("effort", 2))
                             except ValueError as ex:
-                                _logger.error("Invalid effort value; using maximum effort instead: {ex}")
+                                _logger.error(f"Invalid effort value; using maximum effort instead: {ex}")
                                 eff = ExecutiveEffort.HIGH
                             _logger.info(f"🖥️ Invoking the executive [effort={eff.value}]: {task}")
                             try:
