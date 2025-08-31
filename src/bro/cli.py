@@ -115,7 +115,7 @@ class WebController(web_ui.Controller):
 
 
 def _prompt() -> Context:
-    print("🛑 Enter text; press Ctrl+D or enter three blank lines to finish:")
+    print("🛑 Enter text; press Ctrl+D or enter three blank lines to submit:")
     lines = []
     while len(lines) < 3 or lines[-3].strip() != "" or lines[-2].strip() != "" or lines[-1].strip() != "":
         try:
