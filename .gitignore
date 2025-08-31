@@ -3,6 +3,9 @@ __pycache__/
 *$py.class
 *.so
 .bro
+*.bro.json
+*.bro.txt
+*.bak
 .Python
 build/
 develop-eggs/

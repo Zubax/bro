@@ -1,20 +1,19 @@
 from __future__ import annotations
 import time
-import json
 from typing import Any
 from itertools import count
 import logging
-from datetime import datetime
 from pathlib import Path
-import re
 
-from openai import OpenAI, InternalServerError, NOT_GIVEN, NotGiven
-from openai.types import ReasoningEffort
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+
+import openai
+from openai import OpenAI
 
 from bro import ui_io
-from bro.executive import Executive
+from bro.executive import Executive, Effort
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, get_local_time_llm, format_exception, split_trailing_json
+from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
 
 _logger = logging.getLogger(__name__)
 
@@ -24,10 +23,8 @@ You are an agent that can perform simple tasks on a computer by controlling the 
 to a smaller underlying agent. You accept high-level goals and break them down into smaller, atomic tasks that
 the underlying agent can perform. At each step you receive the current screenshot of the desktop and the current time.
 You do not perform any UI actions yourself. Your role is entirely passive/reactive; you only do what explicitly asked
-and you never make suggestions or ask questions unless you are stuck and cannot make any progress.
-
-You are controlled not by a human, but by a higher-level agentic planner that gives you high-level goals to achieve.
-Therefore, you MUST NOT attempt to ask for a human intervention, nor speak to the user in any way.
+and you never make suggestions or ask questions. If not sure how to proceed, terminate the task with a failure message.
+Do not do anything that is not explicitly asked of you.
 
 The underlying agent is very basic and can be easily confused, so you must break down complex tasks into very simple,
 unambiguous atomic steps.
@@ -39,16 +36,23 @@ For example, if the goal is "Open zubax.com", you should break it down into a se
 4. Press Enter (using the `key_press` command).
 5. Wait for the correct page to load (using the `wait` command).
 
+Remember that some computer usage patterns that are appropriate for humans may be suboptimal for you.
+For example, usually there is no point in copying and pasting text using the clipboard (Ctrl+C/Ctrl+V),
+as it is easier and more reliable to type text manually. Similarly, using keyboard shortcuts is usually preferable
+to using the mouse.
+
+You are controlled not by a human, but by a higher-level agentic planner that gives you high-level goals to achieve.
+Therefore, you MUST NOT attempt to ask for a human intervention, nor speak to the user in any way.
+You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
+You MUST NOT provide suggestions, advice, solicit feedback, or ask questions.
+If not sure what to do, terminate the task with a failure message, explaining what went wrong.
+
 Each of your responses MUST begin with a brief description of the current status of the task,
 a critical review of the progress so far, and a description of the next step you are going to take.
-Finally, there MUST be a MANDATORY JSON block enclosed in triple backticks as specified below.
-
-You MUST NOT explicitly ask for further tasks once the current task is finished; your role is entirely passive/reactive.
-
-You can assign one small task per step.
-To assign a task, include a JSON code block at the end of your response following one of the templates below.
-A JSON block is MANDATORY in EVERY response.
-There shall be no text after the JSON code block; the JSON block SHALL BE SURROUNDED BY TRIPLE BACKTICKS.
+Each response MUST contain a detailed description of what is visible in the screenshot,
+including the names of visible windows, buttons, icons, text fields, and other UI elements.
+Finally, there MUST be a SINGLE MANDATORY JSON block enclosed in triple backticks as specified below,
+containing EXACTLY ONE command to execute. There shall be no text after the JSON block.
 
 # JSON response templates
 
@@ -67,8 +71,12 @@ Do not use this command for typing text or pressing keys; use the `type` and `ke
 ## Type text
 
 Prefer this over invoking the underlying agent to type text, because it is more reliable and faster.
-Avoid Unicode characters that cannot be typed on a standard English keyboard;
+Avoid Unicode characters that cannot be typed on a keyboard;
 you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
+For example, avoid emdash (—) and use a double hyphen (--) instead;
+avoid curly quotes (“”) and use straight quotes (") instead;
+avoid ellipsis (…) and use three dots (...) instead;
+avoid non-breaking space and use regular space instead; and so on.
 
 ```json
 {"type": "type", "text": "<text to type>"}
@@ -78,10 +86,14 @@ you can use composition shortcuts like Alt+NumpadXXXX if needed instead.
 
 Press hotkeys using this command. Whenever possible you should prefer using hotkeys over mouse clicks,
 because they are much more reliable and faster. For example, if you need to scroll a document or a web page,
-use the PageUp/PageDown keys instead of scrolling with the mouse! Likewise, use Alt+Tab to switch applications
+use the arrows or PageUp/PageDown keys instead of scrolling with the mouse! Likewise, use Alt+Tab to switch applications
 instead of clicking on the taskbar, use Ctrl+T to open a new browser tab instead of clicking the "+" button,
 use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to close a window instead of clicking the
 "X" button, and so on.
+
+If an attempt to click a UI element using the GUI task repeatedly fails, try pressing Tab repeatedly to iterate
+through the clickable elements on the screen until the desired element is focused,
+and then press Enter, Space, or whatever key is appropriate to "click" it.
 
 ```json
 {"type": "key_press", "keys": ["<key1>", "<key2>", ...]}
@@ -89,10 +101,8 @@ use Ctrl+W to close a tab instead of clicking the "X" button, use Alt+F4 to clos
 
 ## Wait for a certain amount of time
 
-You MUST NOT use this command to request a user intervention; use the `ask_user` command instead.
-YOU MUST NEVER USE THIS COMMAND TO WAIT FOR USER INPUT.
-The user cannot intervene you unless you either terminate the task or use the `ask_user` command.
-You must always make progress as quickly as possible, and as such, you are not allowed to use unreasonably long waits.
+You MUST NOT use this command to request intervention or additional inputs; use the `help` command instead.
+The higher-level planner cannot intervene you unless you either terminate the task or use the `help` command.
 
 ```json
 {"type": "wait", "duration": number_of_seconds}
@@ -106,6 +116,8 @@ You must always make progress as quickly as possible, and as such, you are not a
 
 ## Request intervention of the higher-level agentic planner
 
+Use this if you are not sure how to proceed, or if you need additional information or actions.
+
 ```json
 {"type": "help", "message": "<explanation of the situation and what kind of help is needed>"}
 ```
@@ -116,8 +128,6 @@ You have exhausted the maximum number of steps allowed.
 You must terminate the task immediately with a failure message.
 Explain what you managed to achieve and what went wrong.
 """
-
-_RE_JSON = re.compile(r"(?ims)^```(?:json)?\n(.+)\n```$")
 
 
 class HierarchicalExecutive(Executive):
@@ -141,25 +151,45 @@ class HierarchicalExecutive(Executive):
         state_dir: Path,
         client: OpenAI,
         model: str,
-        reasoning_effort: ReasoningEffort | NotGiven = NOT_GIVEN,
         temperature: float = 1.0,
-        max_steps: int = 10,
+        acts_to_remember: int = 5,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
         self._dir = state_dir
         self._client = client
         self._model = model
-        self._reasoning_effort = reasoning_effort
+        self._reasoning_effort = ""
         self._temperature = temperature
-        self._retry_attempts = 5
-        self._max_steps = max_steps
+        self._retry_attempts = 10
         self._context = [{"role": "system", "content": _PROMPT}]
+        self._acts_to_remember = acts_to_remember
+        if self._acts_to_remember < 1:
+            raise ValueError("The executive should remember at least one past act to avoid loops.")
+        self._act_history: list[list[dict[str, Any]]] = []
 
-    def act(self, goal: str) -> str:
-        ctx = self._context + [{"role": "user", "content": goal}]
+    def act(self, goal: str, effort: Effort) -> str:
+        # Configure the context.
+        # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
+        # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
+        reasoning_effort = ("low", "medium", "high")[effort.value]
+        max_steps = (10, 20, 100)[effort.value]
+        if self._reasoning_effort != reasoning_effort:
+            _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
+            if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.
+                _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
+                self._act_history.clear()
+        self._reasoning_effort = reasoning_effort
+
+        # Add new context entry for this goal.
+        if len(self._act_history) >= self._acts_to_remember:
+            self._act_history.pop(0)
+        ctx = [self._user_message(goal)]
+        self._act_history.append(ctx)
+
+        # Run the reasoning-action loop.
         for step in count():
-            _logger.info(f"🔄 Step {step+1}/{self._max_steps}")
+            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._reasoning_effort!r}")
             ctx += [
                 {
                     "role": "user",
@@ -172,39 +202,45 @@ class HierarchicalExecutive(Executive):
                     ],
                 },
             ]
-            if step + 1 >= self._max_steps:
+            if step > max_steps * 2:
+                _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
+                return (
+                    "ERROR: AGENT TERMINATED DUE TO FAILURE TO COOPERATE. Final state unknown."
+                    " Please try again; consider using simpler goals or clearer instructions."
+                )
+            if step + 1 >= max_steps:
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
-            ctx = truncate(ctx, head=100, tail=1000)
-            for attempt in range(1, self._retry_attempts + 1):
-                try:
-                    # noinspection PyTypeChecker
-                    response = self._client.chat.completions.create(
-                        model=self._model,
-                        reasoning_effort=self._reasoning_effort,
-                        messages=ctx,
-                        temperature=self._temperature,
-                    )
-                    break
-                except InternalServerError as e:
-                    _logger.warning(f"Inference API error on attempt {attempt}/{self._retry_attempts}: {e}")
-                    if attempt == self._retry_attempts:
-                        raise
-                    time.sleep(2**attempt)
-            else:
-                assert False, "Unreachable"
+            response = self._request_inference(self._context + sum(self._act_history, []))
             _logger.debug("Response: %s", response)
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            new_items, msg = self._process(resp_text)
+            new_items, msg = self._process(resp_text, effort)
             ctx += new_items
             if msg is not None:
                 _logger.debug(f"🤖 Final message: {msg}")
                 return msg
         assert False
 
-    def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(10),
+        wait=wait_exponential(multiplier=1, min=2, max=3600),
+        retry=(retry_if_exception_type(openai.OpenAIError)),
+        before_sleep=before_sleep_log(_logger, logging.ERROR),
+    )
+    def _request_inference(self, ctx: list[dict[str, Any]]) -> Any:
+        _logger.debug(f"Requesting inference with {len(ctx)} context items...")
+        # noinspection PyTypeChecker
+        return self._client.chat.completions.create(
+            model=self._model,
+            reasoning_effort=self._reasoning_effort,
+            messages=ctx,
+            temperature=self._temperature,
+        )
+
+    def _process(self, response: str, effort: Effort) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
@@ -212,7 +248,7 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description).strip()
+                    result = self._inferior.act(description, effort).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
                     out = []
                     if result:
@@ -264,7 +300,7 @@ class HierarchicalExecutive(Executive):
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"executive_hierarchical_{datetime.now().isoformat()}.png", format="PNG")
+        im.save(self._dir / f"{__name__}.png", format="PNG")
         return image_to_base64(im)
 
 
@@ -304,7 +340,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt))
+    print(exe.act(prompt, Effort.MEDIUM))
 
 
 if __name__ == "__main__":

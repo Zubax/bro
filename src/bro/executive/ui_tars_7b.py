@@ -4,7 +4,6 @@ import json
 import time
 from typing import Any
 import logging
-from datetime import datetime
 from pathlib import Path
 import re
 import concurrent.futures
@@ -13,9 +12,9 @@ from openai import OpenAI, InternalServerError
 from PIL import Image
 
 from bro import ui_io
-from bro.executive import Executive
+from bro.executive import Executive, Effort
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, format_exception, get_local_time_llm
+from bro.util import image_to_base64, format_exception, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
@@ -57,6 +56,8 @@ the action templates below.
 Click(start_box='(x,y)') -- Click the mouse at the specified screen coordinates (x, y).
 
 LeftDouble(start_box='(x,y)') -- Double-click the left mouse button at (x, y).
+
+LeftTriple(start_box='(x,y)') -- Triple-click the left mouse button at (x, y).
 
 RightSingle(start_box='(x,y)') -- Right-click the mouse at (x, y).
 
@@ -108,10 +109,11 @@ class UiTars7bExecutive(Executive):
         self._model = model
         self._max_steps = max_steps
         self._retry_attempts = 5
-        self._temperature = 0.1
+        self._temperature = 0.1  # Higher temps cause the model to do weird things
         self._context = [{"role": "system", "content": _PROMPT_EXECUTIVE}]
 
-    def act(self, goal: str) -> str:
+    def act(self, goal: str, effort: Effort) -> str:
+        _ = effort  # This implementation currently does not use the mode
         scr_w, scr_h = self._ui.screen_width_height
         ctx = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
         for step in range(self._max_steps):
@@ -129,7 +131,6 @@ class UiTars7bExecutive(Executive):
                     ],
                 },
             ]
-            ctx = truncate(ctx, head=10, tail=200)
             self._save_context(ctx)
             for attempt in range(1, self._retry_attempts + 1):
                 try:
@@ -138,6 +139,7 @@ class UiTars7bExecutive(Executive):
                         model=self._model,
                         messages=ctx,
                         temperature=self._temperature,
+                        max_tokens=500,
                     )
                     break
                 except InternalServerError as e:
@@ -184,9 +186,15 @@ class UiTars7bExecutive(Executive):
                 case "click" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y)))
+                case "leftsingle" if len(numbers) == 2:  # We don't give this explicitly but the model generalizes
+                    x, y = numbers
+                    self._ui.do(ui_io.ClickAction((x, y)))
                 case "leftdouble" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y), count=2))
+                case "lefttriple" if len(numbers) == 2:
+                    x, y = numbers
+                    self._ui.do(ui_io.ClickAction((x, y), count=3))
                 case "rightsingle" if len(numbers) == 2:
                     x, y = numbers
                     self._ui.do(ui_io.ClickAction((x, y), button=ui_io.ClickAction.BUTTON_RIGHT))
@@ -227,7 +235,7 @@ class UiTars7bExecutive(Executive):
         return {"role": "user", "content": msg}
 
     def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / "executive_context.json"
+        f_context = self._dir / f"{__name__}.json"
         f_context.write_text(json.dumps(context, indent=2))
 
     def _screenshot_b64(self) -> str:
@@ -235,7 +243,7 @@ class UiTars7bExecutive(Executive):
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"executive_{datetime.now().isoformat()}.png", format="PNG")
+        im.save(self._dir / f"{__name__}.png", format="PNG")
         return image_to_base64(im)
 
 
@@ -266,7 +274,7 @@ def _test() -> None:
         if len(sys.argv) > 1
         else "Search for Zubax Robotics on Google and open the official website."
     )
-    print(exe.act(prompt))
+    print(exe.act(prompt, Effort.MEDIUM))
 
 
 class _GuiLocator:
