@@ -7,9 +7,6 @@ import sys
 import argparse
 import sqlite3
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.history import FileHistory
-
 from openai import OpenAI
 
 from bro import ui_io, logs, web_ui
@@ -17,7 +14,7 @@ from bro.reasoner import Context
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
-from bro.brofiles import PROMPT_HISTORY_FILE, USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
+from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
 
 _logger = logging.getLogger(__name__)
 
@@ -29,8 +26,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run Bro")
     parser.add_argument("--resume", action="store_true", help="Resume from existing state file if available.")
     args = parser.parse_args()
-
-    ps = PromptSession(history=FileHistory(PROMPT_HISTORY_FILE))
 
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
     _logger.info(f"User system prompt {USER_SYSTEM_PROMPT_FILE} contains {len(user_system_prompt or '')} characters")
@@ -72,12 +67,12 @@ def main() -> None:
             shutil.copy(snapshot_file, bak)
             rsn.restore(json.loads(snapshot_file.read_text(encoding="utf-8")))
             _logger.info("Optionally, enter a new prompt to change the task, or submit an empty prompt to resume as-is")
-            if (ctx := _prompt(ps)).prompt:
+            if (ctx := _prompt()).prompt:
                 rsn.task(ctx)
         else:
             _logger.info(f"🍃 Starting fresh; use --resume to resume from a state snapshot if available")
             _logger.info("💡 Protip: the prompt can reference local files and URLs")
-            rsn.task(_prompt(ps))
+            rsn.task(_prompt())
 
         # Main loop
         _logger.info("🚀 START")
@@ -93,12 +88,12 @@ def main() -> None:
                     "2. Type a new message to the agent (possibly a new task).\n"
                     "3. Ctrl-C again to quit."
                 )
-                if (ctx := _prompt(ps)).prompt:
+                if (ctx := _prompt()).prompt:
                     rsn.task(ctx)
             else:
                 if result is not None:
                     _logger.info("🏁 " * 40 + "\n" + result)
-                    rsn.task(_prompt(ps))
+                    rsn.task(_prompt())
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
 
@@ -119,9 +114,15 @@ class WebController(web_ui.Controller):
         return self._db
 
 
-def _prompt(ps: PromptSession) -> Context:
-    try:
-        txt = ps.prompt("🛑[Alt+Enter]>>> ", multiline=True).strip()
-    except EOFError:
-        raise KeyboardInterrupt
-    return Context(prompt=txt, files=[])
+def _prompt() -> Context:
+    print("🛑 Enter text; press Ctrl+D or enter three blank lines to finish:")
+    lines = []
+    while len(lines) < 3 or lines[-3].strip() != "" or lines[-2].strip() != "" or lines[-1].strip() != "":
+        try:
+            lines.append(input())
+        except EOFError:
+            break
+    return Context(
+        prompt="\n".join(lines).rstrip("\n"),
+        files=[],
+    )

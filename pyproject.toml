@@ -17,7 +17,6 @@ dependencies = [
     "mss~=10.1",
     "Pillow~=11.1",
     "tenacity~=9.1",
-    "prompt-toolkit~=3.0",
     "colorlog~=6.9",
     "flask~=3.1",
 ]
