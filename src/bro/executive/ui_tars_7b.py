@@ -98,13 +98,11 @@ class UiTars7bExecutive(Executive):
         self,
         *,
         ui: UiController,
-        state_dir: Path,
         client: OpenAI,
         model: str = "bytedance/ui-tars-1.5-7b",
         max_steps: int = 3,
     ) -> None:
         self._ui = ui
-        self._dir = state_dir
         self._client = client
         self._model = model
         self._max_steps = max_steps
@@ -131,7 +129,6 @@ class UiTars7bExecutive(Executive):
                     ],
                 },
             ]
-            self._save_context(ctx)
             for attempt in range(1, self._retry_attempts + 1):
                 try:
                     # noinspection PyTypeChecker
@@ -234,16 +231,11 @@ class UiTars7bExecutive(Executive):
     def _user_message(msg: str, /) -> dict[str, Any]:
         return {"role": "user", "content": msg}
 
-    def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / f"{__name__}.json"
-        f_context.write_text(json.dumps(context, indent=2))
-
     def _screenshot_b64(self) -> str:
         # The short sleep helps avoiding further waits while the UI is still updating.
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"{__name__}.png", format="PNG")
         return image_to_base64(im)
 
 
@@ -263,11 +255,7 @@ def _test() -> None:
             item.rmdir()
     exe = UiTars7bExecutive(
         ui=ui_io.make_controller(),
-        state_dir=state_dir,
-        client=OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-        ),
+        client=OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY")),
     )
     prompt = (
         " ".join(sys.argv[1:])

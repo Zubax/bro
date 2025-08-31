@@ -4,7 +4,6 @@ import json
 import time
 from typing import Any
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from openai import OpenAI, InternalServerError
@@ -38,7 +37,7 @@ keyboard. In such cases, don't hesitate to apply standard replacements, such as 
 For reasons of efficiency, when asked to copy and paste short text, prefer typing it out manually to avoid
 using the clipboard.
 
-When navigating around the GUI, prefer shortcuts over mouse clicking, if possible.
+When navigating around the GUI, prefer shortcuts over mouse clicking.
 """
 
 
@@ -47,12 +46,10 @@ class OpenAiCuaExecutive(Executive):
         self,
         *,
         ui: UiController,
-        state_dir: Path,
         client: OpenAI,
         model: str = "computer-use-preview",
     ) -> None:
         self._ui = ui
-        self._dir = state_dir
         self._client = client
         self._model = model
         screen_size = self._ui.screen_width_height
@@ -105,7 +102,6 @@ class OpenAiCuaExecutive(Executive):
         stop = None
         while stop is None:
             ctx = truncate(ctx)
-            self._save_context(ctx)
             # The computer-use-preview model is still quite unstable, so we implement retries here.
             for attempt in range(self._retry_attempts):
                 try:
@@ -130,7 +126,6 @@ class OpenAiCuaExecutive(Executive):
                 time.sleep(2**attempt)
             else:
                 assert False, "unreachable"
-            self._save_response(response)
 
             output = response["output"]
             if not output:
@@ -245,20 +240,11 @@ class OpenAiCuaExecutive(Executive):
                 # Do we need better handling here?
                 return [], None
 
-    def _save_context(self, context: list[dict[str, Any]]) -> None:
-        f_context = self._dir / "executive_context.json"
-        f_context.write_text(json.dumps(context, indent=2))
-
-    def _save_response(self, response: dict[str, Any]) -> None:
-        f_response = self._dir / "executive_response.json"
-        f_response.write_text(json.dumps(response, indent=2))
-
     def _screenshot_b64(self) -> str:
         # The short sleep helps avoiding further waits while the UI is still updating.
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"executive_{datetime.now().isoformat()}.png", format="PNG")
         return image_to_base64(im)
 
     def _get_coords(self, act: dict[str, Any]) -> ui_io.ScreenCoord:
@@ -283,7 +269,6 @@ def _test() -> None:
             item.rmdir()
     exe = OpenAiCuaExecutive(
         ui=ui_io.make_controller(),
-        state_dir=state_dir,
         client=OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
     )
     prompt = (

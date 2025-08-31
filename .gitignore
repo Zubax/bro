@@ -5,7 +5,11 @@ __pycache__/
 .bro
 *.bro.json
 *.bro.txt
+*.bro.png
 *.bak
+prompt_history.txt
+system_prompt.txt
+*.db
 .Python
 build/
 develop-eggs/

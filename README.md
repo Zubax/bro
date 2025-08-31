@@ -70,11 +70,10 @@ Currently, we only provide a very rudimentary CLI interface. We are going to pro
 messaging services like Slack, email, and Telegram in the future, so that you could leave Bro running in the
 background and just send it tasks as messages, like you would with a fleshy team member.
 
-Bro keeps some state and configuration in the BRODIR, which is `~/.bro/`.
-If provided, Bro will read `$BRODIR/system_prompt.txt` and add the contents to the system prompt,
-after its internal system prompt.
-Use this to describe the operational environment (e.g., where to find certain files,
-what software and online services to use, etc), desirable personality traits, and so on.
+If provided, Bro will read `~/bro/system_prompt.txt` and add the contents to the system prompt
+after its internal system prompt. Use this to describe the operational environment (e.g., where to find certain files,
+what software and online services to use, etc), how the bot should self-identify, its personality traits, and so on.
+Bro will store some context files under `$PWD/bro/`.
 
 To invoke Bro you just say `bro` confidently.
 If you want to resume a previous session, use `bro --resume`.
