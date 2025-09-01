@@ -1,9 +1,8 @@
 from __future__ import annotations
-import os
 import platform
 import sqlite3
 from typing import Any
-import datetime
+from datetime import datetime, timezone, timedelta
 from abc import ABC, abstractmethod
 import threading
 import logging
@@ -12,8 +11,6 @@ from PIL import Image
 
 from nicegui import ui
 
-from bro.brofiles import DB_FILE
-from bro.ui_io import UiObserver
 from bro import __version__
 from bro.util import get_upstream_ip, image_to_base64, format_exception
 
@@ -40,8 +37,36 @@ class Controller(ABC):
         raise NotImplementedError
 
 
+_LOG_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+
+
 class View:
-    _LOG_ROWS_PER_PAGE = 100
+    # language=html
+    _HEAD = """\
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
+<style>
+    html, body, #app { height: 100%; }
+    body {
+        font-family: "Ubuntu Mono", monospace;
+        overflow: hidden;
+    }
+    .q-scrollarea__content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .dense-table .q-table td, .dense-table .q-table th { padding: 2px 6px !important; }
+    .dense-table .q-table thead tr { height: 22px; }
+    .dense-table .q-table tbody td { height: 20px; }
+</style>
+        """
+
+    _LOG_ROW_LIMIT = 10_000
     _LOG_COLUMNS = [
         {"name": "id", "label": "#", "field": "id", "align": "right"},
         {"name": "ts", "label": "Time", "field": "ts", "align": "left"},
@@ -106,12 +131,20 @@ class View:
     def endpoint(self) -> str:
         return self._endpoint
 
-    def _get_log_count(self) -> int:
-        cur = self._ctrl.get_db().execute("SELECT MAX(id) FROM logs;")
-        (count,) = cur.fetchone() or (0,)
-        return count
+    def _get_newest_log_time(self) -> datetime:
+        cur = self._ctrl.get_db().execute("SELECT timestamp FROM logs ORDER BY id DESC LIMIT 1;")
+        row = cur.fetchone()
+        if row is None:
+            return datetime.now(timezone.utc)
+        (ts_str,) = row
+        return datetime.fromisoformat(ts_str)
 
-    def _get_logs(self, *, older_than: datetime.datetime) -> list[dict[str, Any]]:
+    def _get_logs(
+        self,
+        *,
+        time_window: tuple[datetime, datetime],
+        min_level: int = _LOG_LEVELS["DEBUG"],
+    ) -> list[dict[str, Any]]:
         query = """
         SELECT
             id,
@@ -126,48 +159,63 @@ class View:
             message,
             exception
         FROM logs
-        WHERE timestamp < ?
+        WHERE timestamp <= ? AND timestamp >= ? AND level >= ?
         ORDER BY id ASC
         LIMIT ?;
         """
-        cur = self._ctrl.get_db().execute(query, (older_than.isoformat(timespec="seconds"), self._LOG_ROWS_PER_PAGE))
+        cur = self._ctrl.get_db().execute(
+            query,
+            (
+                time_window[1].isoformat(),
+                time_window[0].isoformat(),
+                min_level,
+                self._LOG_ROW_LIMIT,
+            ),
+        )
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
         return [dict(zip(columns, row)) for row in rows]
 
     def _setup_log_table(self) -> None:
-        rows = self._get_logs(older_than=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1))
         with ui.scroll_area().classes("h-full"):
-            log_table = (
-                ui.table(
-                    rows=rows,
-                    columns=self._LOG_COLUMNS,
-                    column_defaults=self._LOG_COLUMN_DEFAULTS,
-                )
-                .classes("w-full w-full text-xs leading-tight")
-                .props('dense flat square separator="none" virtual-scroll table-style="table-layout: auto"')
-            )
+            table = ui.table(rows=[], columns=self._LOG_COLUMNS, column_defaults=self._LOG_COLUMN_DEFAULTS)
+            table.classes("w-full w-full text-xs leading-tight")
+            table.props('dense flat square separator="none" virtual-scroll table-style="table-layout: auto"')
+
+        def load() -> None:
+            v = date_picker.value or {}
+            date_from = datetime.fromisoformat(v["from"])
+            date_to = datetime.fromisoformat(v["to"]) + timedelta(days=1)
+            levelno = _LOG_LEVELS[level_select.value]
+            table.rows = self._get_logs(time_window=(date_from, date_to), min_level=levelno)
+            date_menu.close()
+
+        def load_recent() -> None:
+            newest = self._get_newest_log_time()
+            date_from, date_to = newest - timedelta(days=1), newest + timedelta(minutes=1)
+            date_picker.value = {"from": date_from.date().isoformat(), "to": date_to.date().isoformat()}
+            load()
+
         with ui.row():
-            log_nav_newest = ui.button("⏮️ Newest").props("flat")
-            log_nav_newer = ui.button("◀️ Newer").props("flat")
-            log_nav_older = ui.button("Older ▶️").props("flat")
+            ui.button("Load recent").on("click", load_recent)
+            date_input = ui.input("Date range").props("readonly").classes("w-56")
+            date_input.on("click", lambda: date_menu.open())
+            with date_input:
+                with ui.menu() as date_menu:  # hidden until input is clicked
+                    date_picker = ui.date().props("range")
+                    date_picker.on_value_change(load)
+            date_picker.bind_value(
+                date_input,
+                forward=lambda x: f'{x["from"]} - {x["to"]}' if x else "",
+                backward=lambda s: (
+                    {"from": s.split(" - ")[0], "to": s.split(" - ")[1]} if " - " in (s or "") else None
+                ),
+            )
+            level_select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
+            level_select.on("update:model-value", lambda _: load())
 
     def _setup(self) -> None:
-        ui.add_head_html(  # language=HTML
-            """\
-<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
-<style>
-    html, body, #app { height: 100%; }
-    body {
-        font-family: "Ubuntu Mono", monospace;
-        overflow: hidden;
-    }
-    .dense-table .q-table td, .dense-table .q-table th { padding: 2px 6px !important; }
-    .dense-table .q-table thead tr { height: 22px; }
-    .dense-table .q-table tbody td { height: 20px; }
-</style>
-        """
-        )
+        ui.add_head_html(self._HEAD)
 
         # Large screenshot lightbox overlay
         with ui.element("div").classes(
@@ -182,7 +230,7 @@ class View:
                 with ui.column().classes("w-2/3 h-full"):
                     self._setup_log_table()
 
-                with ui.column().classes("w-1/3"):
+                with ui.column().classes("w-1/3 h-full"):
                     # Screenshot area
                     def update_screenshot():
                         im = self._ctrl.get_screenshot()
@@ -218,12 +266,13 @@ class View:
                         reflection_timestamp.set_text(f"Started {_now()}")
                         threading.Thread(target=do_reflect, daemon=True).start()
 
-                    with ui.row():
-                        ui.button("Reflect").on("click", lambda _: update_reflection_begin())
-                        reflection_timestamp = ui.label().style("color: gray; font-style: italic;")
-                        reflection_timestamp.set_text("Press the button to reflect")
-                    reflection = ui.markdown()
+                    with ui.scroll_area().classes("h-full"):
+                        with ui.row():
+                            ui.button("Reflect").on("click", lambda _: update_reflection_begin())
+                            reflection_timestamp = ui.label().style("color: gray; font-style: italic;")
+                            reflection_timestamp.set_text("Press the button to reflect")
+                        reflection = ui.markdown()
 
 
 def _now() -> str:
-    return datetime.datetime.now().isoformat(sep=" ", timespec="seconds")
+    return datetime.now().isoformat(sep=" ", timespec="seconds")
