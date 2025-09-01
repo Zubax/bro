@@ -11,6 +11,7 @@ from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 import logging
+import socket
 import subprocess
 
 from PIL import Image
@@ -60,6 +61,18 @@ def get_local_time_llm() -> dict[str, Any]:
         "weekday": now.isoweekday(),
         "weekday_name": now.strftime("%A"),
     }
+
+
+def get_upstream_ip() -> str | None:
+    """
+    Get a system's upstream IP address; returns None on failure.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("1.1.1.1", 80))  # datagram connect does not send packets
+            return s.getsockname()[0]
+    except OSError:
+        return None
 
 
 def openai_upload_files(

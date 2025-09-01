@@ -1,26 +1,29 @@
 from __future__ import annotations
 import os
+import platform
 import sqlite3
 from typing import Any
+import datetime
 from abc import ABC, abstractmethod
 import threading
-from urllib.parse import urlencode
-
-from flask import Flask, g, request, jsonify, render_template_string, abort
+import logging
 
 from PIL import Image
+
+from nicegui import ui
 
 from bro.brofiles import DB_FILE
 from bro.ui_io import UiObserver
 from bro import __version__
+from bro.util import get_upstream_ip, image_to_base64, format_exception
 
 
 __all__ = ["View", "Controller"]
 
-DEFAULT_PER_PAGE = 200
-MAX_PER_PAGE = 10_000
 HOST = "0.0.0.0"
 PORT = 1488
+
+_logger = logging.getLogger(__name__)
 
 
 class Controller(ABC):
@@ -38,71 +41,93 @@ class Controller(ABC):
 
 
 class View:
-    def __init__(self, ctrl: Controller) -> None:
+    def __init__(
+        self,
+        ctrl: Controller,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> None:
         self._ctrl = ctrl
-        self._app = Flask(__name__)
+        host = host or HOST
+        port = port or PORT
+        self._endpoint = f"http://{host}:{port}/"
         self._thread = threading.Thread(
-            target=lambda: self._app.run(host=HOST, port=PORT, threaded=True, use_reloader=False),
+            target=lambda: ui.run(
+                host=host,
+                port=port,
+                reload=False,
+                show=False,
+                title=f"Bro v{__version__} @ {platform.node()} ({get_upstream_ip() or 'unknown IP'})",
+                favicon="🤖",
+                log_config=None,  # An empty log config is essential! Otherwise, Uvicorn will break our logging setup!
+            ),
             daemon=True,
         )
-
-        @self._app.route("/")
-        def index():
-            return render_template_string(
-                HTML_INDEX,
-                version=__version__,
-            )
+        self._setup()
 
     def start(self) -> None:
         self._thread.start()
 
     @property
     def endpoint(self) -> str:
-        return f"http://{HOST}:{PORT}/"
+        return self._endpoint
 
-    def _run_sql(self, query: str, params: tuple = ()) -> list[sqlite3.Row]:
-        db = self._ctrl.get_db()
-        try:
-            cur = db.execute(query, params)
-            rows = cur.fetchall()
-            cur.close()
-            return rows
-        except sqlite3.DatabaseError as e:
-            abort(500, f"DB error: {e}")
+    def _setup(self) -> None:
+        # Large screenshot lightbox overlay
+        with ui.element("div").classes(
+            "fixed inset-0 bg-black bg-opacity-90 hidden flex items-center justify-center z-50 cursor-pointer"
+        ) as screenshot_overlay:
+            screenshot_big = ui.image().classes("max-w-[95vw] max-h-[95vh] object-contain")
+            screenshot_overlay.on("click", lambda _: screenshot_overlay.classes(remove="flex", add="hidden"))
+
+        # Main layout
+        with ui.row().classes("w-full flex-nowrap"):
+            with ui.column().classes("w-1/2"):
+                ui.label("Log")
+                ui.button("Action A")
+                ui.input("Input A")
+
+            with ui.column().classes("w-1/2"):
+                # Screenshot area
+                def update_screenshot():
+                    im = self._ctrl.get_screenshot()
+                    src = "data:image/png;base64," + image_to_base64(im)
+                    screenshot_thumb.source = src
+                    screenshot_big.source = src
+
+                screenshot_thumb = (
+                    ui.image().style("max-width: 100%; height: auto; border: none;").classes("cursor-pointer")
+                )
+                screenshot_thumb.on("click", lambda _: screenshot_overlay.classes(remove="hidden", add="flex"))
+                update_screenshot()
+                ui.timer(10.0, update_screenshot)
+
+                # Reflection area
+                def do_reflect() -> None:
+                    try:
+                        _logger.info("🪞 Reflecting...")
+                        r = self._ctrl.get_reflection()
+                        _logger.info(f"🪞 Reflection:\n{r}")
+                        reflection.set_content(r)
+                        reflection_timestamp.set_text(f"Reflected {_now()}")
+                        ui.update(reflection, reflection_timestamp)
+                    except Exception as e:
+                        _logger.exception("Reflection failed")
+                        reflection.set_content(f"**Reflection failed:** {e}\n\n```python\n{format_exception(e)}\n```")
+                        ui.update(reflection)
+
+                def update_reflection_begin():
+                    reflection.set_content("*🪞 Reflecting...*")
+                    reflection_timestamp.set_text(f"Started {_now()}")
+                    threading.Thread(target=do_reflect, daemon=True).start()
+
+                with ui.row():
+                    ui.button("Reflect").on("click", lambda _: update_reflection_begin())
+                    reflection_timestamp = ui.label().style("color: gray; font-style: italic;")
+                    reflection_timestamp.set_text("Press the button to reflect")
+                reflection = ui.markdown()
 
 
-def _request_parse_int(name: str, default: int, lo: int, hi: int) -> int:
-    try:
-        v = int(request.args.get(name, default))
-    except ValueError:
-        v = default
-    return max(lo, min(hi, v))
-
-
-# language=HTML
-HTML_INDEX = """
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    {% if refresh %}
-    <meta http-equiv="refresh" content="{{ refresh|int }}">
-    {% endif %}
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bro monitor</title>
-    <style>
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>Bro monitor</h1>
-    </header>
-
-    <footer>
-      <span>
-          <a href="https://github.com/Zubax/bro">Bro v.{{version}}</a> &copy;
-          <a href="https://zubax.com/">Zubax Robotics</a></span>
-    </footer>
-  </body>
-</html>
-"""
+def _now() -> str:
+    return datetime.datetime.now().isoformat(sep=" ", timespec="seconds")

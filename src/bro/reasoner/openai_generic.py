@@ -481,6 +481,7 @@ class OpenAiGenericReasoner(Reasoner):
         ctx = self._context + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         response = self._request_inference(
             ctx,
+            tools=[],
             model="gpt-5-mini",
             reasoning_effort="minimal",
         )
@@ -537,13 +538,14 @@ class OpenAiGenericReasoner(Reasoner):
         *,
         model: str | None = None,
         reasoning_effort: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(
             model=model or self._model,
             input=ctx,
-            tools=self._tools,
+            tools=tools if tools is not None else self._tools,
             reasoning={
                 "effort": reasoning_effort or self._reasoning_effort,
                 "summary": "detailed",
