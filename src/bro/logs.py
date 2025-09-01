@@ -42,6 +42,7 @@ def setup(*, log_file: Path, db_file: Path) -> None:
     logging.getLogger("pyautogui").setLevel(logging.WARNING)
     logging.getLogger("mss").setLevel(logging.WARNING)
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 class _SqliteHandler(logging.Handler):
