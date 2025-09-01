@@ -23,8 +23,6 @@ class SlackMessaging(Messaging):
         )
         self.unread_msgs: list[ReceivedMessage] = []
 
-        #self.send(Message("hello", []), Channel("general"))
-        #self.list_channels()
         self.client.socket_mode_request_listeners.append(self._process_message)
         self.client.connect()
 
@@ -32,19 +30,10 @@ class SlackMessaging(Messaging):
         if req.type == "events_api":
             response = SocketModeResponse(envelope_id=req.envelope_id)
             client.send_socket_mode_response(response)
-            if req.payload["event"]["type"] == "message" \
-                    and req.payload["event"].get("subtype") is None:
-                print(f"Received message: {req.payload['event']['text']}")
-                try:
-                    self.unread_msgs.append(ReceivedMessage(via=req.payload["event"]["channel"],
-                                                            text=req.payload["event"]["text"],
-                                                            attachments=req.payload ["event"]["attachments"]))
-
-                    # self.client.web_client.reactions_add(
-                    #     name="eyes",
-                    #     channel=req.payload["event"]["channel"],
-                    #     timestamp=req.payload["event"]["ts"],
-                    # )
+            if req.payload["event"]["type"] == "message":
+                self.unread_msgs.append(ReceivedMessage(via=req.payload["event"]["channel"],
+                                                        text=req.payload["event"]["text"],
+                                                        attachments=req.payload["event"]["attachments"]))
 
     def list_channels(self) -> list[Channel] | SlackResponse:
         response: SlackResponse = self.web_client.conversations_list(
@@ -65,4 +54,3 @@ class SlackMessaging(Messaging):
             channel=via.name,
             text=message.text,
         )
-
