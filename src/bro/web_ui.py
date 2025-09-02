@@ -190,39 +190,10 @@ class View:
         return [dict(zip(columns, row)) for row in rows]
 
     def _setup_log_table(self) -> None:
-        with ui.scroll_area().classes("h-full"):
-            table = ui.table(rows=[], columns=self._LOG_COLUMNS, column_defaults=self._LOG_COLUMN_DEFAULTS)
-            table.classes("w-full w-full text-xs leading-tight")
-            table.props('dense flat square separator="none" virtual-scroll table-style="table-layout: auto"')
-        table.add_slot(
-            "body-cell-ts",  # language=html
-            """\
-        <q-td :props="props">
-          <span :title="props.value">
-            {{
-              ((d)=>{
-                const p2=n=>String(n).padStart(2,'0'), p3=n=>String(n).padStart(3,'0');
-                return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
-              })(new Date(props.value))
-            }}
-          </span>
-        </q-td>
-        """,
-        )
-        table.add_slot(
-            "body-cell-level_name",  # language=html
-            """\
-        <q-td :props="props">
-          <q-badge class="log-level" :class="'log-' + (props.value || '').toLowerCase()">
-            {{
-              ({DEBUG:'DBG', INFO:'INF', WARNING:'WRN', ERROR:'ERR', CRITICAL:'CRT'}
-              [(props.value || '').toUpperCase()] ||
-              (props.value || '').toString().slice(0,3).toUpperCase())
-            }}
-          </q-badge>
-        </q-td>
-        """,
-        )
+
+        def scroll_bottom():
+            if table.rows:
+                table.run_method("scrollTo", len(table.rows) - 1)
 
         def load() -> None:
             v = date_picker.value or {}
@@ -234,7 +205,8 @@ class View:
                 name_wildcard=wildcard.value,
             )
             date_menu.close()
-            table.run_method("scrollTo", len(table.rows) - 1)  # This doesn't work but idk why
+            ui.timer(0.0, scroll_bottom, once=True)
+            ui.timer(0.1, scroll_bottom, once=True)  # just in case
 
         def load_recent() -> None:
             newest = self._get_newest_log_time()
@@ -242,36 +214,74 @@ class View:
             date_picker.value = {"from": date_from.date().isoformat(), "to": date_to.date().isoformat()}
             load()
 
-        with ui.row().classes("items-center"):
-            ui.button("Load recent").on("click", load_recent)
-            date_input = ui.input("Show logs from date range").props("readonly").classes("w-56")
-            date_input.on("click", lambda: date_menu.open())
-            with date_input:
-                with ui.menu() as date_menu:  # hidden until input is clicked
-                    date_picker = ui.date().props("range")
-                    date_picker.on_value_change(load)
-            date_picker.bind_value(
-                date_input,
-                forward=lambda x: f'{x["from"]} - {x["to"]}' if x else "",
-                backward=lambda s: (
-                    {"from": s.split(" - ")[0], "to": s.split(" - ")[1]} if " - " in (s or "") else None
-                ),
+        with ui.column().classes("w-full h-full"):
+            # Main element -- the log table
+            with ui.element("div").classes("flex-1 min-h-0 w-full"):
+                table = ui.table(rows=[], columns=self._LOG_COLUMNS, column_defaults=self._LOG_COLUMN_DEFAULTS)
+            table.classes("h-full w-full text-xs leading-tight")
+            table.props(
+                'dense flat square separator="none" virtual-scroll row-key="id" table-style="table-layout: auto"'
             )
-            level_select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
-            level_select.on("update:model-value", lambda _: load())
-            wildcard = ui.input(
-                label="Name wildcard",
-                value="bro.*",
-                placeholder="* matches any, ? matches one",
-                validation={
-                    "Invalid characters": lambda v: all((c.isalnum() or c in "*?._") for c in v),
-                    "Must begin with a letter or _": lambda v: not v or (v[0].isalpha() or v[0] == "_"),
-                    "Cannot end with a dot": lambda v: not v.endswith("."),
-                    "Cannot contain consecutive dots": lambda v: ".." not in v,
-                    "Too long": lambda v: len(v) <= 100,
-                },
-            ).classes("w-48")
-            wildcard.on("keyup.enter", load)
+            table.add_slot(
+                "body-cell-ts",  # language=html
+                """\
+            <q-td :props="props">
+              <span :title="props.value">
+                {{
+                  ((d)=>{
+                    const p2=n=>String(n).padStart(2,'0'), p3=n=>String(n).padStart(3,'0');
+                    return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
+                  })(new Date(props.value))
+                }}
+              </span>
+            </q-td>
+            """,
+            )
+            table.add_slot(
+                "body-cell-level_name",  # language=html
+                """\
+            <q-td :props="props">
+              <q-badge class="log-level" :class="'log-' + (props.value || '').toLowerCase()">
+                {{
+                  ({DEBUG:'DBG', INFO:'INF', WARNING:'WRN', ERROR:'ERR', CRITICAL:'CRT'}
+                  [(props.value || '').toUpperCase()] ||
+                  (props.value || '').toString().slice(0,3).toUpperCase())
+                }}
+              </q-badge>
+            </q-td>
+            """,
+            )
+            # Log table controls underneath
+            with ui.row().classes("items-center shrink-0"):
+                ui.button("Load recent").on("click", load_recent)
+                date_input = ui.input("Show logs from date range").props("readonly").classes("w-56")
+                date_input.on("click", lambda: date_menu.open())
+                with date_input:
+                    with ui.menu() as date_menu:  # hidden until input is clicked
+                        date_picker = ui.date().props("range")
+                        date_picker.on_value_change(load)
+                date_picker.bind_value(
+                    date_input,
+                    forward=lambda x: f'{x["from"]} - {x["to"]}' if x else "",
+                    backward=lambda s: (
+                        {"from": s.split(" - ")[0], "to": s.split(" - ")[1]} if " - " in (s or "") else None
+                    ),
+                )
+                level_select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
+                level_select.on("update:model-value", lambda _: load())
+                wildcard = ui.input(
+                    label="Name wildcard",
+                    value="bro.*",
+                    placeholder="* matches any, ? matches one",
+                    validation={
+                        "Invalid characters": lambda v: all((c.isalnum() or c in "*?._") for c in v),
+                        "Must begin with a letter or _": lambda v: not v or (v[0].isalpha() or v[0] == "_"),
+                        "Cannot end with a dot": lambda v: not v.endswith("."),
+                        "Cannot contain consecutive dots": lambda v: ".." not in v,
+                        "Too long": lambda v: len(v) <= 100,
+                    },
+                ).classes("w-48")
+                wildcard.on("keyup.enter", load)
 
         load_recent()
 
