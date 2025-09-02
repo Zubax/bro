@@ -148,7 +148,6 @@ class HierarchicalExecutive(Executive):
         *,
         inferior: Executive,
         ui: UiController,
-        state_dir: Path,
         client: OpenAI,
         model: str,
         temperature: float = 1.0,
@@ -156,7 +155,6 @@ class HierarchicalExecutive(Executive):
     ) -> None:
         self._inferior = inferior
         self._ui = ui
-        self._dir = state_dir
         self._client = client
         self._model = model
         self._reasoning_effort = ""
@@ -173,7 +171,7 @@ class HierarchicalExecutive(Executive):
         # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
         # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
         reasoning_effort = ("low", "medium", "high")[effort.value]
-        max_steps = (10, 20, 100)[effort.value]
+        max_steps = int((2 + effort.value) ** 3.4)
         if self._reasoning_effort != reasoning_effort:
             _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
             if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.
@@ -300,7 +298,6 @@ class HierarchicalExecutive(Executive):
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
-        im.save(self._dir / f"{__name__}.png", format="PNG")
         return image_to_base64(im)
 
 
@@ -331,7 +328,6 @@ def _test() -> None:
     exe = HierarchicalExecutive(
         inferior=inferior,
         ui=ui,
-        state_dir=state_dir,
         client=OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
         model="gpt-5-mini",
     )

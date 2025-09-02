@@ -97,6 +97,9 @@ class UiController(UiObserver):
 
 
 def make_controller() -> UiController:
+    """
+    Constructs a new implementation of UiController and UiObserver suitable for the current runtime environment.
+    """
     return _Impl()
 
 
