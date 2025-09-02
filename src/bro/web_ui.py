@@ -18,7 +18,7 @@ from bro.util import get_upstream_ip, image_to_base64, format_exception
 __all__ = ["View", "Controller"]
 
 HOST = "0.0.0.0"
-PORT = 1488
+PORT = 8814
 
 _logger = logging.getLogger(__name__)
 
