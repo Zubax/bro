@@ -122,7 +122,6 @@ def _prompt() -> Context:
             lines.append(input())
         except EOFError:
             break
-    return Context(
-        prompt="\n".join(lines).rstrip("\n"),
-        files=[],
-    )
+    prompt = "\n".join(lines).rstrip("\n")
+    _logger.debug(f"ENTERED PROMPT:\n{prompt}")
+    return Context(prompt=prompt, files=[])
