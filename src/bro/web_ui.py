@@ -61,7 +61,7 @@ class View:
         padding: 0 !important;
         margin: 0 !important;
     }
-    .log-level    { display:inline-block; padding:0 6px; border-radius:4px; font-weight:600; }
+    .log-level    { display:inline-block; padding:0 3px; border-radius:4px; font-weight:600; }
     .log-debug    { background:#eee; color:#000; }
     .log-info     { background:#040; color:#8f8; }
     .log-warning  { background:#440; color:#ff8; }
@@ -349,9 +349,7 @@ class View:
                         screenshot_thumb.source = src
                         screenshot_big.source = src
 
-                    screenshot_thumb = (
-                        ui.image().style("max-width: 100%; height: auto; border: none;").classes("cursor-pointer")
-                    )
+                    screenshot_thumb = ui.image().classes("max-w-full h-auto cursor-pointer")
                     screenshot_thumb.on("click", lambda _: screenshot_overlay.classes(remove="hidden", add="flex"))
                     update_screenshot()
                     ui.timer(10.0, update_screenshot)
