@@ -35,6 +35,11 @@ class Controller(ABC):
 
     @abstractmethod
     def get_db(self) -> sqlite3.Connection:
+        """
+        TODO: do not expose sqlite directly because it leaks abstraction all over the place; instead, provide DB
+        connectors with methods to query and write logs, etc. The same connector can be used to notify consumers when
+        new log entries are added, so that the UI can auto-refresh.
+        """
         raise NotImplementedError
 
 
@@ -127,7 +132,7 @@ class View:
 </q-tr>
 """
 
-    _LOG_ROW_LIMIT = 10_000
+    _LOG_ROW_LIMIT = 1000
     _LOG_COLUMNS = [
         {"name": "id", "label": "#", "field": "id", "align": "right"},
         {"name": "ts", "label": "Time", "field": "ts", "align": "left"},
@@ -222,7 +227,7 @@ class View:
             exception
         FROM logs
         WHERE timestamp <= ? AND timestamp >= ? AND level >= ? AND name LIKE ?
-        ORDER BY id ASC
+        ORDER BY id DESC
         LIMIT ?;
         """
         pat = name_wildcard.replace("*", "%").replace("?", "_") if name_wildcard else "%"
@@ -238,9 +243,13 @@ class View:
         )
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
-        return [dict(zip(columns, row)) for row in rows]
+        return [dict(zip(columns, row)) for row in rows[::-1]]
 
     def _setup_log_table(self) -> None:
+        """
+        TODO FIXME: this UI is bad; the table needs to be infinitely scrollable with auto-loading more rows when
+        scrolling to the bottom. For now I'm keeping this but it needs to be redone.
+        """
 
         def scroll_bottom():
             try:
