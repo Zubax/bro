@@ -346,10 +346,10 @@ class View:
                     def update_screenshot():
                         im = self._ctrl.get_screenshot()
                         src = "data:image/png;base64," + image_to_base64(im)
-                        screenshot_thumb.source = src
+                        screenshot_thumb.props(f"src={src!r}")
                         screenshot_big.source = src
 
-                    screenshot_thumb = ui.image().classes("max-w-full h-auto cursor-pointer")
+                    screenshot_thumb = ui.element("img").classes("cursor-pointer block max-w-full h-auto border-0")
                     screenshot_thumb.on("click", lambda _: screenshot_overlay.classes(remove="hidden", add="flex"))
                     update_screenshot()
                     ui.timer(10.0, update_screenshot)
