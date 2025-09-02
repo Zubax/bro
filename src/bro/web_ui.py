@@ -52,17 +52,27 @@ class View:
 <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
 <style>
     html, body, #app { height: 100%; }
+    
     body {
         font-family: "Ubuntu Mono", monospace;
         overflow: hidden;
     }
+    
     .q-scrollarea__content {
         padding: 0 !important;
         margin: 0 !important;
     }
+    
     .dense-table .q-table td, .dense-table .q-table th { padding: 2px 6px !important; }
     .dense-table .q-table thead tr { height: 22px; }
     .dense-table .q-table tbody td { height: 20px; }
+    
+    .log-level    { display:inline-block; padding:0 6px; border-radius:4px; font-weight:600; }
+    .log-debug    { background:#eee; color:#000; }
+    .log-info     { background:#040; color:#8f8; }
+    .log-warning  { background:#440; color:#ff8; }
+    .log-error    { background:#400; color:#f88; }
+    .log-critical { background:#000; color:#f88; }
 </style>
         """
 
@@ -144,6 +154,7 @@ class View:
         *,
         time_window: tuple[datetime, datetime],
         min_level: int = _LOG_LEVELS["DEBUG"],
+        name_wildcard: str | None = None,
     ) -> list[dict[str, Any]]:
         query = """
         SELECT
@@ -159,16 +170,18 @@ class View:
             message,
             exception
         FROM logs
-        WHERE timestamp <= ? AND timestamp >= ? AND level >= ?
+        WHERE timestamp <= ? AND timestamp >= ? AND level >= ? AND name LIKE ?
         ORDER BY id ASC
         LIMIT ?;
         """
+        pat = name_wildcard.replace("*", "%").replace("?", "_") if name_wildcard else "%"
         cur = self._ctrl.get_db().execute(
             query,
             (
                 time_window[1].isoformat(),
                 time_window[0].isoformat(),
                 min_level,
+                pat,
                 self._LOG_ROW_LIMIT,
             ),
         )
@@ -181,14 +194,47 @@ class View:
             table = ui.table(rows=[], columns=self._LOG_COLUMNS, column_defaults=self._LOG_COLUMN_DEFAULTS)
             table.classes("w-full w-full text-xs leading-tight")
             table.props('dense flat square separator="none" virtual-scroll table-style="table-layout: auto"')
+        table.add_slot(
+            "body-cell-ts",  # language=html
+            """\
+        <q-td :props="props">
+          <span :title="props.value">
+            {{
+              ((d)=>{
+                const p2=n=>String(n).padStart(2,'0'), p3=n=>String(n).padStart(3,'0');
+                return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
+              })(new Date(props.value))
+            }}
+          </span>
+        </q-td>
+        """,
+        )
+        table.add_slot(
+            "body-cell-level_name",  # language=html
+            """\
+        <q-td :props="props">
+          <q-badge class="log-level" :class="'log-' + (props.value || '').toLowerCase()">
+            {{
+              ({DEBUG:'DBG', INFO:'INF', WARNING:'WRN', ERROR:'ERR', CRITICAL:'CRT'}
+              [(props.value || '').toUpperCase()] ||
+              (props.value || '').toString().slice(0,3).toUpperCase())
+            }}
+          </q-badge>
+        </q-td>
+        """,
+        )
 
         def load() -> None:
             v = date_picker.value or {}
             date_from = datetime.fromisoformat(v["from"])
             date_to = datetime.fromisoformat(v["to"]) + timedelta(days=1)
-            levelno = _LOG_LEVELS[level_select.value]
-            table.rows = self._get_logs(time_window=(date_from, date_to), min_level=levelno)
+            table.rows = self._get_logs(
+                time_window=(date_from, date_to),
+                min_level=_LOG_LEVELS[level_select.value],
+                name_wildcard=wildcard.value,
+            )
             date_menu.close()
+            table.run_method("scrollTo", len(table.rows) - 1)  # This doesn't work but idk why
 
         def load_recent() -> None:
             newest = self._get_newest_log_time()
@@ -196,9 +242,9 @@ class View:
             date_picker.value = {"from": date_from.date().isoformat(), "to": date_to.date().isoformat()}
             load()
 
-        with ui.row():
+        with ui.row().classes("items-center"):
             ui.button("Load recent").on("click", load_recent)
-            date_input = ui.input("Date range").props("readonly").classes("w-56")
+            date_input = ui.input("Show logs from date range").props("readonly").classes("w-56")
             date_input.on("click", lambda: date_menu.open())
             with date_input:
                 with ui.menu() as date_menu:  # hidden until input is clicked
@@ -213,6 +259,21 @@ class View:
             )
             level_select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
             level_select.on("update:model-value", lambda _: load())
+            wildcard = ui.input(
+                label="Name wildcard",
+                value="bro.*",
+                placeholder="* matches any, ? matches one",
+                validation={
+                    "Invalid characters": lambda v: all((c.isalnum() or c in "*?._") for c in v),
+                    "Must begin with a letter or _": lambda v: not v or (v[0].isalpha() or v[0] == "_"),
+                    "Cannot end with a dot": lambda v: not v.endswith("."),
+                    "Cannot contain consecutive dots": lambda v: ".." not in v,
+                    "Too long": lambda v: len(v) <= 100,
+                },
+            ).classes("w-48")
+            wildcard.on("keyup.enter", load)
+
+        load_recent()
 
     def _setup(self) -> None:
         ui.add_head_html(self._HEAD)
