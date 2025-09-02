@@ -479,7 +479,27 @@ class OpenAiGenericReasoner(Reasoner):
         return final
 
     def legilimens(self) -> str:
-        ctx = self._context + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+        # Build a reduced copy of the model context.
+        ctx = []
+        for src in self._context:
+            if src.get("role") not in {"user", "assistant", "system"}:
+                continue
+            cnt = []
+            out = {"role": src["role"], "content": cnt}
+            for item in src.get("content", []) or []:
+                match item.get("type"):
+                    case "input_text":
+                        cnt += [{"type": "input_text", "text": item["text"]}]
+                    case "output_text":
+                        cnt += [{"type": "output_text", "text": item["text"]}]
+                    case "input_image" if item.get("image_url"):
+                        cnt += [{"type": "input_image", "image_url": item["image_url"]}]
+                    case _:
+                        pass
+            if cnt:
+                ctx.append(out)
+        ctx += [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+        # Request a reflection on the reduced context.
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
