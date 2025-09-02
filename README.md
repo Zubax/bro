@@ -15,6 +15,8 @@ it runs as a headless process and offers a remotely accessible web interface for
 
 ℹ️ *"Bro" is Latvian for "one who beheads the Messiah".*
 
+<img src="screenshot_webui.png" width="800" alt="">
+
 ⚠️ **Bro is currently under active development and is known to contain bugs.**
 However, it already useful and can be applied to low-stakes open-ended real-world tasks ---
 which we already practice at Zubax with varying degrees of success.
@@ -40,7 +42,7 @@ As an example where the two are at odds, Bro is able to log into a bank account 
 by an authenticator app, while the current OSWorld flagman is too slow to succeed at that (OTP codes expire quickly);
 also, Bro tends to be very cheap to run because it heavily relies on low-cost models and minimal UI interactions.
 
-<img src="screenshot.png" width="800" alt="">
+<img src="screenshot_ssh.png" width="800" alt="">
 
 ## Requirements
 
