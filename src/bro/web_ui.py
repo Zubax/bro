@@ -52,21 +52,17 @@ class View:
 <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
 <style>
     html, body, #app { height: 100%; }
-    
+
     body {
         font-family: "Ubuntu Mono", monospace;
         overflow: hidden;
     }
-    
+
     .q-scrollarea__content {
         padding: 0 !important;
         margin: 0 !important;
     }
-    
-    .dense-table .q-table td, .dense-table .q-table th { padding: 2px 6px !important; }
-    .dense-table .q-table thead tr { height: 22px; }
-    .dense-table .q-table tbody td { height: 20px; }
-    
+
     .log-level    { display:inline-block; padding:0 6px; border-radius:4px; font-weight:600; }
     .log-debug    { background:#eee; color:#000; }
     .log-info     { background:#040; color:#8f8; }
