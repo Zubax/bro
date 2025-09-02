@@ -46,23 +46,21 @@ _LOG_LEVELS = {
 }
 
 
+# noinspection HtmlUnknownAttribute
 class View:
     # language=html
     _HEAD = """\
 <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap" rel="stylesheet">
 <style>
     html, body, #app { height: 100%; }
-
     body {
         font-family: "Ubuntu Mono", monospace;
         overflow: hidden;
     }
-
     .q-scrollarea__content {
         padding: 0 !important;
         margin: 0 !important;
     }
-
     .log-level    { display:inline-block; padding:0 6px; border-radius:4px; font-weight:600; }
     .log-debug    { background:#eee; color:#000; }
     .log-info     { background:#040; color:#8f8; }
@@ -71,6 +69,62 @@ class View:
     .log-critical { background:#000; color:#f88; }
 </style>
         """
+
+    # language=html
+    _LOG_TABLE_BODY_SLOT = """\
+<q-tr :id="'logrow-' + props.row.id" :props="props" @click="props.expand = !props.expand" class="cursor-pointer">
+  <q-td v-for="col in props.cols" :key="col.name" :props="props">
+    <template v-if="col.name==='ts'">
+      <span :title="props.row.ts">
+        {{
+          ((d)=>{
+            const p2 = n => String(n).padStart(2,'0'), p3 = n => String(n).padStart(3,'0');
+            return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
+          })(new Date(props.row.ts))
+        }}
+      </span>
+    </template>
+    <template v-else-if="col.name==='level_name'">
+      <q-badge class="log-level" :class="'log-' + (props.row.level_name || '').toLowerCase()">
+        {{
+          ({DEBUG:'DBG', INFO:'INF', WARNING:'WRN', ERROR:'ERR', CRITICAL:'CRT'}
+          [(props.row.level_name || '').toUpperCase()] ||
+          (props.row.level_name || '').toString().slice(0,3).toUpperCase())
+        }}
+      </q-badge>
+    </template>
+    <template v-else-if="col.name==='message'">
+      <span class="truncate max-w-xs" :title="props.row.message">{{ props.row.message }}</span>
+    </template>
+    <template v-else>
+      {{ col.value }}
+    </template>
+  </q-td>
+</q-tr>
+
+<q-tr v-show="props.expand" :props="props" class="bg-gray-100">
+  <q-td colspan="100%">
+    <div class="space-y-2">
+      <div class="text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 items-center">
+        <div><span class="font-semibold">PID:</span> {{ props.row.pid }}</div>
+        <div><span class="font-semibold">TID:</span> {{ props.row.tid }}</div>
+        <div class="col-span-1 sm:col-span-2 lg:col-span-1">
+          <span class="font-semibold">File:</span> {{ props.row.path }}:{{ props.row.line }}
+        </div>
+        <div><span class="font-semibold">Func:</span> {{ props.row.func }}</div>
+        <div><span class="font-semibold">Module:</span> {{ props.row.name }}</div>
+        <div><span class="font-semibold">Level:</span> {{ props.row.level_name }}</div>
+      </div>
+      <hr/>
+      <pre class="whitespace-pre-wrap break-words m-0">{{ props.row.message }}</pre>
+      <template v-if="props.row.exception">
+        <div class="font-semibold mt-2">Exception</div>
+        <pre class="whitespace-pre-wrap break-words overflow-x-auto m-0">{{ props.row.exception }}</pre>
+      </template>
+    </div>
+  </q-td>
+</q-tr>
+"""
 
     _LOG_ROW_LIMIT = 10_000
     _LOG_COLUMNS = [
@@ -188,8 +242,25 @@ class View:
     def _setup_log_table(self) -> None:
 
         def scroll_bottom():
-            if table.rows:
-                table.run_method("scrollTo", len(table.rows) - 1)
+            try:
+                # language=js
+                ui.run_javascript(
+                    """
+                    (()=>{
+                      const go = ()=>{  // The row ids are defined in the slot template
+                        const rows = document.querySelectorAll('tr[id^="logrow-"]');  
+                        if (!rows.length) return;
+                        const last = rows[rows.length-1];
+                        const sc = last.closest('.q-table__middle');
+                        if (sc) sc.scrollTop = last.offsetTop;
+                        else last.scrollIntoView({block:'end'});
+                      };
+                      requestAnimationFrame(()=>requestAnimationFrame(go));
+                    })();
+                    """
+                )
+            except Exception as ex:
+                _logger.exception(f"Failed to scroll the log table: {ex}")
 
         def load() -> None:
             v = date_picker.value or {}
@@ -215,38 +286,10 @@ class View:
             with ui.element("div").classes("flex-1 min-h-0 w-full"):
                 table = ui.table(rows=[], columns=self._LOG_COLUMNS, column_defaults=self._LOG_COLUMN_DEFAULTS)
             table.classes("h-full w-full text-xs leading-tight")
-            table.props(
-                'dense flat square separator="none" virtual-scroll row-key="id" table-style="table-layout: auto"'
-            )
-            table.add_slot(
-                "body-cell-ts",  # language=html
-                """\
-            <q-td :props="props">
-              <span :title="props.value">
-                {{
-                  ((d)=>{
-                    const p2=n=>String(n).padStart(2,'0'), p3=n=>String(n).padStart(3,'0');
-                    return `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${p3(d.getMilliseconds())}`;
-                  })(new Date(props.value))
-                }}
-              </span>
-            </q-td>
-            """,
-            )
-            table.add_slot(
-                "body-cell-level_name",  # language=html
-                """\
-            <q-td :props="props">
-              <q-badge class="log-level" :class="'log-' + (props.value || '').toLowerCase()">
-                {{
-                  ({DEBUG:'DBG', INFO:'INF', WARNING:'WRN', ERROR:'ERR', CRITICAL:'CRT'}
-                  [(props.value || '').toUpperCase()] ||
-                  (props.value || '').toString().slice(0,3).toUpperCase())
-                }}
-              </q-badge>
-            </q-td>
-            """,
-            )
+            # virtual-scroll does not work correctly with expandable rows, so we don't use it.
+            table.props('dense flat square separator="none" row-key="id" table-style="table-layout: auto"')
+            table.add_slot("body", self._LOG_TABLE_BODY_SLOT)
+
             # Log table controls underneath
             with ui.row().classes("items-center shrink-0"):
                 ui.button("Load recent").on("click", load_recent)
@@ -278,6 +321,7 @@ class View:
                     },
                 ).classes("w-48")
                 wildcard.on("keyup.enter", load)
+                ui.button("⬇️").on("click", scroll_bottom).props("flat")
 
         load_recent()
 
