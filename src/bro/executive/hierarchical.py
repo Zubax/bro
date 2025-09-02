@@ -171,7 +171,7 @@ class HierarchicalExecutive(Executive):
         # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
         # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
         reasoning_effort = ("low", "medium", "high")[effort.value]
-        max_steps = (10, 20, 100)[effort.value]
+        max_steps = int((2 + effort.value) ** 3.4)
         if self._reasoning_effort != reasoning_effort:
             _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
             if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.

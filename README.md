@@ -10,8 +10,7 @@
 Bro is an LLM computer-using agent (CUA) designed to autonomously perform mundane tasks related to business operations
 and administration, such as doing accounting, filing paperwork, and submitting applications.
 Bro is primarily designed to run on a dedicated VM or a spare laptop;
-it runs as a headless process and offers a remotely accessible web interface for monitoring and control
-(default port 8814).
+it runs as a headless process and offers a remotely accessible web interface for monitoring and control.
 
 ℹ️ *"Bro" is Latvian for "one who beheads the Messiah".*
 
@@ -71,24 +70,45 @@ pip install -e .
 
 ## Usage
 
-Currently, we only provide a very rudimentary CLI interface. We are going to provide proper integrations with
-messaging services like Slack, email, and Telegram in the future, so that you could leave Bro running in the
-background and just send it tasks as messages, like you would with a fleshy team member.
+### Command-line interface
+
+To invoke Bro you just say `bro` confidently.
+If you want to resume a previous session, use `bro --resume`.
+To run Bro via SSH, be sure to `source source_ssh.sh` first,
+and consider using [tmux](https://en.wikipedia.org/wiki/Tmux) as explained below.
 
 If provided, Bro will read `~/bro/system_prompt.txt` and add the contents to the system prompt
 after its internal system prompt. Use this to describe the operational environment (e.g., where to find certain files,
 what software and online services to use, etc), how the bot should self-identify, its personality traits, and so on.
-Bro will store some context files under `$PWD/bro/`.
+Bro will store some context files under the local brodir `$PWD/bro/`.
+It is by design that if you clone Bro into your `~` and run it there, all three directories --
+the local context directory, the global brodir, and the source directory -- will be the same.
 
-To invoke Bro you just say `bro` confidently.
-If you want to resume a previous session, use `bro --resume`.
+The recommended practice is to give Bro a separate virtual machine or a spare laptop
+with the most recent Ubuntu LTS, configure a narrow screen resolution (not larger than about 1600x1200),
+disable Wayland, ssh there and run Bro in a terminal multiplexer.
+Do not attempt to run Bro on computers used by humans.
 
-Currently, the recommended practice is to give Bro a separate virtual machine with the most recent Ubuntu LTS,
-configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.
+It may be a good idea to set up the shell on the remote machine to automatically run ssh sessions in tmux
+to retain Bro sessions across disconnects.
+[One standard recipe is to add the following to `~/.bashrc` or `~/.profile`](https://stackoverflow.com/a/40192494/1007777):
 
-To run Bro via SSH, be sure to `source source_ssh.sh` first.
+```bash
+if [[ $- =~ i ]] && [[ -z "$TMUX" ]] && [[ -n "$SSH_TTY" ]]; then
+  tmux attach-session -t ssh_tmux || tmux new-session -s ssh_tmux
+fi
+```
 
-To monitor Bro via the web interface, open a browser and go to `http://<host>:8814`.
+To detach from a tmux session, press `Ctrl+B` followed by `D`. This will leave the session running in the background.
+To reattach to the session later, use the command `tmux attach-session -t ssh_tmux`.
+
+### Web interface
+
+The web interface is intended for monitoring purposes only. It is available via `http://<host>:8814`.
+
+### Instant messaging connectors
+
+This is intended to be the main use case, but it is not implemented yet.
 
 ## Testing
 
