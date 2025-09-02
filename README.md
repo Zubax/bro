@@ -9,6 +9,9 @@
 
 Bro is an LLM computer-using agent (CUA) designed to autonomously perform mundane tasks related to business operations
 and administration, such as doing accounting, filing paperwork, and submitting applications.
+Bro is primarily designed to run on a dedicated VM or a spare laptop;
+it runs as a headless process and offers a remotely accessible web interface for monitoring and control
+(default port 8814).
 
 ℹ️ *"Bro" is Latvian for "one who beheads the Messiah".*
 
@@ -82,6 +85,8 @@ Currently, the recommended practice is to give Bro a separate virtual machine wi
 configure a narrow screen resolution, ssh there and run Bro, possibly in a terminal multiplexer like tmux or screen.
 
 To run Bro via SSH, be sure to `source source_ssh.sh` first.
+
+To monitor Bro via the web interface, open a browser and go to `http://<host>:8814`.
 
 ## Testing
 

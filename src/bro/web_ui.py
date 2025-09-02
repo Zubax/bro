@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from abc import ABC, abstractmethod
 import threading
 import logging
+from concurrent.futures import ThreadPoolExecutor, Future
 
 from PIL import Image
 
@@ -108,12 +109,12 @@ class View:
       <div class="text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 items-center">
         <div><span class="font-semibold">PID:</span> {{ props.row.pid }}</div>
         <div><span class="font-semibold">TID:</span> {{ props.row.tid }}</div>
+        <div><span class="font-semibold">Record</span> #{{ props.row.id }} {{ props.row.level_name }}</div>
         <div class="col-span-1 sm:col-span-2 lg:col-span-1">
           <span class="font-semibold">File:</span> {{ props.row.path }}:{{ props.row.line }}
         </div>
-        <div><span class="font-semibold">Func:</span> {{ props.row.func }}</div>
         <div><span class="font-semibold">Module:</span> {{ props.row.name }}</div>
-        <div><span class="font-semibold">Level:</span> {{ props.row.level_name }}</div>
+        <div><span class="font-semibold">Func:</span> {{ props.row.func }}</div>
       </div>
       <hr/>
       <pre class="whitespace-pre-wrap break-words m-0">{{ props.row.message }}</pre>
@@ -281,6 +282,10 @@ class View:
             date_picker.value = {"from": date_from.date().isoformat(), "to": date_to.date().isoformat()}
             load()
 
+        def on_reload_timer() -> None:
+            if auto_reload_recent.value:
+                load_recent()
+
         with ui.column().classes("w-full h-full"):
             # Main element -- the log table
             with ui.element("div").classes("flex-1 min-h-0 w-full"):
@@ -321,7 +326,9 @@ class View:
                     },
                 ).classes("w-48")
                 wildcard.on("keyup.enter", load)
-                ui.button("⬇️").on("click", scroll_bottom).props("flat")
+                ui.button("Scroll⬇️").on("click", scroll_bottom).props("flat")
+                auto_reload_recent = ui.checkbox("Auto reload recent", value=False)
+                ui.timer(10.0, on_reload_timer)
 
         load_recent()
 
@@ -355,6 +362,8 @@ class View:
                     ui.timer(10.0, update_screenshot)
 
                     # Reflection area
+                    fut_reflection: Future[None] | None = None
+
                     def do_reflect() -> None:
                         try:
                             _logger.info("🪞 Reflecting...")
@@ -373,7 +382,11 @@ class View:
                     def update_reflection_begin():
                         reflection.set_content("*🪞 Reflecting...*")
                         reflection_timestamp.set_text(f"Started {_now()}")
-                        threading.Thread(target=do_reflect, daemon=True).start()
+                        nonlocal fut_reflection
+                        if fut_reflection is None or fut_reflection.done():
+                            fut_reflection = ThreadPoolExecutor(1).submit(do_reflect)
+                        else:
+                            _logger.warning("Reflection already in progress, no point clicking again")
 
                     with ui.scroll_area().classes("h-full"):
                         with ui.row():

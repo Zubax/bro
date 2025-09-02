@@ -374,6 +374,8 @@ STOP WHAT YOU ARE DOING IMMEDIATELY AND RESPOND WITH A BRIEF REFLECTION FOR MONI
 Your response should be a very brief essay that answers the following questions concisely:
 What task are you working on?
 Have you been successful so far?
+Have you encountered any problems or obstacles?
+Have you made any noteworthy observations or encountered anything unusual or unexpected?
 Are you optimistic about your ability to complete the task?
 What are you planning to do next?
 Feel free to add dark humor if pertinent. Please do not include the questions in your response.
@@ -478,12 +480,7 @@ class OpenAiGenericReasoner(Reasoner):
 
     def legilimens(self) -> str:
         ctx = self._context + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
-        response = self._request_inference(
-            ctx,
-            tools=[],
-            model="gpt-5-mini",
-            reasoning_effort="minimal",
-        )
+        response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
@@ -649,7 +646,7 @@ class OpenAiGenericReasoner(Reasoner):
                     case "read_files":
                         category = args["category"]
                         names = [Path(str(x)).expanduser() for x in args["file_names"]]
-                        _logger.info(f"📄 Reading files of category {category!r}: {[repr(str(x)) for x in names]}")
+                        _logger.info(f"📄 Reading files of category {category!r}: {[str(x) for x in names]}")
                         fps = [locate_file(x) for x in names]
                         result = (
                             f"Read files of category {category!r}; results added to the context per file:"
