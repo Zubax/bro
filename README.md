@@ -72,7 +72,13 @@ pip install -e .
 
 ### Command-line interface
 
-To invoke Bro you just say `bro` confidently.
+To invoke Bro, go like:
+
+```bash
+bro --exe gpt-5+ui-tars-7b
+```
+
+For other options, see `bro --help`.
 If you want to resume a previous session, use `bro --resume`.
 To run Bro via SSH, be sure to `source source_ssh.sh` first,
 and consider using [tmux](https://en.wikipedia.org/wiki/Tmux) as explained below.

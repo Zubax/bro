@@ -74,7 +74,7 @@ class OpenAiCuaExecutive(Executive):
         ]
         self._context = [{"role": "system", "content": [{"type": "input_text", "text": _OPENAI_CUA_PROMPT}]}]
         # Currently, this is chosen rather arbitrarily. We don't really alter any model parameters, just the step count.
-        self._max_steps_map = (10, 20, 30)
+        self._max_steps_map = (15, 50, 100)
 
     def act(self, goal: str, effort: Effort) -> str:
         _logger.debug(f"🥅 [effort={effort.name}]: {goal}")
@@ -82,7 +82,7 @@ class OpenAiCuaExecutive(Executive):
         ctx = self._context.copy() + [{"role": "user", "content": [{"type": "input_text", "text": goal}]}]
         max_steps = self._max_steps_map[effort.value]
         for step in count():
-            _logger.debug(f"🔄 Step {step+1}/{max_steps}")
+            _logger.debug(f"🦶 Step {step+1}/{max_steps}")
             if step > max_steps * 2:
                 _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
                 return _AGENT_TERMINATED_MESSAGE
