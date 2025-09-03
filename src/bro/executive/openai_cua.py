@@ -74,7 +74,7 @@ class OpenAiCuaExecutive(Executive):
         ]
         self._context = [{"role": "system", "content": [{"type": "input_text", "text": _OPENAI_CUA_PROMPT}]}]
         # Currently, this is chosen rather arbitrarily. We don't really alter any model parameters, just the step count.
-        self._max_steps_map = (15, 50, 100)
+        self._max_steps_map = (20, 40, 60)
 
     def act(self, goal: str, effort: Effort) -> str:
         _logger.debug(f"🥅 [effort={effort.name}]: {goal}")

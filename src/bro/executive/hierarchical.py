@@ -216,7 +216,7 @@ class HierarchicalExecutive(Executive):
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            new_items, msg = self._process(resp_text, effort)
+            new_items, msg = self._process(resp_text)
             ctx += new_items
             if msg is not None:
                 _logger.debug(f"🤖 Final message: {msg}")
@@ -240,7 +240,7 @@ class HierarchicalExecutive(Executive):
             temperature=self._temperature,
         )
 
-    def _process(self, response: str, effort: Effort) -> tuple[list[dict[str, Any]], str | None]:
+    def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
@@ -248,7 +248,9 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description, effort).strip()
+                    # We always invoke the underlying executive with a low effort setting, because we perform
+                    # all of the planning and the underlying agent only needs to do simple atomic tasks.
+                    result = self._inferior.act(description, Effort.LOW).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
                     out = []
                     if result:

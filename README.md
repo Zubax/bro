@@ -26,9 +26,8 @@ and the fast and compact UI-TARS-1.5-7B for UI grounding
 (which is used directly, without any additional OCR or object detection).
 The agent is tuned to avoid touching UI unless absolutely necessary, preferring
 direct file access, shell commands, Python scripting, and hotkeys whenever possible.
-
-There is an option to replace the GPT & UI-TARS stack with the stock CUA model from OpenAI,
-but this is actually not recommended because it is slower and much more expensive than the UI-TARS stack.
+There is an option to replace the GPT & UI-TARS stack with the stock CUA model from OpenAI;
+it may perform better in certain scenarios, but it is also much more expensive to run.
 
 You can even run UI-TARS locally (the 7B version only needs 32 GB of VRAM) and avoid OpenRouter.
 Warning though: **quantized edits of UI-TARS cannot be used for grounding as-is!!**
