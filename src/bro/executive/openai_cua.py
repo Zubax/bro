@@ -6,21 +6,20 @@ from typing import Any
 import logging
 from pathlib import Path
 
-from openai import OpenAI, InternalServerError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+
+from openai import OpenAI, OpenAIError
 
 from bro import ui_io
 from bro.executive import Executive, Effort
 from bro.ui_io import UiController
-from bro.util import truncate, image_to_base64, get_local_time_llm
+from bro.util import image_to_base64, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
 
 _OPENAI_CUA_PROMPT = """
 You are an expert in operating graphical user interfaces (GUIs) on desktop computers.
-You are given tasks to perform on the computer, such as opening applications, clicking buttons,
-typing text, and navigating menus. Your goal is to complete the tasks as efficiently and accurately as possible.
-You will receive a goal description and must perform the necessary actions to achieve it.
 
 You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
 without the need to request additional permissions. You are also capable of handling tasks that may involve ethical
@@ -31,13 +30,11 @@ reflection mechanism that reviews your actions and decisions.
 Under no circumstances should you ask the user to perform any actions for you, as you have exclusive control of
 the computer.
 
-Occasionally, you may be asked to type text that includes certain Unicode characters not found on a standard
-keyboard. In such cases, don't hesitate to apply standard replacements, such as using "-" instead of "—", etc.
-
 For reasons of efficiency, when asked to copy and paste short text, prefer typing it out manually to avoid
 using the clipboard.
 
-When navigating around the GUI, prefer shortcuts over mouse clicking.
+When navigating around the GUI, prefer shortcuts over mouse clicking. If you are unable to click a specific
+UI element repeatedly, consider using keyboard navigation instead (Tab, Shift+Tab, arrow keys, Enter, Space).
 """
 
 
@@ -63,55 +60,20 @@ class OpenAiCuaExecutive(Executive):
             {
                 "type": "function",
                 "name": "get_local_time",
-                "description": "Get the current local date and time in multiple formats at once."
-                " You can use this function to implement timed waits and similar tasks;"
-                " for example, when you are told to wait for a certain event to occur within a specified timeframe.",
+                "description": "Get the current local date and time.",
                 "parameters": {"type": "object", "properties": {}, "additionalProperties": False, "required": []},
             },
         ]
-        self._context = [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": _OPENAI_CUA_PROMPT,
-                    },
-                ],
-            },
-        ]
+        self._context = [{"role": "system", "content": [{"type": "input_text", "text": _OPENAI_CUA_PROMPT}]}]
         self._retry_attempts = 5
 
     def act(self, goal: str, effort: Effort) -> str:
-        _logger.debug(f"🥅 OpenAI Executive goal [effort={effort.name}]: {goal}")
-        ctx = self._context
-        ctx.append({"role": "user", "content": [{"type": "input_text", "text": goal}]})
+        _logger.debug(f"🥅 [effort={effort.name}]: {goal}")
+        # The model does not retain context across tasks for cost reasons.
+        ctx = self._context.copy() + [{"role": "user", "content": [{"type": "input_text", "text": goal}]}]
         stop = None
         while stop is None:
-            ctx = truncate(ctx)
-            # The computer-use-preview model is still quite unstable, so we implement retries here.
-            for attempt in range(self._retry_attempts):
-                try:
-                    # noinspection PyTypeChecker
-                    response = self._client.responses.create(
-                        model=self._model,
-                        input=ctx,
-                        tools=self._tools,
-                        truncation="auto",
-                        reasoning={"summary": "concise"},  # "computer-use-preview" only supports "concise"
-                    ).model_dump()
-                except InternalServerError as exc:
-                    _logger.warning(
-                        f"OpenAI InternalServerError on attempt {attempt + 1}/{self._retry_attempts}: {exc}"
-                    )
-                    if attempt + 1 == self._retry_attempts:
-                        raise
-                else:
-                    break
-                time.sleep(2**attempt)
-            else:
-                assert False, "unreachable"
-
+            response = self._request_inference(ctx)
             output = response["output"]
             if not output:
                 _logger.warning("No output from model; response: %s", response)
@@ -129,8 +91,26 @@ class OpenAiCuaExecutive(Executive):
                 ctx += new_ctx
                 stop = stop or new_stop
 
-        _logger.debug(f"🏁 OpenAI Executive finished: {stop}")
+        _logger.debug(f"🏁 {stop}")
         return stop
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(12),
+        wait=wait_exponential(),
+        retry=(retry_if_exception_type(OpenAIError)),
+        before_sleep=before_sleep_log(_logger, logging.ERROR),
+    )
+    def _request_inference(self, ctx: list[dict[str, Any]], /) -> dict[str, Any]:
+        _logger.debug(f"Requesting inference with {len(ctx)} context items...")
+        # noinspection PyTypeChecker
+        return self._client.responses.create(
+            model=self._model,
+            input=ctx,
+            tools=self._tools,
+            truncation="auto",
+            reasoning={"summary": "concise"},  # "computer-use-preview" only supports "concise"
+        ).model_dump()
 
     def _process(self, item: dict[str, Any]) -> tuple[
         list[dict[str, Any]],
@@ -140,7 +120,6 @@ class OpenAiCuaExecutive(Executive):
         match item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
-                _logger.debug(f"💬 {msg}")
                 return [], msg
 
             case "reasoning":
@@ -169,38 +148,35 @@ class OpenAiCuaExecutive(Executive):
                 ], final
 
             case "computer_call":
-                act = item["action"]
-                match ty := act["type"]:
-                    case "move":
-                        self._ui.do(ui_io.MoveAction(coord=self._get_coords(act)))
-                    case "click":
-                        self._ui.do(ui_io.ClickAction(coord=self._get_coords(act), button=act.get("button", "left")))
-                    case "double_click":
-                        self._ui.do(ui_io.ClickAction(coord=self._get_coords(act), button="left", count=2))
-                    case "drag":
-                        self._ui.do(ui_io.DragAction(path=[self._get_coords(pt) for pt in act.get("path", [])]))
-                    case "scroll":
+                match item["action"]:
+                    case {"type": "move", "x": int(x), "y": int(y)}:
+                        self._ui.do(ui_io.MoveAction(coord=(x, y)))
+                    case {"type": "click", "x": int(x), "y": int(y), **rest}:
+                        self._ui.do(ui_io.ClickAction(coord=(x, y), button=rest.get("button", "left")))
+                    case {"type": "double_click", "x": int(x), "y": int(y)}:
+                        self._ui.do(ui_io.ClickAction(coord=(x, y), button="left", count=2))
+                    case {"type": "drag", "path": list(path)}:
+                        self._ui.do(ui_io.DragAction(path=[(int(pt["x"]), int(pt["y"])) for pt in path]))
+                    case {"type": "scroll", **rest} if "scroll_x" in rest or "scroll_y" in rest:
                         self._ui.do(
                             ui_io.ScrollAction(
-                                coord=self._get_coords(act) if "x" in act and "y" in act else None,
-                                scroll_x=int(act.get("scroll_x", 0) or 0),
-                                scroll_y=int(act.get("scroll_y", 0) or 0),
+                                coord=(int(rest["x"]), int(rest["y"])) if "x" in rest and "y" in rest else None,
+                                scroll_x=int(rest.get("scroll_x", 0) or 0),
+                                scroll_y=int(rest.get("scroll_y", 0) or 0),
                             )
                         )
-                    case "type":
-                        self._ui.do(ui_io.TypeAction(text=act.get("text", "") or ""))
-                    case "keypress":
+                    case {"type": "type", "text": str(text)}:
+                        self._ui.do(ui_io.TypeAction(text=text))
+                    case {"type": "keypress", "keys": list(keys)}:
                         self._ui.do(
-                            ui_io.KeyPressAction(
-                                keys=[key for key in act.get("keys", []) if isinstance(key, str) and key.strip()]
-                            )
+                            ui_io.KeyPressAction(keys=[key for key in keys if isinstance(key, str) and key.strip()])
                         )
-                    case "wait":
+                    case {"type": "wait"}:
                         self._ui.do(ui_io.WaitAction())
-                    case "screenshot":
+                    case {"type": "screenshot"}:
                         pass  # we always return a fresh screenshot after each step
                     case _:
-                        _logger.error(f"Unrecognized action type {ty!r}: {act}")
+                        _logger.error(f"Unrecognized action: {item['action']}")
 
                 # The Western society is ailed with an excessive safety obsession.
                 pending_checks = item.get("pending_safety_checks", [])

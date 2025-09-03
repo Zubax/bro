@@ -162,7 +162,6 @@ class HierarchicalExecutive(Executive):
         self._model = model
         self._temperature = temperature
         self._effort = Effort.LOW
-        self._retry_attempts = 10
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
         if self._acts_to_remember < 1:
