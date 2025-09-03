@@ -73,19 +73,20 @@ class OpenAiCuaExecutive(Executive):
             },
         ]
         self._context = [{"role": "system", "content": [{"type": "input_text", "text": _OPENAI_CUA_PROMPT}]}]
-        self._act_history: list[list[dict[str, Any]]] = []
-        # Currently, this is chosen rather arbitrarily. We don't really alter any model parameters, just the step count.
+        self._history: list[list[dict[str, Any]]] = []
+
+        # Currently, this is chosen rather arbitrarily. We don't alter any model parameters, only the environment.
         self._max_steps_map = (20, 40, 60)
-        self._acts_to_remember_map = (0, 2, 5)
+        self._acts_to_remember_map = (1, 3, 5)
 
     def act(self, goal: str, effort: Effort) -> str:
         _logger.debug(f"🥅 [effort={effort.name}]: {goal}")
 
         # Set up the context.
-        while len(self._act_history) > self._acts_to_remember_map[effort.value]:
-            self._act_history.pop(0)
+        while len(self._history) > self._acts_to_remember_map[effort.value]:
+            self._history.pop(0)
         ctx = [self._user_message(goal)]
-        self._act_history.append(ctx)
+        self._history.append(ctx)
 
         # Run the interaction loop.
         max_steps = self._max_steps_map[effort.value]
@@ -98,7 +99,7 @@ class OpenAiCuaExecutive(Executive):
                 _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
                 ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
 
-            response = self._request_inference(self._context + sum(self._act_history, []))
+            response = self._request_inference(self._context + sum(self._history, []))
             output = response["output"]
             if not output:
                 _logger.warning("No output from model; response: %s", response)
