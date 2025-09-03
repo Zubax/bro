@@ -7,6 +7,11 @@ import sys
 import argparse
 import sqlite3
 
+try:
+    import readline  # noqa: F401
+except ImportError:
+    pass
+
 from openai import OpenAI
 
 from bro import ui_io, logs, web_ui
