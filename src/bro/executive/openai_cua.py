@@ -59,10 +59,12 @@ class OpenAiCuaExecutive(Executive):
         ui: UiController,
         client: OpenAI,
         model: str = "computer-use-preview",
+        service_tier: str = "default",
     ) -> None:
         self._ui = ui
         self._client = client
         self._model = model
+        self._service_tier = service_tier
         ss = self._ui.screen_width_height
         self._tools = [
             {"type": "computer_use_preview", "display_width": ss[0], "display_height": ss[1], "environment": "linux"},
@@ -137,6 +139,7 @@ class OpenAiCuaExecutive(Executive):
             input=ctx,
             tools=self._tools,
             truncation="auto",
+            service_tier=self._service_tier,
             reasoning={"summary": "concise"},  # "computer-use-preview" only supports "concise"
         ).model_dump()
 

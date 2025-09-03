@@ -154,6 +154,7 @@ class HierarchicalExecutive(Executive):
         client: OpenAI,
         model: str,
         temperature: float = 1.0,
+        service_tier: str = "default",
         acts_to_remember: int = 5,
     ) -> None:
         self._inferior = inferior
@@ -161,6 +162,7 @@ class HierarchicalExecutive(Executive):
         self._client = client
         self._model = model
         self._temperature = temperature
+        self._service_tier = service_tier
         self._effort = Effort.LOW
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
@@ -238,6 +240,7 @@ class HierarchicalExecutive(Executive):
             reasoning_effort=self._reasoning_effort_map[self._effort.value],
             messages=ctx,
             temperature=self._temperature,
+            service_tier=self._service_tier,
         )
 
     def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
