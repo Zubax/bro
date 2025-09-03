@@ -556,6 +556,7 @@ class OpenAiGenericReasoner(Reasoner):
             },
             text={"verbosity": "low"},
             service_tier=self._service_tier,
+            truncation="auto",
         ).model_dump()
 
     def _process(self, item: dict[str, Any]) -> tuple[

@@ -84,21 +84,8 @@ class OpenAiCuaExecutive(Executive):
 
     def act(self, goal: str, effort: Effort) -> str:
         _logger.debug(f"🥅 OpenAI Executive goal [effort={effort.name}]: {goal}")
-        # EXPERIMENTAL CHANGE: do not preserve context between runs. This reduces the inference costs due to
-        # ever-growing context, and also avoids repeated inference errors if the inference provider trips on
-        # malformed context, which happened with OpenAI.
         ctx = self._context
-        ctx.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": goal,
-                    },
-                ],
-            }
-        )
+        ctx.append({"role": "user", "content": [{"type": "input_text", "text": goal}]})
         stop = None
         while stop is None:
             ctx = truncate(ctx)
@@ -111,9 +98,7 @@ class OpenAiCuaExecutive(Executive):
                         input=ctx,
                         tools=self._tools,
                         truncation="auto",
-                        reasoning={
-                            "summary": "concise",  # "computer-use-preview" only supports "concise"
-                        },
+                        reasoning={"summary": "concise"},  # "computer-use-preview" only supports "concise"
                     ).model_dump()
                 except InternalServerError as exc:
                     _logger.warning(
@@ -227,10 +212,7 @@ class OpenAiCuaExecutive(Executive):
                     "type": "computer_call_output",
                     "call_id": item["call_id"],
                     "acknowledged_safety_checks": pending_checks,
-                    "output": {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{scr}",
-                    },
+                    "output": {"type": "input_image", "image_url": f"data:image/png;base64,{scr}"},
                 }
                 return [output], None
 
