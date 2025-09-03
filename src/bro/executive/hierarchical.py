@@ -223,8 +223,8 @@ class HierarchicalExecutive(Executive):
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(10),
-        wait=wait_exponential(multiplier=1, min=2, max=3600),
+        stop=stop_after_attempt(12),
+        wait=wait_exponential(),
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
