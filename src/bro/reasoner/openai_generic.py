@@ -164,7 +164,9 @@ Use this function to perform any computer operations, such as opening applicatio
 files, and so on, if the task cannot be solved using the other functions. Be very specific and detailed in your
 instructions because the agent can be easily confused. Break down complex tasks into very small atomic steps and use
 multiple calls to this function to achieve the overall goal. The computer-using agent may not retain full memory
-of its past actions, so you must provide all necessary context in each invocation.
+of its past actions, so you must provide all necessary context in each invocation. The computer-using agent does
+not have access to your context; you must provide all necessary information in the task description without making
+references to your own context (such as using data from files you have read using the `read_files` function, etc).
 
 The computer-using agent can be unreliable, so you must verify its actions and correct them if necessary.
 If the agent fails to complete the task, try again with smaller steps and simpler instructions,

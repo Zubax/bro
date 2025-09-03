@@ -157,8 +157,8 @@ class HierarchicalExecutive(Executive):
         self._ui = ui
         self._client = client
         self._model = model
-        self._reasoning_effort = ""
         self._temperature = temperature
+        self._effort = Effort.LOW
         self._retry_attempts = 10
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
@@ -166,18 +166,16 @@ class HierarchicalExecutive(Executive):
             raise ValueError("The executive should remember at least one past act to avoid loops.")
         self._act_history: list[list[dict[str, Any]]] = []
 
-    def act(self, goal: str, effort: Effort) -> str:
-        # Configure the context.
         # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
         # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
-        reasoning_effort = ("low", "medium", "high")[effort.value]
-        max_steps = int((2 + effort.value) ** 3.4)
-        if self._reasoning_effort != reasoning_effort:
-            _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
-            if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.
-                _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
-                self._act_history.clear()
-        self._reasoning_effort = reasoning_effort
+        self._reasoning_effort_map = ("low", "medium", "high")
+        self._max_steps_map = (15, 100, 100)
+
+    def act(self, goal: str, effort: Effort) -> str:
+        if effort.value > self._effort.value:  # Avoid style anchoring.
+            _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
+            self._act_history.clear()
+        self._effort = effort
 
         # Add new context entry for this goal.
         if len(self._act_history) >= self._acts_to_remember:
@@ -186,17 +184,15 @@ class HierarchicalExecutive(Executive):
         self._act_history.append(ctx)
 
         # Run the reasoning-action loop.
+        max_steps = self._max_steps_map[self._effort.value]
         for step in count():
-            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._reasoning_effort!r}")
+            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._effort}")
             ctx += [
                 {
                     "role": "user",
                     "content": [
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self._screenshot_b64()}"}},
-                        {
-                            "type": "text",
-                            "text": f"The current time is {get_local_time_llm()}.",
-                        },
+                        {"type": "text", "text": f"The current time is {get_local_time_llm()}."},
                     ],
                 },
             ]
@@ -233,7 +229,7 @@ class HierarchicalExecutive(Executive):
         # noinspection PyTypeChecker
         return self._client.chat.completions.create(
             model=self._model,
-            reasoning_effort=self._reasoning_effort,
+            reasoning_effort=self._reasoning_effort_map[self._effort.value],
             messages=ctx,
             temperature=self._temperature,
         )
@@ -322,7 +318,6 @@ def _test() -> None:
     ui = ui_io.make_controller()
     inferior = UiTars7bExecutive(
         ui=ui,
-        state_dir=state_dir,
         client=OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY")),
     )
     exe = HierarchicalExecutive(
