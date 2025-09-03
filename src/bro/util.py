@@ -30,12 +30,34 @@ def image_to_base64(im: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def truncate(x: list[Any], head: int = 100, tail: int = 1000) -> list[Any]:
-    if head <= 0 or tail <= 0:
-        raise ValueError("head and tail must be positive integers")
-    if len(x) <= head + tail:
-        return x
-    return x[:head] + x[-tail:]
+def prune_context_text_only(
+    context: list[dict[str, Any]],
+    keep_roles: frozenset[str] = frozenset(("user", "system", "assistant")),
+) -> list[dict[str, Any]]:
+    """
+    Constructs a new LLM context that only contains text messages from the specified roles.
+    This is intended for use for summarization and long context truncation.
+    Everything else (images, files, tool calls) is removed.
+    Consecutive duplicate messages are also removed.
+    """
+    out_ctx = []
+    for src in context:
+        if src.get("role") not in keep_roles:
+            continue
+        content = []
+        out_item = {"role": src["role"], "content": content}
+        for in_item in src.get("content", []) or []:
+            match in_item:
+                case {"type": ty, "text": str(text), **_rest} if ty in {"text", "input_text", "output_text"}:
+                    content.append({"type": ty, "text": text})
+                case _:
+                    pass
+        if not content:
+            continue  # No content left after pruning, skip this message
+        if out_ctx and out_ctx[-1] == out_item:  # Skip duplicates (such as repeated screenshots)
+            continue
+        out_ctx.append(out_item)
+    return out_ctx
 
 
 def format_exception(exc: BaseException) -> str:

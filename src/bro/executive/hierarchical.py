@@ -13,7 +13,7 @@ from openai import OpenAI
 from bro import ui_io
 from bro.executive import Executive, Effort
 from bro.ui_io import UiController
-from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
+from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json, prune_context_text_only
 
 _logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ Use this if you are not sure how to proceed, or if you need additional informati
 
 _MAX_STEPS_MESSAGE = """\
 You have exhausted the maximum number of steps allowed.
-You must terminate the task immediately with a failure message.
+You must terminate the task immediately.
 Explain what you managed to achieve and what went wrong.
 """
 
@@ -177,9 +177,13 @@ class HierarchicalExecutive(Executive):
             self._act_history.clear()
         self._effort = effort
 
-        # Add new context entry for this goal.
+        # Add new context entry for this goal, and prune old entries if needed.
         if len(self._act_history) >= self._acts_to_remember:
             self._act_history.pop(0)
+        if self._act_history:
+            old_count = len(self._act_history[-1])
+            self._act_history[-1] = prune_context_text_only(self._act_history[-1])
+            _logger.info(f"🧠 Pruned the last act context from {old_count} to {len(self._act_history[-1])} items")
         ctx = [self._user_message(goal)]
         self._act_history.append(ctx)
 

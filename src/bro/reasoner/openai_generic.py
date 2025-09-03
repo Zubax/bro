@@ -15,8 +15,8 @@ from openai import OpenAI
 from bro.executive import Executive, Effort as ExecutiveEffort
 from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
-from bro.util import image_to_base64, truncate, format_exception, get_local_time_llm, openai_upload_files, locate_file
-from bro.util import run_shell_command, run_python_code
+from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
+from bro.util import run_shell_command, run_python_code, prune_context_text_only
 from bro import __version_info__
 
 _logger = logging.getLogger(__name__)
@@ -443,7 +443,7 @@ class OpenAiGenericReasoner(Reasoner):
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
         self._step_number += 1
 
-        self._context = truncate(self._context)  # TODO this is borken
+        # TODO implement truncation!
         response = self._request_inference(self._context)
         _logger.debug(f"Received response: {response}")
         output = response["output"]
@@ -481,27 +481,11 @@ class OpenAiGenericReasoner(Reasoner):
         return final
 
     def legilimens(self) -> str:
-        # Build a reduced copy of the model context.
-        ctx = []
-        for src in self._context:
-            if src.get("role") not in {"user", "assistant", "system"}:
-                continue
-            cnt = []
-            out = {"role": src["role"], "content": cnt}
-            for item in src.get("content", []) or []:
-                match item.get("type"):
-                    case "input_text":
-                        cnt += [{"type": "input_text", "text": item["text"]}]
-                    case "output_text":
-                        cnt += [{"type": "output_text", "text": item["text"]}]
-                    case "input_image" if item.get("image_url"):
-                        cnt += [{"type": "input_image", "image_url": item["image_url"]}]
-                    case _:
-                        pass
-            if cnt:
-                ctx.append(out)
-        ctx += [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
-        # Request a reflection on the reduced context.
+        ctx = (
+            prune_context_text_only(self._context)
+            + self._screenshot()
+            + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+        )
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
