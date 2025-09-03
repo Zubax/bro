@@ -116,8 +116,8 @@ and how you plan to address them.
 
 It is possible that the strategy will need to be revised as you progress with the task and encounter new information
 or obstacles. You can call this function multiple times to update or refine your strategy as needed.
-It is recommended to invoke it at least every 10 invocations of the `use_computer` function to ensure that your approach
-remains effective and aligned with the task's goals.
+It is recommended to invoke it at least every 10 steps to ensure that your approach remains effective and aligned
+with the task's goals.
 
 It is mandatory to invoke this function before the first invocation of the `use_computer` function.
 """,
@@ -156,7 +156,7 @@ and what is the reason you are stuck.
         "type": "function",
         "name": "use_computer",
         "description": """\
-Perform computer operations to complete the assigned task using a separate computer-using agent.
+Perform specific computer operations to complete the assigned task using a separate computer-using agent.
 This is a last-resort function that you should only use when the task cannot be completed using other functions
 (such as `shell`, `read_files`, `read_urls`, `python`, etc).
 
@@ -167,6 +167,8 @@ multiple calls to this function to achieve the overall goal. The computer-using 
 of its past actions, so you must provide all necessary context in each invocation. The computer-using agent does
 not have access to your context; you must provide all necessary information in the task description without making
 references to your own context (such as using data from files you have read using the `read_files` function, etc).
+The computer-using agent does not understand the context of the task and cannot reason about it; you must provide
+practical and actionable instructions that the agent can follow directly.
 
 The computer-using agent can be unreliable, so you must verify its actions and correct them if necessary.
 If the agent fails to complete the task, try again with smaller steps and simpler instructions,
