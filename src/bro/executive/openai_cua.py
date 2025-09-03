@@ -37,6 +37,7 @@ using the clipboard.
 
 When navigating around the GUI, prefer shortcuts over mouse clicking. If you are unable to click a specific
 UI element repeatedly, consider using keyboard navigation instead (Tab, Shift+Tab, arrow keys, Enter, Space).
+To change text entered in a text field, use Ctrl+A to select all text, then type the new text.
 """
 
 _MAX_STEPS_MESSAGE = """\
