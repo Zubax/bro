@@ -448,37 +448,24 @@ class OpenAiGenericReasoner(Reasoner):
         response = self._request_inference(self._context)
         _logger.debug(f"Received response: {response}")
         output = response["output"]
-        self._context += output
+        addendum = output.copy()
 
         # The model trips if the "status" field is not removed.
         # I guess we could switch to the stateful conversation API instead? See
         # https://platform.openai.com/docs/guides/conversation-state?api-mode=responses
-        for x in self._context:
+        for x in addendum:
             if x.get("type") == "reasoning" and "status" in x:
                 del x["status"]
 
         final: str | None = None
         for item in output:
-            try:
-                new_ctx, new_final = self._process(item)
-                final = final or new_final
-            except Exception as ex:
-                _logger.exception(f"Exception during item processing: {ex}")
-                new_ctx = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": (
-                                    f"ERROR: Exception during processing: {type(ex).__name__}: {ex}\n"
-                                    + format_exception(ex)
-                                ),
-                            }
-                        ],
-                    }
-                ]
-            self._context += new_ctx
+            new_ctx, new_final = self._process(item)
+            final = final or new_final
+            addendum += new_ctx
+
+        # Atomic context update: only add new items once the step is fully processed.
+        # Otherwise, we may end up in an inconsistent state if the processing fails halfway.
+        self._context += addendum
         return final
 
     def legilimens(self) -> str:
