@@ -64,6 +64,9 @@ Avoid tasks more complex than clicking a button, scrolling, or dragging the mous
 When asking the agent to click something, be sure to specify if it's a double-click, single-click, or right-click!
 Do not use this command for typing text or pressing keys; use the `type` and `key_press` commands instead.
 
+Often this function will struggle to click the correct UI element. In that case, consider using the Tab and Enter
+keys via the `key_press` command to navigate to the desired element instead of clicking it directly.
+
 ```json
 {"type": "task", "description": "<description of the task for the underlying agent>"}
 ```

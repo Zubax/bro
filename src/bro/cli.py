@@ -97,7 +97,7 @@ def main() -> None:
                     rsn.task(ctx)
             else:
                 if result is not None:
-                    _logger.info("🏁 " * 40 + "\n" + result)
+                    _logger.warning("🏁 " * 40 + "\n" + result)
                     rsn.task(_prompt())
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
