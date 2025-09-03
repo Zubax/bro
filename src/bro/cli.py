@@ -7,12 +7,19 @@ import sys
 import argparse
 import sqlite3
 
+try:
+    import readline  # noqa: F401
+except ImportError:
+    pass
+
 from openai import OpenAI
 
 from bro import ui_io, logs, web_ui
 from bro.reasoner import Context
+from bro.executive import Executive
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
+from bro.executive.openai_cua import OpenAiCuaExecutive
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
 from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
 
@@ -25,6 +32,14 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Run Bro")
     parser.add_argument("--resume", action="store_true", help="Resume from existing state file if available.")
+    parser.add_argument(
+        "--exe",
+        "-E",
+        type=str,
+        required=True,
+        choices=["gpt-5+ui-tars-7b", "gpt-5+openai-cua", "openai-cua"],
+        help="The executive stack to use",
+    )
     args = parser.parse_args()
 
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
@@ -35,12 +50,28 @@ def main() -> None:
 
     # Construct the system
     ui = ui_io.make_controller()
-    exe = HierarchicalExecutive(
-        inferior=UiTars7bExecutive(ui=ui, client=openrouter_client),
-        ui=ui,
-        client=openai_client,
-        model="gpt-5",
-    )
+    exe: Executive | None = None
+    match (args.exe or "").lower():
+        case "gpt-5+ui-tars-7b":
+            exe = HierarchicalExecutive(
+                inferior=UiTars7bExecutive(ui=ui, client=openrouter_client),
+                ui=ui,
+                client=openai_client,
+                model="gpt-5",
+            )
+        case "gpt-5+openai-cua":
+            exe = HierarchicalExecutive(
+                inferior=OpenAiCuaExecutive(ui=ui, client=openai_client),
+                ui=ui,
+                client=openai_client,
+                model="gpt-5",
+            )
+        case "openai-cua":
+            exe = OpenAiCuaExecutive(ui=ui, client=openai_client)
+        case _:
+            _logger.error(f"Unknown executive specification: {args.exe!r}")
+            sys.exit(1)
+
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
@@ -92,7 +123,7 @@ def main() -> None:
                     rsn.task(ctx)
             else:
                 if result is not None:
-                    _logger.info("🏁 " * 40 + "\n" + result)
+                    _logger.warning("🏁 " * 40 + "\n" + result)
                     rsn.task(_prompt())
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")

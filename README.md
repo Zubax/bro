@@ -26,9 +26,8 @@ and the fast and compact UI-TARS-1.5-7B for UI grounding
 (which is used directly, without any additional OCR or object detection).
 The agent is tuned to avoid touching UI unless absolutely necessary, preferring
 direct file access, shell commands, Python scripting, and hotkeys whenever possible.
-
-There is an option to replace the GPT & UI-TARS stack with the stock CUA model from OpenAI,
-but this is actually not recommended because it is slower and much more expensive than the UI-TARS stack.
+There is an option to replace the GPT & UI-TARS stack with the stock CUA model from OpenAI;
+it may perform better in certain scenarios, but it is also much more expensive to run.
 
 You can even run UI-TARS locally (the 7B version only needs 32 GB of VRAM) and avoid OpenRouter.
 Warning though: **quantized edits of UI-TARS cannot be used for grounding as-is!!**
@@ -57,8 +56,8 @@ We mostly use it in an Ubuntu virtual machine with a 1280x1024 screen resolution
 It is highly advised to use the default UI theme and a highly textured wallpaper
 to avoid confusing the UI grounding model (e.g., a solid black desktop background is known to cause issues).
 Disable spell checking everywhere. Disable popups. Ensure scroll bars are always visible.
-Use light themes everywhere. Disable tools that inject context menus, like the ChatGPT integration in Firefox,
-Grammarly, etc.
+Use light themes everywhere. Disable the automatic translation suggestions in browsers.
+Disable tools that inject context menus, like the ChatGPT integration in Firefox,  Grammarly, etc.
 
 ## Installation
 
@@ -72,7 +71,13 @@ pip install -e .
 
 ### Command-line interface
 
-To invoke Bro you just say `bro` confidently.
+To invoke Bro, export `OPENAI_API_KEY` and `OPENROUTER_API_KEY`, then go like:
+
+```bash
+bro --exe gpt-5+ui-tars-7b
+```
+
+For other options, see `bro --help`.
 If you want to resume a previous session, use `bro --resume`.
 To run Bro via SSH, be sure to `source source_ssh.sh` first,
 and consider using [tmux](https://en.wikipedia.org/wiki/Tmux) as explained below.

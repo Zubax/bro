@@ -13,7 +13,7 @@ from openai import OpenAI
 from bro import ui_io
 from bro.executive import Executive, Effort
 from bro.ui_io import UiController
-from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json
+from bro.util import image_to_base64, get_local_time_llm, format_exception, split_trailing_json, prune_context_text_only
 
 _logger = logging.getLogger(__name__)
 
@@ -63,6 +63,9 @@ A JSON block is MANDATORY in EVERY response.
 Avoid tasks more complex than clicking a button, scrolling, or dragging the mouse.
 When asking the agent to click something, be sure to specify if it's a double-click, single-click, or right-click!
 Do not use this command for typing text or pressing keys; use the `type` and `key_press` commands instead.
+
+Often this function will struggle to click the correct UI element. In that case, consider using the Tab and Enter
+keys via the `key_press` command to navigate to the desired element instead of clicking it directly.
 
 ```json
 {"type": "task", "description": "<description of the task for the underlying agent>"}
@@ -125,7 +128,7 @@ Use this if you are not sure how to proceed, or if you need additional informati
 
 _MAX_STEPS_MESSAGE = """\
 You have exhausted the maximum number of steps allowed.
-You must terminate the task immediately with a failure message.
+You must terminate the task immediately.
 Explain what you managed to achieve and what went wrong.
 """
 
@@ -151,52 +154,53 @@ class HierarchicalExecutive(Executive):
         client: OpenAI,
         model: str,
         temperature: float = 1.0,
+        service_tier: str = "default",
         acts_to_remember: int = 5,
     ) -> None:
         self._inferior = inferior
         self._ui = ui
         self._client = client
         self._model = model
-        self._reasoning_effort = ""
         self._temperature = temperature
-        self._retry_attempts = 10
+        self._service_tier = service_tier
+        self._effort = Effort.LOW
         self._context = [{"role": "system", "content": _PROMPT}]
         self._acts_to_remember = acts_to_remember
         if self._acts_to_remember < 1:
             raise ValueError("The executive should remember at least one past act to avoid loops.")
         self._act_history: list[list[dict[str, Any]]] = []
 
-    def act(self, goal: str, effort: Effort) -> str:
-        # Configure the context.
         # A GPT-5-class model in the high reasoning effort mode is safe to run for a large number of steps.
         # Lower reasoning settings may cause the model to go off the rails, so we limit the number of steps.
-        reasoning_effort = ("low", "medium", "high")[effort.value]
-        max_steps = int((2 + effort.value) ** 3.4)
-        if self._reasoning_effort != reasoning_effort:
-            _logger.info(f"🧠 Switching reasoning effort to {reasoning_effort}; max steps {max_steps}")
-            if reasoning_effort > self._reasoning_effort:  # Avoid style anchoring.
-                _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
-                self._act_history.clear()
-        self._reasoning_effort = reasoning_effort
+        self._reasoning_effort_map = ("low", "medium", "high")
+        self._max_steps_map = (15, 100, 100)
 
-        # Add new context entry for this goal.
+    def act(self, goal: str, effort: Effort) -> str:
+        if effort.value > self._effort.value:  # Avoid style anchoring.
+            _logger.info(f"🧠➡️🗑 DROPPING CONTEXT due to reasoning effort change")
+            self._act_history.clear()
+        self._effort = effort
+
+        # Add new context entry for this goal, and prune old entries if needed.
         if len(self._act_history) >= self._acts_to_remember:
             self._act_history.pop(0)
+        if self._act_history:
+            old_count = len(self._act_history[-1])
+            self._act_history[-1] = prune_context_text_only(self._act_history[-1])
+            _logger.info(f"🧠 Pruned the last act context from {old_count} to {len(self._act_history[-1])} items")
         ctx = [self._user_message(goal)]
         self._act_history.append(ctx)
 
         # Run the reasoning-action loop.
+        max_steps = self._max_steps_map[self._effort.value]
         for step in count():
-            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._reasoning_effort!r}")
+            _logger.info(f"🔄 Step {step+1}/{max_steps}; effort={self._effort}")
             ctx += [
                 {
                     "role": "user",
                     "content": [
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{self._screenshot_b64()}"}},
-                        {
-                            "type": "text",
-                            "text": f"The current time is {get_local_time_llm()}.",
-                        },
+                        {"type": "text", "text": f"The current time is {get_local_time_llm()}."},
                     ],
                 },
             ]
@@ -214,7 +218,7 @@ class HierarchicalExecutive(Executive):
             resp_msg = response.choices[0].message
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
-            new_items, msg = self._process(resp_text, effort)
+            new_items, msg = self._process(resp_text)
             ctx += new_items
             if msg is not None:
                 _logger.debug(f"🤖 Final message: {msg}")
@@ -223,8 +227,8 @@ class HierarchicalExecutive(Executive):
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(10),
-        wait=wait_exponential(multiplier=1, min=2, max=3600),
+        stop=stop_after_attempt(12),
+        wait=wait_exponential(),
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
@@ -233,12 +237,13 @@ class HierarchicalExecutive(Executive):
         # noinspection PyTypeChecker
         return self._client.chat.completions.create(
             model=self._model,
-            reasoning_effort=self._reasoning_effort,
+            reasoning_effort=self._reasoning_effort_map[self._effort.value],
             messages=ctx,
             temperature=self._temperature,
+            service_tier=self._service_tier,
         )
 
-    def _process(self, response: str, effort: Effort) -> tuple[list[dict[str, Any]], str | None]:
+    def _process(self, response: str) -> tuple[list[dict[str, Any]], str | None]:
         thought, cmd = split_trailing_json(response)
         if thought:
             _logger.info(f"💭 {thought}")
@@ -246,7 +251,9 @@ class HierarchicalExecutive(Executive):
             match cmd:
                 case {"type": "task", "description": description}:
                     _logger.info(f"➡️ Delegating task: {description}")
-                    result = self._inferior.act(description, effort).strip()
+                    # We always invoke the underlying executive with a low effort setting, because we perform
+                    # all of the planning and the underlying agent only needs to do simple atomic tasks.
+                    result = self._inferior.act(description, Effort.LOW).strip()
                     _logger.info(f"🏆 Delegation result: {result}")
                     out = []
                     if result:
@@ -322,7 +329,6 @@ def _test() -> None:
     ui = ui_io.make_controller()
     inferior = UiTars7bExecutive(
         ui=ui,
-        state_dir=state_dir,
         client=OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY")),
     )
     exe = HierarchicalExecutive(

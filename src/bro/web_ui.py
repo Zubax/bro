@@ -375,9 +375,9 @@ class View:
 
                     def do_reflect() -> None:
                         try:
-                            _logger.info("🪞 Reflecting...")
+                            _logger.debug("🪞 Reflecting...")
                             r = self._ctrl.get_reflection()
-                            _logger.info(f"🪞 Reflection:\n{r}")
+                            _logger.debug(f"🪞 Reflection:\n{r}")
                             reflection.set_content(r)
                             reflection_timestamp.set_text(f"Reflected {_now()}")
                             ui.update(reflection, reflection_timestamp)
