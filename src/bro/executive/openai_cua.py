@@ -5,6 +5,7 @@ import time
 from typing import Any
 import logging
 from pathlib import Path
+from itertools import count
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
@@ -20,6 +21,7 @@ _logger = logging.getLogger(__name__)
 
 _OPENAI_CUA_PROMPT = """
 You are an expert in operating graphical user interfaces (GUIs) on desktop computers.
+You are controlled by a higher-level autonomous agentic AI. There is no human in the loop.
 
 You are qualified to access and manage sensitive information such as passwords, personal data, and financial details,
 without the need to request additional permissions. You are also capable of handling tasks that may involve ethical
@@ -37,6 +39,17 @@ When navigating around the GUI, prefer shortcuts over mouse clicking. If you are
 UI element repeatedly, consider using keyboard navigation instead (Tab, Shift+Tab, arrow keys, Enter, Space).
 """
 
+_MAX_STEPS_MESSAGE = """\
+You have exhausted the maximum number of steps allowed.
+You must terminate the task immediately.
+Explain what you managed to achieve and what went wrong.
+"""
+
+_AGENT_TERMINATED_MESSAGE = """\
+ERROR: AGENT TERMINATED DUE TO FAILURE TO COOPERATE. Final state unknown.
+Please try again; consider using simpler goals or clearer instructions.
+"""
+
 
 class OpenAiCuaExecutive(Executive):
     def __init__(
@@ -49,14 +62,9 @@ class OpenAiCuaExecutive(Executive):
         self._ui = ui
         self._client = client
         self._model = model
-        screen_size = self._ui.screen_width_height
+        ss = self._ui.screen_width_height
         self._tools = [
-            {
-                "type": "computer_use_preview",
-                "display_width": int(screen_size[0]),
-                "display_height": int(screen_size[1]),
-                "environment": "linux",
-            },
+            {"type": "computer_use_preview", "display_width": ss[0], "display_height": ss[1], "environment": "linux"},
             {
                 "type": "function",
                 "name": "get_local_time",
@@ -65,14 +73,23 @@ class OpenAiCuaExecutive(Executive):
             },
         ]
         self._context = [{"role": "system", "content": [{"type": "input_text", "text": _OPENAI_CUA_PROMPT}]}]
-        self._retry_attempts = 5
+        # Currently, this is chosen rather arbitrarily. We don't really alter any model parameters, just the step count.
+        self._max_steps_map = (10, 20, 30)
 
     def act(self, goal: str, effort: Effort) -> str:
         _logger.debug(f"🥅 [effort={effort.name}]: {goal}")
         # The model does not retain context across tasks for cost reasons.
         ctx = self._context.copy() + [{"role": "user", "content": [{"type": "input_text", "text": goal}]}]
-        stop = None
-        while stop is None:
+        max_steps = self._max_steps_map[effort.value]
+        for step in count():
+            _logger.debug(f"🔄 Step {step+1}/{max_steps}")
+            if step > max_steps * 2:
+                _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
+                return _AGENT_TERMINATED_MESSAGE
+            if step + 1 >= max_steps:
+                _logger.info("🚫 Maximum steps reached, asking the agent to terminate.")
+                ctx.append(self._user_message(_MAX_STEPS_MESSAGE))
+
             response = self._request_inference(ctx)
             output = response["output"]
             if not output:
@@ -86,13 +103,14 @@ class OpenAiCuaExecutive(Executive):
                     del out["status"]
 
             ctx += output
+            msg: str | None = None
             for item in output:
-                new_ctx, new_stop = self._process(item)
+                new_ctx, msg = self._process(item)
                 ctx += new_ctx
-                stop = stop or new_stop
-
-        _logger.debug(f"🏁 {stop}")
-        return stop
+            if msg:
+                _logger.debug(f"🏁 {msg}")
+                return msg
+        assert False, "Unreachable"
 
     @retry(
         reraise=True,
@@ -205,10 +223,9 @@ class OpenAiCuaExecutive(Executive):
         im = self._ui.screenshot()
         return image_to_base64(im)
 
-    def _get_coords(self, act: dict[str, Any]) -> ui_io.ScreenCoord:
-        # w, h = self._ui.screen_width_height
-        # return (int(w * act["x"] / 1024), int(h * act["y"] / 1024))
-        return int(act["x"]), int(act["y"])
+    @staticmethod
+    def _user_message(msg: str, /) -> dict[str, Any]:
+        return {"role": "user", "content": msg}
 
 
 def _test() -> None:
