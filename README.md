@@ -71,7 +71,7 @@ pip install -e .
 
 ### Command-line interface
 
-To invoke Bro, go like:
+To invoke Bro, export `OPENAI_API_KEY` and `OPENROUTER_API_KEY`, then go like:
 
 ```bash
 bro --exe gpt-5+ui-tars-7b
