@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from time import sleep
+from asyncio import Lock
 import tempfile
 from pathlib import Path
 
@@ -41,48 +41,52 @@ class SlackMessaging(Messaging):
 
         self.client.socket_mode_request_listeners.append(self._process_message)
         self.client.connect()
+        self.mutex = Lock()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
-        if req.type == "events_api":
-            response = SocketModeResponse(envelope_id=req.envelope_id)
-            client.send_socket_mode_response(response)
-            if req.payload["event"]["type"] == "message":
-                attachments = []
-                text = ""
-                channel_id = req.payload["event"]["channel"]
-                if req.payload["event"].get("text"):
-                    text = req.payload["event"]["text"]
-                    logging.info("Received a text message.")
-                if req.payload["event"].get("subtype") == "file_share":
-                    logging.info("Received one attachment or more.")
-                    files = req.payload["event"]["files"]
-                    for file in files:
-                        file_info = self.web_client.files_info(file=file["id"])
-                        file_download_url = file_info["file"]["url_private_download"]
-                        file_download_path = _download_attachment(url=file_download_url)
-                        if file_download_path:
-                            attachments.append(file_download_path)
-                logging.info("Received a total of %d attachments." % len(attachments))
-                self.unread_msgs.append(
-                    ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
-                )
+        with self.mutex:
+            if req.type == "events_api":
+                response = SocketModeResponse(envelope_id=req.envelope_id)
+                client.send_socket_mode_response(response)
+                if req.payload["event"]["type"] == "message":
+                    attachments = []
+                    text = ""
+                    channel_id = req.payload["event"]["channel"]
+                    if req.payload["event"].get("text"):
+                        text = req.payload["event"]["text"]
+                        logging.info("Received a text message.")
+                    if req.payload["event"].get("subtype") == "file_share":
+                        logging.info("Received one attachment or more.")
+                        files = req.payload["event"]["files"]
+                        for file in files:
+                            file_info = self.web_client.files_info(file=file["id"])
+                            file_download_url = file_info["file"]["url_private_download"]
+                            file_download_path = _download_attachment(url=file_download_url)
+                            if file_download_path:
+                                attachments.append(file_download_path)
+                    logging.info("Received a total of %d attachments." % len(attachments))
+                    self.unread_msgs.append(
+                        ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
+                    )
 
     def list_channels(self) -> list[Channel] | SlackResponse:
-        response: SlackResponse = self.web_client.conversations_list(
-            types="public_channel, private_channel", exclude_archived=True
-        )
-        if response["ok"]:
-            return list(map(lambda c: Channel(c["name"]), response["channels"]))
-        return response
+        with self.mutex:
+            response: SlackResponse = self.web_client.conversations_list(
+                types="public_channel, private_channel", exclude_archived=True
+            )
+            if response["ok"]:
+                return list(map(lambda c: Channel(c["name"]), response["channels"]))
+            return response
 
     def poll(self) -> list[ReceivedMessage]:
-        last_unread_msgs = self.unread_msgs
-        self.unread_msgs = []
-        # add mutex everywhere
-        return last_unread_msgs
+        with self.mutex:
+            last_unread_msgs = self.unread_msgs
+            self.unread_msgs = []
+            return last_unread_msgs
 
     def send(self, message: Message, via: Channel) -> None:
-        self.web_client.chat_postMessage(
-            channel=via.name,
-            text=message.text,
-        )
+        with self.mutex:
+            self.web_client.chat_postMessage(
+                channel=via.name,
+                text=message.text,
+            )
