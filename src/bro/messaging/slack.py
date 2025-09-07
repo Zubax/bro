@@ -1,8 +1,9 @@
-import http
 import logging
 import os
 import sys
 from time import sleep
+import tempfile
+from pathlib import Path
 
 import requests
 from slack_sdk import WebClient
@@ -19,13 +20,13 @@ app_token = os.environ["SLACK_APP_TOKEN"]
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
-def _download_attachment(url: str) -> str:
-    attachment_folder = "/tmp"
-    file_location = ""
+def _download_attachment(url: str) -> Path | None:
+    attachment_folder = tempfile.mkdtemp()
+    file_location: Path | None = None
     try:
         response = requests.get(url)
-        file_location = attachment_folder + "/" + url.split("/")[-1]
-        open(file_location, "wb").write(response.content)
+        file_location = Path(attachment_folder) / url.split("/")[-1]
+        file_location.write_bytes(response.content)
         logging.info(f"File is saved at {file_location}")
     except:
         logging.error("Unexpected error: %s", sys.exc_info()[0])
@@ -59,7 +60,8 @@ class SlackMessaging(Messaging):
                         file_info = self.web_client.files_info(file=file["id"])
                         file_download_url = file_info["file"]["url_private_download"]
                         file_download_path = _download_attachment(url=file_download_url)
-                        attachments.append(file_download_path)
+                        if file_download_path:
+                            attachments.append(file_download_path)
                 logging.info("Received a total of %d attachments." % len(attachments))
                 self.unread_msgs.append(
                     ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
