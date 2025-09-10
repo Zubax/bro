@@ -3,15 +3,13 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass
 from pathlib import Path
 
-"""
-TODO: one important issue is how to represent conversation threads.
-"""
 
 @dataclass(frozen=True)
 class Channel:
     """
     Represents either a group channel or a direct message channel. For example, `#general`.
     """
+
     name: str
 
 
@@ -22,6 +20,7 @@ class Message:
     When receiving a message, its attachments need to be downloaded to the local filesystem with the file names
     preserved.
     """
+
     text: str
     attachments: list[Path]
 
@@ -33,6 +32,7 @@ class ReceivedMessage(Message):
 
 class MessagingError(Exception):
     """For now, there are no specialized exceptions, but we may add them later; e.g., recipient unknown, etc."""
+
     pass
 
 
@@ -43,7 +43,7 @@ class Messaging(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def poll(self) -> list[ReceivedMessage]:  # TODO: specify which messages are considered mew
+    def poll(self) -> list[ReceivedMessage]:
         """Non-blockingly check for new messages; return all at once."""
         raise NotImplementedError
 

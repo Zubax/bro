@@ -1,7 +1,6 @@
-import logging
 import os
-import sys
-from asyncio import Lock
+import logging
+from threading import Lock
 import tempfile
 from pathlib import Path
 
@@ -14,37 +13,31 @@ from slack_sdk.web import SlackResponse
 
 from bro.messaging import Messaging, Channel, ReceivedMessage, Message
 
-bot_token = os.environ["SLACK_BOT_TOKEN"]
-app_token = os.environ["SLACK_APP_TOKEN"]
+_logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+ATTACHMENT_FOLDER = tempfile.mkdtemp()
 
 
 def _download_attachment(url: str) -> Path | None:
-    attachment_folder = tempfile.mkdtemp()
-    file_location: Path | None = None
-    try:
-        response = requests.get(url)
-        file_location = Path(attachment_folder) / url.split("/")[-1]
-        file_location.write_bytes(response.content)
-        logging.info(f"File is saved at {file_location}")
-    except:
-        logging.error("Unexpected error: %s", sys.exc_info()[0])
+    response = requests.get(url)
+    file_location = Path(ATTACHMENT_FOLDER) / url.split("/")[-1]
+    file_location.write_bytes(response.content)
+    _logger.info(f"File is saved at {file_location}")
     return file_location
 
 
 class SlackMessaging(Messaging):
-    def __init__(self) -> None:
-        self.web_client = WebClient(token=bot_token)
-        self.client = SocketModeClient(app_token=app_token, web_client=self.web_client)
-        self.unread_msgs: list[ReceivedMessage] = []
+    def __init__(self, bot_token: str, app_token: str) -> None:
+        self._web_client = WebClient(token=bot_token)
+        self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
+        self._unread_msgs: list[ReceivedMessage] = []
 
-        self.client.socket_mode_request_listeners.append(self._process_message)
-        self.client.connect()
-        self.mutex = Lock()
+        self._client.socket_mode_request_listeners.append(self._process_message)
+        self._client.connect()
+        self._mutex = Lock()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
-        with self.mutex:
+        with self._mutex:
             if req.type == "events_api":
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
@@ -54,24 +47,31 @@ class SlackMessaging(Messaging):
                     channel_id = req.payload["event"]["channel"]
                     if req.payload["event"].get("text"):
                         text = req.payload["event"]["text"]
-                        logging.info("Received a text message.")
+                        _logger.info("Received a text message.")
                     if req.payload["event"].get("subtype") == "file_share":
-                        logging.info("Received one attachment or more.")
+                        _logger.info("Received one attachment or more.")
                         files = req.payload["event"]["files"]
                         for file in files:
-                            file_info = self.web_client.files_info(file=file["id"])
-                            file_download_url = file_info["file"]["url_private_download"]
-                            file_download_path = _download_attachment(url=file_download_url)
-                            if file_download_path:
-                                attachments.append(file_download_path)
-                    logging.info("Received a total of %d attachments." % len(attachments))
+                            try:
+                                file_info = self._web_client.files_info(file=file["id"])
+                                file_download_url = file_info["file"]["url_private_download"]
+                                file_download_path = _download_attachment(url=file_download_url)
+                                if file_download_path:
+                                    attachments.append(file_download_path)
+                            except Exception as ex:
+                                _logger.exception(f"Failed to save attachment from {file_download_url!r}: {ex}")
+                                return None
+                    _logger.info("Received a total of %d attachments." % len(attachments))
                     self.unread_msgs.append(
                         ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
                     )
+                    return None
+                return None
+            return None
 
     def list_channels(self) -> list[Channel] | SlackResponse:
-        with self.mutex:
-            response: SlackResponse = self.web_client.conversations_list(
+        with self._mutex:
+            response: SlackResponse = self._web_client.conversations_list(
                 types="public_channel, private_channel", exclude_archived=True
             )
             if response["ok"]:
@@ -79,14 +79,26 @@ class SlackMessaging(Messaging):
             return response
 
     def poll(self) -> list[ReceivedMessage]:
-        with self.mutex:
-            last_unread_msgs = self.unread_msgs
+        with self._mutex:
+            last_unread_msgs = self._unread_msgs
             self.unread_msgs = []
             return last_unread_msgs
 
     def send(self, message: Message, via: Channel) -> None:
-        with self.mutex:
-            self.web_client.chat_postMessage(
+        with self._mutex:
+            self._web_client.chat_postMessage(
                 channel=via.name,
                 text=message.text,
             )
+
+
+if __name__ == "__main__":
+    from bro import logs
+    from bro.brofiles import LOG_FILE, DB_FILE
+
+    logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
+    _logger.setLevel(logging.INFO)
+
+    messaging = SlackMessaging(os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"])
+    while True:
+        messaging.poll()
