@@ -27,6 +27,12 @@ def _download_attachment(url: str) -> Path | None:
 
 
 class SlackMessaging(Messaging):
+    """
+    SlackMessaging is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
+    This class needs BOT_TOKEN and APP_TOKEN variables.
+    Both can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token
+    """
+
     def __init__(self, bot_token: str, app_token: str) -> None:
         self._web_client = WebClient(token=bot_token)
         self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
