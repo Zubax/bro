@@ -456,6 +456,11 @@ class OpenAiGenericReasoner(Reasoner):
         for x in addendum:
             if x.get("type") == "reasoning" and "status" in x:
                 del x["status"]
+            if out.get("type") == "web_search_call":
+                try:
+                    del out["action"]["sources"]
+                except (TypeError, LookupError, ValueError):
+                    pass
 
         final: str | None = None
         for item in output:
