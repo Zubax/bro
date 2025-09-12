@@ -11,7 +11,7 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import SlackResponse
 
-from bro.messaging import Messaging, Channel, ReceivedMessage, Message
+from bro.messaging import Messaging, Channel, ReceivedMessage, Message, User
 
 _logger = logging.getLogger(__name__)
 
@@ -78,10 +78,17 @@ class SlackMessaging(Messaging):
     def list_channels(self) -> list[Channel] | SlackResponse:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(
-                types="public_channel, private_channel", exclude_archived=True
+                types="public_channel, private_channel, mpim", exclude_archived=True
             )
             if response["ok"]:
                 return list(map(lambda c: Channel(c["name"]), response["channels"]))
+            return response
+
+    def list_dms(self) -> list[User] | SlackResponse:
+        with self._mutex:
+            response: SlackResponse = self._web_client.conversations_list(types="im")
+            if response["ok"]:
+                return list(map(lambda c: User(id=c["user"]), response["channels"]))
             return response
 
     def poll(self) -> list[ReceivedMessage]:

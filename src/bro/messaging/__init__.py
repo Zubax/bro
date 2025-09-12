@@ -14,6 +14,15 @@ class Channel:
 
 
 @dataclass(frozen=True)
+class User:
+    """
+    Represents either a user or a direct message channel. For example, `@pavel.kirenko`.
+    """
+
+    id: str
+
+
+@dataclass(frozen=True)
 class Message:
     """
     Attachments point to local files, possibly temporary.
