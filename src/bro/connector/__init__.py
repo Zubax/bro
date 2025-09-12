@@ -48,7 +48,11 @@ class MessagingError(Exception):
 class Messaging(ABC):
     @abstractmethod
     def list_channels(self) -> list[Channel]:
-        """Both DM and groups."""
+        """Both group chats and channels."""
+        raise NotImplementedError
+
+    def list_dms(self) -> list[User]:
+        """Only direct messages"""
         raise NotImplementedError
 
     @abstractmethod
