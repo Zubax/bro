@@ -16,11 +16,6 @@ You are a Slack bot talking to multiple people in Slack. You get your response f
 """
 
 
-def _generate_response(msg: str) -> Message:
-    response = ""
-    return Message(text=response, attachments=[])
-
-
 class ConversationHandler:
     """
     This class handles receiving message from slack and replying
@@ -48,16 +43,23 @@ class ConversationHandler:
     def start(self):
         while True:
             msgs = self.connector.poll()
+            _logger.info(f"Polling...")
             if msgs:
                 for msg in msgs:
+                    _logger.info(msg)
                     self._context += [
                         {
                             "role": "user",
                             "content": [
-                                {"type": "input_text", "text": msg},
+                                {"type": "input_text", "text": msg.text},
                             ],
                         },
                     ]
+                    response = self._request_inference(self._context, tools=[], reasoning_effort="minimal")
+                    reflection = response["output"][-1]["content"][0]["text"]
+                    _logger.info(f"Received response: {reflection}")
+                    self.connector.send(Message(text=reflection, attachments=[]), msg.via)
+
             sleep(60)
         # TODO: attach file to ctx
 
@@ -69,13 +71,13 @@ class ConversationHandler:
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
     def _request_inference(
-        self,
-        ctx: list[dict[str, Any]],
-        /,
-        *,
-        model: str | None = None,
-        reasoning_effort: str | None = None,
-        tools: list[dict[str, Any]] | None = None,
+            self,
+            ctx: list[dict[str, Any]],
+            /,
+            *,
+            model: str | None = None,
+            reasoning_effort: str | None = None,
+            tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
@@ -92,6 +94,11 @@ class ConversationHandler:
 
 def demo():
     from bro.connector.slack import SlackConnector
+    from bro import logs
+    from bro.brofiles import LOG_FILE, DB_FILE
+
+    logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
+    _logger.setLevel(logging.DEBUG)
 
     OpenAI_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     connector = SlackConnector(bot_token=slack_bot_token, app_token=slack_app_token)
