@@ -28,7 +28,7 @@ def _download_attachment(url: str) -> Path | None:
 
 class SlackConnector(Messaging):
     """
-    SlackMessaging is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
+    SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
     This class needs BOT_TOKEN and APP_TOKEN variables.
     Both can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token
     """
@@ -68,7 +68,7 @@ class SlackConnector(Messaging):
                                 _logger.exception(f"Failed to save attachment from {file_download_url!r}: {ex}")
                                 return None
                     _logger.info("Received a total of %d attachments." % len(attachments))
-                    self.unread_msgs.append(
+                    self._unread_msgs.append(
                         ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
                     )
                     return None
@@ -94,7 +94,7 @@ class SlackConnector(Messaging):
     def poll(self) -> list[ReceivedMessage]:
         with self._mutex:
             last_unread_msgs = self._unread_msgs
-            self.unread_msgs = []
+            self._unread_msgs = []
             return last_unread_msgs
 
     def send(self, message: Message, via: Channel) -> None:

@@ -819,7 +819,7 @@ class OpenAiGenericReasoner(Reasoner):
                 return [], None
 
     def _screenshot(self) -> list[dict[str, Any]]:
-        # The short sleep helps avoiding further waits while the UI is still updating.
+        # The short sleep helps avoid further waits while the UI is still updating.
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()
