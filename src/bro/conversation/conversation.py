@@ -102,7 +102,7 @@ def demo():
 
     OpenAI_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     connector = SlackConnector(bot_token=slack_bot_token, app_token=slack_app_token)
-    conversation = ConversationHandler(connector, "User-defined prompt in prompt.txt", OpenAI_client)
+    conversation = ConversationHandler(connector, _OPENAI_CONVERSATION_PROMPT, OpenAI_client)
     conversation.start()
 
 
