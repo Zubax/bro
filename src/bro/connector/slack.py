@@ -16,6 +16,7 @@ from bro.connector import Messaging, Channel, ReceivedMessage, Message, User
 _logger = logging.getLogger(__name__)
 
 ATTACHMENT_FOLDER = tempfile.mkdtemp()
+BRO_USER_ID = "U09C3T1L631"
 
 
 def _download_attachment(url: str) -> Path | None:
@@ -47,7 +48,9 @@ class SlackConnector(Messaging):
             if req.type == "events_api":
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
-                if req.payload["event"]["type"] == "message":
+                if req.payload["event"]["user"] == BRO_USER_ID:
+                    _logger.info("Bro sent a text message.")
+                elif req.payload["event"]["type"] == "message":
                     attachments = []
                     text = ""
                     channel_id = req.payload["event"]["channel"]
