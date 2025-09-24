@@ -41,26 +41,28 @@ class ConversationHandler:
         return ctx
 
     def start(self):
+        interval = 60
         while True:
             msgs = self.connector.poll()
-            _logger.info(f"Polling...")
-            if msgs:
-                for msg in msgs:
-                    _logger.info(msg)
-                    self._context += [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "input_text", "text": msg.text},
-                            ],
-                        },
-                    ]
-                    response = self._request_inference(self._context, tools=[], reasoning_effort="minimal")
-                    reflection = response["output"][-1]["content"][0]["text"]
-                    _logger.info(f"Received response: {reflection}")
-                    self.connector.send(Message(text=reflection, attachments=[]), msg.via)
-
-            sleep(60)
+            _logger.info("Polling...")
+            for remaining in range(interval, 0, -10):
+                _logger.info(f"Next poll in {remaining} seconds")
+                if msgs:
+                    for msg in msgs:
+                        _logger.info(msg)
+                        self._context += [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "input_text", "text": msg.text},
+                                ],
+                            },
+                        ]
+                        response = self._request_inference(self._context, tools=[], reasoning_effort="minimal")
+                        reflection = response["output"][-1]["content"][0]["text"]
+                        _logger.info(f"Received response: {reflection}")
+                        self.connector.send(Message(text=reflection, attachments=[]), msg.via)
+                sleep(10)
         # TODO: attach file to ctx
 
     @retry(
