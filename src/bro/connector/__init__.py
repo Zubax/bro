@@ -45,7 +45,7 @@ class MessagingError(Exception):
     pass
 
 
-class Messaging(ABC):
+class Connecting(ABC):
     @abstractmethod
     def list_channels(self) -> list[Channel]:
         """Both group chats and channels."""

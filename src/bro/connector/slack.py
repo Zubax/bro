@@ -16,7 +16,7 @@ from bro.connector import Connecting, Channel, ReceivedMessage, Message, User
 _logger = logging.getLogger(__name__)
 
 ATTACHMENT_FOLDER = tempfile.mkdtemp()
-BRO_USER_ID = "U09C3T1L631"
+BRO_USER_ID = os.getenv("BRO_USER_ID")
 
 
 def _download_attachment(url: str) -> Path | None:
@@ -84,14 +84,14 @@ class SlackConnecting(Connecting):
                 types="public_channel, private_channel, mpim", exclude_archived=True
             )
             if response["ok"]:
-                return list(map(lambda c: Channel(c["name"]), response["channels"]))
+                return list(map(lambda c: Channel(c["id"]), response["channels"]))
             return response
 
-    def list_dms(self) -> list[User] | SlackResponse:
+    def list_users(self) -> list[User] | SlackResponse:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(types="im")
             if response["ok"]:
-                return list(map(lambda c: User(id=c["user"]), response["channels"]))
+                return list(map(lambda c: User(c["user"]), response["channels"]))
             return response
 
     def poll(self) -> list[ReceivedMessage]:
