@@ -11,7 +11,7 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import SlackResponse
 
-from bro.connector import Messaging, Channel, ReceivedMessage, Message, User
+from bro.connector import Connecting, Channel, ReceivedMessage, Message, User
 
 _logger = logging.getLogger(__name__)
 
@@ -27,9 +27,9 @@ def _download_attachment(url: str) -> Path | None:
     return file_location
 
 
-class SlackConnector(Messaging):
+class SlackConnecting(Connecting):
     """
-    SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
+    SlackConnecting is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
     This class needs BOT_TOKEN and APP_TOKEN variables.
     Both can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token
     """
@@ -115,6 +115,6 @@ if __name__ == "__main__":
     logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
     _logger.setLevel(logging.INFO)
 
-    connector = SlackConnector(os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"])
+    connector = SlackConnecting(os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"])
     while True:
         connector.poll()
