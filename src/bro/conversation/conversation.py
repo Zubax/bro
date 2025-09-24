@@ -6,7 +6,7 @@ from typing import Any
 import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-from bro.connector import Channel, Message, Messaging
+from bro.connector import Message, Connecting
 
 _logger = logging.getLogger(__name__)
 slack_bot_token, slack_app_token = os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"]
@@ -21,7 +21,7 @@ class ConversationHandler:
     This class handles receiving message from slack and replying
     """
 
-    def __init__(self, connector: Messaging, user_system_prompt: str, client: OpenAI):
+    def __init__(self, connector: Connecting, user_system_prompt: str, client: OpenAI):
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
@@ -95,7 +95,7 @@ class ConversationHandler:
 
 
 def demo():
-    from bro.connector.slack import SlackConnector
+    from bro.connector.slack import SlackConnecting
     from bro import logs
     from bro.brofiles import LOG_FILE, DB_FILE
 
@@ -103,7 +103,7 @@ def demo():
     _logger.setLevel(logging.DEBUG)
 
     OpenAI_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    connector = SlackConnector(bot_token=slack_bot_token, app_token=slack_app_token)
+    connector = SlackConnecting(bot_token=slack_bot_token, app_token=slack_app_token)
     conversation = ConversationHandler(connector, _OPENAI_CONVERSATION_PROMPT, OpenAI_client)
     conversation.start()
 
