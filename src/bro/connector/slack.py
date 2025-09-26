@@ -48,9 +48,10 @@ class SlackConnecting(Connecting):
             if req.type == "events_api":
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
-                if req.payload["event"]["user"] == BRO_USER_ID:
-                    _logger.info("Bro sent a text message.")
-                elif req.payload["event"]["type"] == "message":
+                if req.payload["event"]["type"] == "message":
+                    if req.payload["event"]["user"] == BRO_USER_ID:
+                        _logger.info("Bro sent a text message.")
+                        return None
                     attachments = []
                     text = ""
                     channel_id = req.payload["event"]["channel"]
