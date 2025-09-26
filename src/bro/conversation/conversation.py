@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 slack_bot_token, slack_app_token = os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"]
 
 _OPENAI_CONVERSATION_PROMPT = """
-You are a Slack bot talking to multiple people in Slack. You get your response from another reasoning model. 
+You are a bot talking to multiple people in a workspace. You get your response from calling another reasoning model. 
 """
 
 
