@@ -98,7 +98,7 @@ class SlackConnecting(Connecting):
         with self._mutex:
             last_unread_msgs = self._unread_msgs
             self._unread_msgs = []
-            return last_unread_msgs
+        return last_unread_msgs
 
     def send(self, message: Message, via: Channel) -> None:
         with self._mutex:
