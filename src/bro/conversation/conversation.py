@@ -41,28 +41,28 @@ class ConversationHandler:
         return ctx
 
     def start(self):
-        interval = 60
+        interval, step = 30, 10
         while True:
             msgs = self.connector.poll()
             _logger.info("Polling...")
-            for remaining in range(interval, 0, -10):
+            if msgs:
+                for msg in msgs:
+                    _logger.info(msg)
+                    self._context += [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": msg.text},
+                            ],
+                        },
+                    ]
+                    response = self._request_inference(self._context, tools=[], reasoning_effort="minimal")
+                    reflection = response["output"][-1]["content"][0]["text"]
+                    _logger.info(f"Received response: {reflection}")
+                    self.connector.send(Message(text=reflection, attachments=[]), msg.via)
+            for remaining in range(interval, 0, -step):
                 _logger.info(f"Next poll in {remaining} seconds")
-                if msgs:
-                    for msg in msgs:
-                        _logger.info(msg)
-                        self._context += [
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "input_text", "text": msg.text},
-                                ],
-                            },
-                        ]
-                        response = self._request_inference(self._context, tools=[], reasoning_effort="minimal")
-                        reflection = response["output"][-1]["content"][0]["text"]
-                        _logger.info(f"Received response: {reflection}")
-                        self.connector.send(Message(text=reflection, attachments=[]), msg.via)
-                sleep(10)
+                sleep(step)
         # TODO: attach file to ctx
 
     @retry(
