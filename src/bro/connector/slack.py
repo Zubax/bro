@@ -43,11 +43,17 @@ class SlackConnecting(Connecting):
         self._client.connect()
         self._mutex = Lock()
 
+        self._seen_events = set()
+
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
             if req.type == "events_api":
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
+                event_id = req.payload["event_id"]
+                if event_id in self._seen_events:
+                    return
+                self._seen_events.add(event_id)
                 if req.payload["event"]["type"] == "message":
                     if req.payload["event"]["user"] == BRO_USER_ID:
                         _logger.info("Bro sent a text message.")
@@ -57,7 +63,7 @@ class SlackConnecting(Connecting):
                     channel_id = req.payload["event"]["channel"]
                     if req.payload["event"].get("text"):
                         text = req.payload["event"]["text"]
-                        _logger.info("Received a text message.")
+                        _logger.info("Received a text message: %s", text)
                     if req.payload["event"].get("subtype") == "file_share":
                         _logger.info("Received one attachment or more.")
                         files = req.payload["event"]["files"]
