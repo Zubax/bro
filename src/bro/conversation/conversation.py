@@ -12,7 +12,9 @@ _logger = logging.getLogger(__name__)
 slack_bot_token, slack_app_token = os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"]
 
 _OPENAI_CONVERSATION_PROMPT = """
-You are a bot talking to multiple people in a workspace. You get your response from calling another reasoning model. 
+You are a bot talking to multiple people in a workspace. 
+When you need to do complex work, for example controlling the computer, use the reasoner tool. 
+To check on the status of the reasoner, use the legilimens tool.
 """
 
 
