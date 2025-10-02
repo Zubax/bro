@@ -16,12 +16,15 @@ from openai import OpenAI
 
 from bro import ui_io, logs, web_ui
 from bro.reasoner import Context
+from bro.reasoner.openai_generic import OpenAiGenericReasoner
 from bro.executive import Executive
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.executive.openai_cua import OpenAiCuaExecutive
-from bro.reasoner.openai_generic import OpenAiGenericReasoner
 from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
+from bro.connector.slack import SlackConnecting
+from bro.conversation.conversation import ConversationHandler, slack_bot_token, slack_app_token, \
+    OPENAI_CONVERSATION_PROMPT
 
 _logger = logging.getLogger(__name__)
 
@@ -78,6 +81,12 @@ def main() -> None:
         client=openai_client,
         user_system_prompt=user_system_prompt,
     )
+
+    # Start the conversation layer
+    connector = SlackConnecting(bot_token=slack_bot_token, app_token=slack_app_token)
+    conversation = ConversationHandler(connector, OPENAI_CONVERSATION_PROMPT, openai_client, reasoner=rsn)
+    conversation.start()
+    _logger.info(f"Starting the conversation layer")
 
     # Start the web UI
     web_ctrl = WebController(ui=ui, rsn=rsn)
