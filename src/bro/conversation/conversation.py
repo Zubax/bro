@@ -37,18 +37,19 @@ tools = [
             "additionalProperties": False
         },
         "strict": True
+    },
+    {
+        "type": "function",
+        "name": "get_reasoner_status",
+        "description": "Check the status of the task the reasoner is given.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False
+        },
+        "strict": True
     }
-    # {
-    #     "type": "function",
-    #     "name": "get_reasoner_status",
-    #     "description": "Provide a summary of the current internal state of the reasoner.",
-    #     "parameters": {
-    #         "type": "object",
-    #         "properties": {},
-    #         "additionalProperties": False
-    #     },
-    #     "strict": True
-    # }
+
 ]
 
 
@@ -98,18 +99,27 @@ class ConversationHandler:
                     for item in response["output"]:
                         if item["type"] == "function_call":
                             if item["name"] == "task_reasoner":
-                                _logger.info(json.loads(item["arguments"]))
-                                self._reasoner.task(Context(prompt=json.loads(item["arguments"])["prompt"], files=[]))
-                                reasoner_status = self._reasoner.legilimens()
+                                prompt = json.loads(item["arguments"])["prompt"]
+                                self._reasoner.task(Context(prompt=prompt, files=[]))
+                                reasoner_status = json.loads(self._reasoner.legilimens())
                                 self._context += [
                                     {
                                         "type": "function_call_output",
                                         "call_id": item["call_id"],
-                                        "output": json.dumps({
-                                            "status": reasoner_status
-                                        })
+                                        "output": reasoner_status["text"]
                                     },
                                 ]
+                                self.connector.send(Message(text=reasoner_status["text"], attachments=[]), msg.via)
+                            if item["name"] == "get_reasoner_status":
+                                reasoner_status = json.loads(self._reasoner.legilimens())
+                                self._context += [
+                                    {
+                                        "type": "function_call_output",
+                                        "call_id": item["call_id"],
+                                        "output": reasoner_status
+                                    },
+                                ]
+                                self.connector.send(Message(text=reasoner_status["text"], attachments=[]), msg.via)
                         if response["output"][-1].get("content"):
                             reflection = response["output"][-1]["content"][0]["text"]
                             _logger.info(f"Received response: {reflection}")
