@@ -17,7 +17,8 @@ slack_bot_token, slack_app_token = os.environ["SLACK_BOT_TOKEN"], os.environ["SL
 
 OPENAI_CONVERSATION_PROMPT = """
 You are a bot talking to multiple people in a workspace. 
-When you need to do complex work, for example controlling the computer, use the task reasoner tool. 
+When you need to do complex work, for example controlling the computer, use the task reasoner tool.
+When user asks for the reasoner status, use the get_reasoner_status tool.
 """
 
 tools = [
@@ -97,6 +98,8 @@ class ConversationHandler:
                     response = self._request_inference(self._context, tools=tools, reasoning_effort="minimal")
                     _logger.info(response["output"])
                     for item in response["output"]:
+                        item.pop("status", None)
+                        self._context.append(item)
                         if item["type"] == "function_call":
                             if item["name"] == "task_reasoner":
                                 prompt = json.loads(item["arguments"])["prompt"]
@@ -116,11 +119,11 @@ class ConversationHandler:
                                     {
                                         "type": "function_call_output",
                                         "call_id": item["call_id"],
-                                        "output": reasoner_status
+                                        "output": reasoner_status["text"]
                                     },
                                 ]
                                 self.connector.send(Message(text=reasoner_status["text"], attachments=[]), msg.via)
-                        if response["output"][-1].get("content"):
+                        elif response["output"][-1].get("content"):
                             reflection = response["output"][-1]["content"][0]["text"]
                             _logger.info(f"Received response: {reflection}")
                             self.connector.send(Message(text=reflection, attachments=[]), msg.via)
