@@ -79,6 +79,47 @@ class ConversationHandler:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
+    def _process(self, item: dict[str, Any]) -> tuple[
+        list[dict[str, Any]],
+        str | None,
+    ]:
+        _logger.debug(f"Processing item: {item}")
+        match item["type"]:
+            case "message":
+                msg = item["content"][0]["text"]
+                return [], msg
+
+            case "reasoning":
+                for x in item["summary"]:
+                    if x.get("type") == "summary_text":
+                        _logger.info(f"💭 {x['text']}")
+                return [], None
+
+            case "function_call":
+                name, args = item["name"], json.loads(item["arguments"])
+                result, msg = None, None
+                match name:
+                    case "task_reasoner":
+                        prompt = json.loads(item["arguments"])["prompt"]
+                        self._reasoner.task(Context(prompt=prompt, files=[]))
+                        result = self._reasoner.legilimens()
+                        msg = result["text"]
+
+                    case "get_reasoner_status":
+                        result = self._reasoner.legilimens()
+                        msg = result["text"]
+
+                    case _:
+                        result = f"ERROR: Unrecognized function call: {name!r}({args})"
+                        _logger.error(f"Unrecognized function call: {name!r}({args})")
+                return [
+                    {
+                        "type": "function_call_output",
+                        "call_id": item["call_id"],
+                        "output": json.dumps(result),
+                    }
+                ], msg
+
     def start(self):
         interval, step = 30, 10
         while True:
@@ -96,37 +137,21 @@ class ConversationHandler:
                         },
                     ]
                     response = self._request_inference(self._context, tools=tools, reasoning_effort="minimal")
-                    _logger.info(response["output"])
-                    for item in response["output"]:
-                        item.pop("status", None)
-                        self._context.append(item)
-                        if item["type"] == "function_call":
-                            if item["name"] == "task_reasoner":
-                                prompt = json.loads(item["arguments"])["prompt"]
-                                self._reasoner.task(Context(prompt=prompt, files=[]))
-                                reasoner_status = json.loads(self._reasoner.legilimens())
-                                self._context += [
-                                    {
-                                        "type": "function_call_output",
-                                        "call_id": item["call_id"],
-                                        "output": reasoner_status["text"]
-                                    },
-                                ]
-                                self.connector.send(Message(text=reasoner_status["text"], attachments=[]), msg.via)
-                            if item["name"] == "get_reasoner_status":
-                                reasoner_status = json.loads(self._reasoner.legilimens())
-                                self._context += [
-                                    {
-                                        "type": "function_call_output",
-                                        "call_id": item["call_id"],
-                                        "output": reasoner_status["text"]
-                                    },
-                                ]
-                                self.connector.send(Message(text=reasoner_status["text"], attachments=[]), msg.via)
-                        elif response["output"][-1].get("content"):
-                            reflection = response["output"][-1]["content"][0]["text"]
-                            _logger.info(f"Received response: {reflection}")
-                            self.connector.send(Message(text=reflection, attachments=[]), msg.via)
+                    output = response["output"]
+                    if not output:
+                        _logger.warning("No output from model; response: %s", response)
+
+                    for out in output:
+                        if out.get("type") == "reasoning":
+                            del out["status"]
+
+                    self._context += output
+                    for item in output:
+                        new_ctx, text = self._process(item)
+                        self._context += new_ctx
+                        if text:
+                            _logger.info(f"Received response: {text}")
+                            self.connector.send(Message(text=text, attachments=[]), msg.via)
 
             for remaining in range(interval, 0, -step):
                 _logger.info(f"Next poll in {remaining} seconds")
