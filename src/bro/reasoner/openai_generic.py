@@ -484,7 +484,7 @@ class OpenAiGenericReasoner(Reasoner):
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
-        return reflection
+        return json.loads(reflection)
 
     def snapshot(self) -> Any:
         return {
