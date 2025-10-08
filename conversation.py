@@ -1,5 +1,4 @@
 import json
-import os
 import logging
 from time import sleep
 from typing import Any
@@ -8,14 +7,16 @@ import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connecting
+from bro.connector import Message, Connector
 from bro.reasoner import Context
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
 
 _logger = logging.getLogger(__name__)
-slack_bot_token, slack_app_token = os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"]
 
-OPENAI_CONVERSATION_PROMPT = """
+# provide examples, better description
+# the bot doesn't need to respond to every message
+# however, if the bot notices that someone is mistaken, it should intervene to rectify
+_OPENAI_CONVERSATION_PROMPT = """
 You are a bot talking to multiple people in a workspace. 
 When you need to do complex work, for example controlling the computer, use the task reasoner tool.
 When user asks for the reasoner status, use the get_reasoner_status tool.
@@ -56,22 +57,23 @@ tools = [
 
 class ConversationHandler:
     """
-    This class handles receiving message from slack and replying
+    This class handles receiving messages and replying.
     """
 
-    def __init__(self, connector: Connecting, user_system_prompt: str, client: OpenAI, reasoner: OpenAiGenericReasoner):
+    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: OpenAiGenericReasoner):
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
+        # todo add better logging throughout6z
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx = [
             {
                 "role": "system",
                 "content": [
-                    {"type": "input_text", "text": OPENAI_CONVERSATION_PROMPT},
+                    {"type": "input_text", "text": _OPENAI_CONVERSATION_PROMPT},
                 ],
             },
         ]
@@ -120,9 +122,9 @@ class ConversationHandler:
                     }
                 ], msg
 
-    def start(self):
+    def start(self):  # do not block forever, do one iteration per invocation; name it spin() or something
         interval, step = 30, 10
-        while True:
+        while True:# todo remove
             msgs = self.connector.poll()
             _logger.info("Polling...")
             if msgs:
@@ -136,7 +138,7 @@ class ConversationHandler:
                             ],
                         },
                     ]
-                    response = self._request_inference(self._context, tools=tools, reasoning_effort="minimal")
+                    response = self._request_inference(self._context, reasoning_effort="minimal")
                     output = response["output"]
                     if not output:
                         _logger.warning("No output from model; response: %s", response)
@@ -167,12 +169,7 @@ class ConversationHandler:
     )
     def _request_inference(
             self,
-            ctx: list[dict[str, Any]],
-            /,
-            *,
-            model: str | None = None,
-            reasoning_effort: str | None = None,
-            tools: list[dict[str, Any]] | None = None,
+            ctx: list[dict[str, Any]]
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
