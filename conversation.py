@@ -1,19 +1,18 @@
 import json
 import logging
-from time import sleep
 from typing import Any
 
 import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connector
+from bro.connector import Message, Connector, ReceivedMessage, Channel
 from bro.reasoner import Context
 from bro.reasoner.openai_generic import OpenAiGenericReasoner
 
 _logger = logging.getLogger(__name__)
 
-# provide examples, better description
+# TODO provide examples, better description
 # the bot doesn't need to respond to every message
 # however, if the bot notices that someone is mistaken, it should intervene to rectify
 _OPENAI_CONVERSATION_PROMPT = """
@@ -54,19 +53,19 @@ tools = [
 
 ]
 
-
 class ConversationHandler:
     """
     This class handles receiving messages and replying.
     """
 
     def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: OpenAiGenericReasoner):
+        self._current_channel = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
-        # todo add better logging throughout6z
+        # todo add better logging throughout
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx = [
@@ -103,9 +102,9 @@ class ConversationHandler:
                 match name:
                     case "task_reasoner":
                         prompt = json.loads(item["arguments"])["prompt"]
+                        _logger.info(f"prompt for the reasoner {prompt}")
                         self._reasoner.task(Context(prompt=prompt, files=[]))
-                        result = self._reasoner.legilimens()
-                        msg = result["text"]
+                        msg = self._reasoner.change_busy_status()
 
                     case "get_reasoner_status":
                         result = self._reasoner.legilimens()
@@ -122,42 +121,55 @@ class ConversationHandler:
                     }
                 ], msg
 
-    def start(self):  # do not block forever, do one iteration per invocation; name it spin() or something
-        interval, step = 30, 10
-        while True:# todo remove
-            msgs = self.connector.poll()
-            _logger.info("Polling...")
-            if msgs:
-                for msg in msgs:
-                    _logger.info(msg)
-                    self._context += [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "input_text", "text": msg.text},
-                            ],
-                        },
-                    ]
-                    response = self._request_inference(self._context, reasoning_effort="minimal")
-                    output = response["output"]
-                    if not output:
-                        _logger.warning("No output from model; response: %s", response)
+    def spin(self) -> str | None:
+        result = None
+        msgs = self.connector.poll()
+        _logger.info("Polling...")
+        while self._reasoner.busy:
+            result = self._reasoner.step()
+            if result is not None:
+                _logger.warning("🏁 " * 40 + "\n" + result)
+                self._reasoner.change_busy_status()
+                self.connector.send(Message(text=result, attachments=[]), via=self._current_channel)
 
-                    for out in output:
-                        if out.get("type") == "reasoning":
-                            del out["status"]
+                self._context += [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": result},
+                        ],
+                    },
+                ]
 
-                    self._context += output
-                    for item in output:
-                        new_ctx, text = self._process(item)
-                        self._context += new_ctx
-                        if text:
-                            _logger.info(f"Received response: {text}")
-                            self.connector.send(Message(text=text, attachments=[]), msg.via)
+        if msgs:
+            for msg in msgs:
+                _logger.info(msg)
+                self._context += [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": msg.text},
+                        ],
+                    },
+                ]
+                self._current_channel = msg.via
+                response = self._request_inference(self._context)
+                output = response["output"]
+                if not output:
+                    _logger.warning("No output from model; response: %s", response)
 
-            for remaining in range(interval, 0, -step):
-                _logger.info(f"Next poll in {remaining} seconds")
-                sleep(step)
+                for out in output:
+                    if out.get("type") == "reasoning":
+                        del out["status"]
+
+                self._context += output
+                for item in output:
+                    new_ctx, text = self._process(item)
+                    self._context += new_ctx
+                    if text:
+                        _logger.info(f"Received response: {text}")
+                        self.connector.send(Message(text=text, attachments=[]), msg.via)
+        return result
         # TODO: attach file to ctx
 
     @retry(
