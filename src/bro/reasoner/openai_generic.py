@@ -399,6 +399,7 @@ class OpenAiGenericReasoner(Reasoner):
         reasoning_effort: str = "high",
         service_tier: str = "default",
     ) -> None:
+        self.busy = False
         self._exe = executive
         self._ui = ui
         self._client = client
@@ -442,6 +443,14 @@ class OpenAiGenericReasoner(Reasoner):
                 )
         self._context += self._screenshot()  # Add the initial screenshot
 
+    def change_busy_status(self) -> str:
+        msg = "The reasoner is free. Ready to take new task."
+        self.busy ^= True
+        if self.busy:
+            msg = f"Processing user-assigned task. The reasoner is now busy."
+        _logger.debug(msg)
+        return msg
+
     def step(self) -> str | None:
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
         self._step_number += 1
@@ -479,7 +488,7 @@ class OpenAiGenericReasoner(Reasoner):
         ctx = (
             prune_context_text_only(self._context)
             + self._screenshot()
-            + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+            + [{"role": "user", "content":  [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         )
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]
