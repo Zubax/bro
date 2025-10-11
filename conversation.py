@@ -6,9 +6,8 @@ import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connector, ReceivedMessage, Channel
-from bro.reasoner import Context
-from bro.reasoner.openai_generic import OpenAiGenericReasoner
+from bro.connector import Message, Connector
+from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
 
 _logger = logging.getLogger(__name__)
 
@@ -53,12 +52,13 @@ tools = [
 
 ]
 
+
 class ConversationHandler:
     """
     This class handles receiving messages and replying.
     """
 
-    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: OpenAiGenericReasoner):
+    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner):
         self._current_channel = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
@@ -101,15 +101,14 @@ class ConversationHandler:
                 result, msg = None, None
                 match name:
                     case "task_reasoner":
+                        # TODO: add a way to interrupt the current task.
                         prompt = json.loads(item["arguments"])["prompt"]
-                        _logger.info(f"prompt for the reasoner {prompt}")
-                        self._reasoner.task(Context(prompt=prompt, files=[]))
-                        msg = self._reasoner.change_busy_status()
-
+                        msg = "Sorry the reasoner is busy. Please try again later."
+                        _logger.info(f"Reasoner prompt: {prompt}")
+                        if self._reasoner.task(Context(prompt=prompt, files=[])):
+                            msg = "Successfully tasked the reasoner."
                     case "get_reasoner_status":
-                        result = self._reasoner.legilimens()
-                        msg = result["text"]
-
+                        msg = self._reasoner.legilimens()
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
@@ -121,26 +120,25 @@ class ConversationHandler:
                     }
                 ], msg
 
-    def spin(self) -> str | None:
-        result = None
+    def spin(self) -> None:
         msgs = self.connector.poll()
         _logger.info("Polling...")
-        while self._reasoner.busy:
-            result = self._reasoner.step()
-            if result is not None:
-                _logger.warning("🏁 " * 40 + "\n" + result)
-                self._reasoner.change_busy_status()
-                self.connector.send(Message(text=result, attachments=[]), via=self._current_channel)
-
+        match self._reasoner.step():
+            case StepResultCompleted(message):
+                _logger.warning("🏁 " * 40 + "\n" + message)
+                self.connector.send(Message(text=message, attachments=[]), via=self._current_channel)
                 self._context += [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": result},
+                            {"type": "input_text", "text": message},
                         ],
                     },
                 ]
-
+            case StepResultInProgress():
+                pass
+            case StepResultNothingToDo():
+                pass
         if msgs:
             for msg in msgs:
                 _logger.info(msg)
@@ -169,7 +167,6 @@ class ConversationHandler:
                     if text:
                         _logger.info(f"Received response: {text}")
                         self.connector.send(Message(text=text, attachments=[]), msg.via)
-        return result
         # TODO: attach file to ctx
 
     @retry(
