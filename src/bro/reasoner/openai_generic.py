@@ -372,15 +372,13 @@ This function is safe for security-sensitive tasks.
 
 _LEGILIMENS_PROMPT = """\
 STOP WHAT YOU ARE DOING IMMEDIATELY AND RESPOND WITH A BRIEF REFLECTION FOR MONITORING PURPOSES.
-Your response should be JSON format including 2 fields text and flag:
-1. Text field is a very brief essay that answers the following questions concisely:
+Your response should be a very brief essay that answers the following questions concisely:
 What task are you working on?
 Have you been successful so far?
 Have you encountered any problems or obstacles?
 Have you made any noteworthy observations or encountered anything unusual or unexpected?
 Are you optimistic about your ability to complete the task?
 What are you planning to do next?
-2. Flag field has 3 possible values: busy, fail and success. It indicates whether the task is successfully finished
 Feel free to add dark humor if pertinent. Please do not include the questions in your response.
 """
 
@@ -494,7 +492,7 @@ class OpenAiGenericReasoner(Reasoner):
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection: str = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
-        return json.loads(reflection)
+        return reflection
 
     def snapshot(self) -> Any:
         return {
