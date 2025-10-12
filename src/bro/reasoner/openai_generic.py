@@ -55,6 +55,8 @@ or email applications if you need additional information to complete the task.
 
 You are allowed and encouraged to create new user accounts on websites and services if it helps you complete the task.
 
+You are NOT ALLOWED to use `use_computer` tool until attempts using other tools fail.
+
 You are NOT ALLOWED to use tools like `pdftotext` or `tesseract` or similar to extract text from images or PDFs
 because this leads to the loss of information. Instead, you can use the `read_files` function to add
 the contents of any file (text or binary) to your context.
