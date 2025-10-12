@@ -11,13 +11,18 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
-# TODO provide examples, better description
-# the bot doesn't need to respond to every message
-# however, if the bot notices that someone is mistaken, it should intervene to rectify
 _OPENAI_CONVERSATION_PROMPT = """
-You are a bot talking to multiple people in a workspace. 
-When you need to do complex work, for example controlling the computer, use the task reasoner tool.
-When user asks for the reasoner status, use the get_reasoner_status tool.
+You are an assistant working alongside an AI agent named Bro, responsible for handling complex reasoning tasks.
+Your role is to engage with users, and delegate more complex tasks (e.g., controlling the computer) to Bro.
+
+You have access to the following tools:
+- task_reasoner: a function that activates the Bro reasoner by providing a task summary.
+- get_reasoner_status: a function that checks whether Bro is ready to take on new tasks.
+
+You can pass tasks to Bro using the task_reasoner tool and update users about task progress using get_reasoner_status.
+
+Important:
+To users, there is no distinction between you and Bro. To them, you are Bro.
 """
 
 tools = [
@@ -151,6 +156,7 @@ class ConversationHandler:
                     },
                 ]
                 self._current_channel = msg.via
+                _logger.info(f"Current channel is set to {self._current_channel}")
                 response = self._request_inference(self._context)
                 output = response["output"]
                 if not output:
