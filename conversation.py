@@ -6,7 +6,7 @@ import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connector
+from bro.connector import Message, Connector, Task, Channel
 from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
 
 _logger = logging.getLogger(__name__)
@@ -42,8 +42,12 @@ tools = [
                     "type": "string",
                     "description": "describe what the user wants to do with the needed context."
                 },
+                "channel": {
+                    "type": "string",
+                    "description": "the channel id where the task comes from."
+                }
             },
-            "required": ["prompt"],
+            "required": ["prompt", "channel"],
             "additionalProperties": False
         },
         "strict": True
@@ -69,7 +73,7 @@ class ConversationHandler:
     """
 
     def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
-        self._current_channel = None
+        self._current_task = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
@@ -108,8 +112,11 @@ class ConversationHandler:
                     case "task_reasoner":
                         # TODO: add a way to interrupt the current task.
                         prompt = json.loads(item["arguments"])["prompt"]
+                        channel = json.loads(item["arguments"])["channel"]
                         _logger.info(f"Reasoner prompt: {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
+                            self._current_task = Task(summary=prompt, channel=Channel(name=channel))
+                            _logger.info(f"Current task is set. Updates will be sent to channel {channel}.")
                             msg = "Successfully tasked the reasoner."
                         else:
                             msg = "Sorry the reasoner is busy. Please try again later."
@@ -126,7 +133,7 @@ class ConversationHandler:
         match self._reasoner.step():
             case StepResultCompleted(message):
                 _logger.warning("🏁 " * 40 + "\n" + message)
-                self.connector.send(Message(text=message, attachments=[]), via=self._current_channel)
+                self.connector.send(Message(text=message, attachments=[]), via=self._current_task.channel)
                 self._context += [
                     {
                         "role": "user",
@@ -155,8 +162,6 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                self._current_channel = msg.via
-                _logger.info(f"Current channel is set to {self._current_channel}")
                 response = self._request_inference(self._context)
                 output = response["output"]
                 if not output:
@@ -172,7 +177,7 @@ class ConversationHandler:
                     msg = self._process(item)
                     if msg:
                         _logger.info(f"Received response: {msg}")
-                        self.connector.send(Message(text=msg, attachments=[]), self._current_channel)
+                        self.connector.send(Message(text=msg, attachments=[]), self._current_task.channel)
                         if item.get("call_id"):
                             self._context += [
                                 {
