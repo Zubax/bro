@@ -11,29 +11,24 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
+# TODO Define a YAML message schema using plain strings: https://yaml-multiline.info/
 _OPENAI_CONVERSATION_PROMPT = """
-You are an assistant working alongside an AI agent named Bro, responsible for handling complex reasoning tasks.
-Your role is to engage with users and delegate more complex tasks (e.g., controlling the computer) to Bro.
+You are a confident and autonomous AI agent named Bro, designed to complete complex tasks using the reasoner.
+The reasoner can perform actions such as searching the web, reading remote files, and controlling the computer.
 
-Tools available:
-- task_reasoner: activates the Bro reasoner by providing a summary of the user's goal and necessary context.
-  If the reasoner is busy, this function returns False (no need to check status before calling).
-- get_reasoner_status: returns a summary of the reasoner’s task progress.
-
-Workflow:
-- Use task_reasoner to pass tasks to Bro.
-- Use get_reasoner_status to update users on task progress.
+You should handle all user interactions and simpler tasks independently, without asking for permission.
+Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
 Important:
-- To users, there is no distinction between you and Bro. To them, you are Bro.
-- When writing a prompt for the reasoner, do NOT provide step-by-step instructions; the goal alone is sufficient.
+- When writing a prompt for the reasoner, provide only the goal, not step-by-step instructions.
+- There is no need to check the reasoner’s status before calling task_reasoner.
 """
 
 tools = [
     {
         "type": "function",
         "name": "task_reasoner",
-        "description": "Give a new task to the reasoner with the needed context.",
+        "description": "Activate the Bro reasoner by providing a summary of the user's goal and necessary context",
         "parameters": {
             "type": "object",
             "properties": {
@@ -50,7 +45,7 @@ tools = [
     {
         "type": "function",
         "name": "get_reasoner_status",
-        "description": "Check the status of the task the reasoner is given.",
+        "description": "Update users on current task progress.",
         "parameters": {
             "type": "object",
             "properties": {},
@@ -64,10 +59,10 @@ tools = [
 
 class ConversationHandler:
     """
-    This class handles receiving messages and replying.
+    This class handles receiving messages, replying to them, and delegating tasks to the Reasoner.
     """
 
-    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner):
+    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
         self._current_channel = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
@@ -89,45 +84,35 @@ class ConversationHandler:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def _process(self, item: dict[str, Any]) -> tuple[
-        list[dict[str, Any]],
-        str | None,
-    ]:
+    def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
+        msg = None
         match item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
-                return [], msg
 
             case "reasoning":
                 for x in item["summary"]:
                     if x.get("type") == "summary_text":
                         _logger.info(f"💭 {x['text']}")
-                return [], None
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
-                result, msg = None, None
                 match name:
                     case "task_reasoner":
                         # TODO: add a way to interrupt the current task.
                         prompt = json.loads(item["arguments"])["prompt"]
-                        msg = "Sorry the reasoner is busy. Please try again later."
                         _logger.info(f"Reasoner prompt: {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             msg = "Successfully tasked the reasoner."
+                        else:
+                            msg = "Sorry the reasoner is busy. Please try again later."
                     case "get_reasoner_status":
                         msg = self._reasoner.legilimens()
                     case _:
-                        result = f"ERROR: Unrecognized function call: {name!r}({args})"
+                        msg = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
-                return [
-                    {
-                        "type": "function_call_output",
-                        "call_id": item["call_id"],
-                        "output": json.dumps(result),
-                    }
-                ], msg
+        return msg
 
     def spin(self) -> None:
         msgs = self.connector.poll()
@@ -155,6 +140,7 @@ class ConversationHandler:
                     {
                         "role": "user",
                         "content": [
+                            # TODO SPECIFY WHERE THE MESSAGE COMES FROM (use JSON?)
                             {"type": "input_text", "text": msg.text},
                         ],
                     },
@@ -172,11 +158,17 @@ class ConversationHandler:
 
                 self._context += output
                 for item in output:
-                    new_ctx, text = self._process(item)
-                    self._context += new_ctx
-                    if text:
-                        _logger.info(f"Received response: {text}")
-                        self.connector.send(Message(text=text, attachments=[]), msg.via)
+                    msg = self._process(item)
+                    if msg:
+                        self._context += [
+                            {
+                                "type": "function_call_output",
+                                "call_id": item["call_id"],
+                                "output": json.dumps(msg),
+                            }
+                        ]
+                        _logger.info(f"Received response: {msg}")
+                        self.connector.send(Message(text=msg, attachments=[]), self._current_channel)
         # TODO: attach file to ctx
 
     @retry(
