@@ -51,6 +51,8 @@ class SlackConnector(Connector):
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
                 event_id = req.payload["event_id"]
+                user_id = req.payload["event"]["user"]
+                _logger.info(f"Received event payload: {req.payload['event']}")
                 if event_id in self._seen_events:
                     return
                 self._seen_events.add(event_id)
@@ -78,8 +80,11 @@ class SlackConnector(Connector):
                                 _logger.exception(f"Failed to save attachment from {file_download_url!r}: {ex}")
                                 return None
                     _logger.info("Received a total of %d attachments." % len(attachments))
+                    user_info = self._web_client.users_info(user=user_id)["user"]
+                    user_name = user_info['name']
+                    _logger.info(f"User info: id={user_id}, name={user_name}")
                     self._unread_msgs.append(
-                        ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
+                        ReceivedMessage(via=Channel(name=channel_id), user=User(id=user_id, name=user_name), text=text, attachments=attachments)
                     )
                     return None
                 return None

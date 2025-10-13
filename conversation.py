@@ -11,13 +11,19 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
-# TODO Define a YAML message schema using plain strings: https://yaml-multiline.info/
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident and autonomous AI agent named Bro, designed to complete complex tasks using the reasoner.
 The reasoner can perform actions such as searching the web, reading remote files, and controlling the computer.
 
 You should handle all user interactions and simpler tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
+
+Received message schema (YAML):
+  via: <channel name>
+  user: 
+      id: <user id>
+      name: <user name> 
+  text: <user message>
 
 Important:
 - When writing a prompt for the reasoner, provide only the goal, not step-by-step instructions.
@@ -136,12 +142,16 @@ class ConversationHandler:
         if msgs:
             for msg in msgs:
                 _logger.info(msg)
+                input_payload = json.dumps({
+                    "via": msg.via.name,
+                    "user": {"id": msg.user.id, "name": msg.user.name},
+                    "text": msg.text
+                })
                 self._context += [
                     {
                         "role": "user",
                         "content": [
-                            # TODO SPECIFY WHERE THE MESSAGE COMES FROM (use JSON?)
-                            {"type": "input_text", "text": msg.text},
+                            {"type": "input_text", "text": input_payload},
                         ],
                     },
                 ]
@@ -158,18 +168,20 @@ class ConversationHandler:
 
                 self._context += output
                 for item in output:
+                    _logger.info(f"Received output item: {item}")
                     msg = self._process(item)
                     if msg:
-                        self._context += [
-                            {
-                                "type": "function_call_output",
-                                "call_id": item["call_id"],
-                                "output": json.dumps(msg),
-                            }
-                        ]
                         _logger.info(f"Received response: {msg}")
                         self.connector.send(Message(text=msg, attachments=[]), self._current_channel)
-        # TODO: attach file to ctx
+                        if item.get("call_id"):
+                            self._context += [
+                                {
+                                    "type": "function_call_output",
+                                    "call_id": item["call_id"],
+                                    "output": json.dumps(msg),
+                                }
+                            ]
+                # TODO: attach file to ctx
 
     @retry(
         reraise=True,

@@ -20,6 +20,7 @@ class User:
     """
 
     id: str
+    name: str
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class Message:
 @dataclass(frozen=True)
 class ReceivedMessage(Message):
     via: Channel
+    user: User
 
 
 class MessagingError(Exception):
