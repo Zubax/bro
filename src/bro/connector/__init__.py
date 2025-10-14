@@ -19,7 +19,6 @@ class User:
     Represents either a user or a direct message channel. For example, `@pavel.kirenko`.
     """
 
-    id: str
     name: str
 
 

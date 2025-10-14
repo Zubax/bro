@@ -84,7 +84,7 @@ class SlackConnector(Connector):
                     user_name = user_info['name']
                     _logger.info(f"User info: id={user_id}, name={user_name}")
                     self._unread_msgs.append(
-                        ReceivedMessage(via=Channel(name=channel_id), user=User(id=user_id, name=user_name), text=text, attachments=attachments)
+                        ReceivedMessage(via=Channel(name=channel_id), user=User(name=user_name), text=text, attachments=attachments)
                     )
                     return None
                 return None
