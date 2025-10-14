@@ -92,7 +92,6 @@ class ConversationHandler:
         self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
-        # todo add better logging throughout
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx = [
