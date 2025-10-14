@@ -1,29 +1,32 @@
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import openai
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connector, Task, Channel
+from bro.connector import Message, Connector, Channel
 from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
 
 _logger = logging.getLogger(__name__)
 
+# Add more detailed description of the reasoner capabilities and provide examples.
 _OPENAI_CONVERSATION_PROMPT = """
-You are a confident and autonomous AI agent named Bro, designed to complete complex tasks using the reasoner.
+You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool.
 The reasoner can perform actions such as searching the web, reading remote files, and controlling the computer.
 
-You should handle all user interactions and simpler tasks independently, without asking for permission.
+You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
-Received message schema (YAML):
-  via: <channel name>
-  user: 
-      id: <user id>
-      name: <user name> 
-  text: <user message>
+All messages follow the schema defined below:
+
+```
+via: <channel name>
+user: <user name> 
+text: <user message>
+```
 
 Important:
 - When writing a prompt for the reasoner, provide only the goal, not step-by-step instructions.
@@ -34,6 +37,7 @@ tools = [
     {
         "type": "function",
         "name": "task_reasoner",
+        # More detailed, provide examples.
         "description": "Activate the Bro reasoner by providing a summary of the user's goal and necessary context",
         "parameters": {
             "type": "object",
@@ -65,6 +69,15 @@ tools = [
     }
 
 ]
+
+
+@dataclass(frozen=True)
+class Task:
+    """
+    Remember the channel so that the bot could send updates about the task when it's finished.
+    """
+    channel: Channel
+    summary: str
 
 
 class ConversationHandler:
@@ -149,6 +162,7 @@ class ConversationHandler:
         if msgs:
             for msg in msgs:
                 _logger.info(msg)
+                # Do not send JSON, use YAML, or format the string manually.
                 input_payload = json.dumps({
                     "via": msg.via.name,
                     "user": {"id": msg.user.id, "name": msg.user.name},
