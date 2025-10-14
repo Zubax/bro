@@ -107,14 +107,13 @@ def main() -> None:
 
         # Main loop
         _logger.info("🚀 START")
-        interval, step = 30, 10
         while True:
+            # If we handled a message, proceed to the next spin immediately
+            # Otherwise sleep.
             conversation.spin()
             snap = rsn.snapshot()
             snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-            for remaining in range(interval, 0, -step):
-                _logger.info(f"Next poll in {remaining} seconds")
-                sleep(step)
+            sleep(10)
 
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
