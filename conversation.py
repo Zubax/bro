@@ -165,7 +165,7 @@ class ConversationHandler:
                 # Do not send JSON, use YAML, or format the string manually.
                 input_payload = json.dumps({
                     "via": msg.via.name,
-                    "user": {"id": msg.user.id, "name": msg.user.name},
+                    "user": {"name": msg.user.name},
                     "text": msg.text
                 })
                 self._context += [
