@@ -35,15 +35,6 @@ class Message:
 
 
 @dataclass(frozen=True)
-class Task:
-    """
-    Remember the channel so that the bot could send updates about the task when it's finished.
-    """
-    channel: Channel
-    summary: str
-
-
-@dataclass(frozen=True)
 class ReceivedMessage(Message):
     via: Channel
     user: User
