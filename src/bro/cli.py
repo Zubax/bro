@@ -24,7 +24,7 @@ from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.executive.openai_cua import OpenAiCuaExecutive
 from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
 from bro.connector.slack import SlackConnector
-from conversation import ConversationHandler
+from bro.conversation import ConversationHandler
 
 _logger = logging.getLogger(__name__)
 

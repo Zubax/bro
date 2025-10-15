@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import openai
+import yaml
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
@@ -106,9 +107,9 @@ class ConversationHandler:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def _process(self, item: dict[str, Any]) -> str | None:
+    def _process(self, item: dict[str, Any]) -> tuple[str, None] | tuple[None, str]:
         _logger.debug(f"Processing item: {item}")
-        msg = None
+        msg, text = None, None
         match item["type"]:
             case "message":
                 msg = item["content"][0]["text"]
@@ -129,15 +130,15 @@ class ConversationHandler:
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             _logger.info(f"Current task is set. Updates will be sent to channel {channel}.")
-                            msg = "Successfully tasked the reasoner."
+                            text = "Successfully tasked the reasoner."
                         else:
-                            msg = "Sorry the reasoner is busy. Please try again later."
+                            text = "Sorry the reasoner is busy. Please try again later."
                     case "get_reasoner_status":
                         msg = self._reasoner.legilimens()
                     case _:
-                        msg = f"ERROR: Unrecognized function call: {name!r}({args})"
+                        text = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
-        return msg
+        return msg, text
 
     def spin(self) -> None:
         msgs = self.connector.poll()
@@ -160,18 +161,17 @@ class ConversationHandler:
                 pass
         if msgs:
             for msg in msgs:
-                _logger.info(msg)
-                # Do not send JSON, use YAML, or format the string manually.
-                input_payload = json.dumps({
+                _logger.info(f"Processing text from user: {msg}")
+                input_data = yaml.dump({
                     "via": msg.via.name,
-                    "user": {"name": msg.user.name},
+                    "user": msg.user.name,
                     "text": msg.text
                 })
                 self._context += [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": input_payload},
+                            {"type": "input_text", "text": input_data},
                         ],
                     },
                 ]
@@ -187,18 +187,30 @@ class ConversationHandler:
                 self._context += output
                 for item in output:
                     _logger.info(f"Received output item: {item}")
-                    msg = self._process(item)
+                    msg, text = self._process(item)
                     if msg:
-                        _logger.info(f"Received response: {msg}")
-                        self.connector.send(Message(text=msg, attachments=[]), self._current_task.channel)
+                        _logger.info(f"Received message: {msg}.")
+                        try:
+                            msg_data = yaml.safe_load(msg)
+                            text, via = msg_data["text"], msg_data["via"]
+                        except (AttributeError, KeyError, TypeError, yaml.YAMLError) as e:
+                            _logger.error(f"Wrong message format. Error: {e}")
+                            return
+                        except Exception as e:
+                            _logger.error(f"Unknown error: {e}")
+                            return
                         if item.get("call_id"):
                             self._context += [
                                 {
                                     "type": "function_call_output",
                                     "call_id": item["call_id"],
-                                    "output": json.dumps(msg),
+                                    "output": msg,
                                 }
                             ]
+                        self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                    elif text:
+                        _logger.error(f"Received text: {text}.")
+                        self.connector.send(Message(text=text, attachments=[]), self._current_task.channel)
                 # TODO: attach file to ctx
 
     @retry(
