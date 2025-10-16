@@ -134,7 +134,7 @@ class OpenAiCuaExecutive(Executive):
     def _request_inference(self, ctx: list[dict[str, Any]], /) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
-        return self._client.responses.create(
+        return self._client.responses.create(  # type: ignore
             model=self._model,
             input=ctx,
             tools=self._tools,
