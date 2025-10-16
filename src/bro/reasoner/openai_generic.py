@@ -21,9 +21,7 @@ from bro import __version_info__
 
 _logger = logging.getLogger(__name__)
 
-
 _FILE_READ_SIZE_LIMIT = 1024 * 1024
-
 
 _OPENAI_REASONER_PROMPT = """
 You are a confident autonomous AI agent named Bro designed to autonomously complete complex tasks by reasoning,
@@ -555,7 +553,7 @@ class OpenAiGenericReasoner(Reasoner):
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
-        return self._client.responses.create(
+        return self._client.responses.create(  # type: ignore
             model=model or self._model,
             input=ctx,
             tools=tools if tools is not None else self._tools,
