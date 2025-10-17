@@ -108,11 +108,10 @@ def main() -> None:
         # Main loop
         _logger.info("🚀 START")
         while True:
-            # If we handled a message, proceed to the next spin immediately
-            # Otherwise sleep.
-            conversation.spin()
-            snap = rsn.snapshot()
-            snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+            if conversation.spin():
+                snap = rsn.snapshot()
+                snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+                continue
             sleep(10)
 
     except KeyboardInterrupt:

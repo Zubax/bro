@@ -13,11 +13,11 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
-# Add more detailed description of the reasoner capabilities and provide examples.
+# Need better examples.
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
-The reasoner is a computer-use agent that could run shell commands, python code, read local files, fetch remote URLs, 
-and manipulate the computer but only when the task cannot be completed using other functions.
+The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
+It can analyze data, search the Web, write and run programs, and do anything else you would expect a human user to do.
 
 An example of what the reasoner can do is open browser, giving summary of a document or web page.
 An example of what it cannot do is run periodic activities or actions that involve delays, such as schedule a task, 
@@ -28,10 +28,12 @@ Delegate only complex or high-level reasoning tasks to the reasoner when necessa
 
 All messages follow the schema defined below:
 
+# TODO: use a simpler YAML-like schema; a better idea below; parse manually:
 ```
-via: <channel name>
-user: <user name> 
-text: <user message>
+via: "<channel name>"
+user: "<user name>"
+---
+<user message verbatim>
 ```
 
 Important:
@@ -145,9 +147,11 @@ class ConversationHandler:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
         return msg, text
 
-    def spin(self) -> None:
+    def spin(self) -> bool:
         msgs = self.connector.poll()
         _logger.info("Polling...")
+        # TODO (architectural issue): The reasoner should be stepped from a separate thread,
+        # TODO such that we can still talk to the user(s) while the reasoner is busy.
         match self._reasoner.step():
             case StepResultCompleted(message):
                 _logger.warning("🏁 " * 40 + "\n" + message)
@@ -170,7 +174,7 @@ class ConversationHandler:
                 input_data = yaml.dump({
                     "via": msg.via.name,
                     "user": msg.user.name,
-                    "text": msg.text
+                    "text": msg.text  # TODO: use unquoted plain string literals! Construct YAML manually
                 })
                 self._context += [
                     {
@@ -196,7 +200,7 @@ class ConversationHandler:
                     if msg:
                         _logger.info(f"Received message: {msg}.")
                         try:
-                            msg_data = yaml.safe_load(msg)
+                            msg_data = yaml.safe_load(msg)  # TODO: YAML is too strict and this will break
                             text, via = msg_data["text"], msg_data["via"]
                         except (AttributeError, KeyError, TypeError, yaml.YAMLError) as e:
                             _logger.error(f"Wrong message format. Error: {e}")
@@ -216,7 +220,9 @@ class ConversationHandler:
                     elif text:
                         _logger.error(f"Received text: {text}.")
                         self.connector.send(Message(text=text, attachments=[]), self._current_task.channel)
-                # TODO: attach file to ctx
+            return True
+        return False
+        # TODO: attach file to ctx
 
     @retry(
         reraise=True,
