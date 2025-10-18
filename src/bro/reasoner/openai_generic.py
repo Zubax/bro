@@ -491,7 +491,7 @@ class OpenAiGenericReasoner(Reasoner):
         ctx = (
             prune_context_text_only(self._context)
             + self._screenshot()
-            + [{"role": "user", "content":  [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
+            + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         )
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
         reflection = response["output"][-1]["content"][0]["text"]

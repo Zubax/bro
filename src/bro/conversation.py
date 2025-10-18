@@ -26,9 +26,7 @@ or click then wait.
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
-All messages follow the schema defined below:
-
-# TODO: use a simpler YAML-like schema; a better idea below; parse manually:
+All messages MUST follow the schema defined below:
 ```
 via: "<channel name>"
 user: "<user name>"
@@ -52,30 +50,22 @@ tools = [
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "describe what the user wants to do with the needed context."
+                    "description": "describe what the user wants to do with the needed context.",
                 },
-                "channel": {
-                    "type": "string",
-                    "description": "the channel id where the task comes from."
-                }
+                "channel": {"type": "string", "description": "the channel id where the task comes from."},
             },
             "required": ["prompt", "channel"],
-            "additionalProperties": False
+            "additionalProperties": False,
         },
-        "strict": True
+        "strict": True,
     },
     {
         "type": "function",
         "name": "get_reasoner_status",
         "description": "Update users on current task progress.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": False
-        },
-        "strict": True
-    }
-
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        "strict": True,
+    },
 ]
 
 
@@ -84,6 +74,7 @@ class Task:
     """
     Remember the channel so that the bot could send updates about the task when it's finished.
     """
+
     channel: Channel
     summary: str
 
@@ -133,7 +124,7 @@ class ConversationHandler:
                         # TODO: add a way to interrupt the current task.
                         prompt = json.loads(item["arguments"])["prompt"]
                         channel = json.loads(item["arguments"])["channel"]
-                        _logger.info(f"Reasoner prompt: {prompt}")
+                        _logger.info(f"Reasoner prompt:  {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             _logger.info(f"Current task is set. Updates will be sent to channel {channel}.")
@@ -171,11 +162,12 @@ class ConversationHandler:
         if msgs:
             for msg in msgs:
                 _logger.info(f"Processing text from user: {msg}")
-                input_data = yaml.dump({
-                    "via": msg.via.name,
-                    "user": msg.user.name,
-                    "text": msg.text  # TODO: use unquoted plain string literals! Construct YAML manually
-                })
+                input_data = f"""
+                via: {msg.via.name} 
+                user: {msg.user.name}
+                ---
+                {msg.text}
+                """
                 self._context += [
                     {
                         "role": "user",
@@ -196,13 +188,14 @@ class ConversationHandler:
                 self._context += output
                 for item in output:
                     _logger.info(f"Received output item: {item}")
-                    msg, text = self._process(item)
-                    if msg:
-                        _logger.info(f"Received message: {msg}.")
+                    msg_data, text = self._process(item)
+                    if msg_data:
+                        _logger.info(f"Received message data: {msg_data}.")
                         try:
-                            msg_data = yaml.safe_load(msg)  # TODO: YAML is too strict and this will break
-                            text, via = msg_data["text"], msg_data["via"]
-                        except (AttributeError, KeyError, TypeError, yaml.YAMLError) as e:
+                            metadata, text = msg_data.split("\n---\n", 1)
+                            metadata = yaml.safe_load(metadata)
+                            via, user = metadata["via"], metadata["user"]
+                        except (AttributeError, KeyError, TypeError) as e:
                             _logger.error(f"Wrong message format. Error: {e}")
                             return
                         except Exception as e:
@@ -231,10 +224,7 @@ class ConversationHandler:
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(
-            self,
-            ctx: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(

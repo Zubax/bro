@@ -82,8 +82,7 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
     )
 
-    connector = SlackConnector(bot_token=os.environ["SLACK_BOT_TOKEN"],
-                               app_token=os.environ["SLACK_APP_TOKEN"])
+    connector = SlackConnector(bot_token=os.environ["SLACK_BOT_TOKEN"], app_token=os.environ["SLACK_APP_TOKEN"])
     conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 
     # Start the web UI
