@@ -2,6 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any
+import textwrap
 
 import openai
 import yaml
@@ -13,7 +14,7 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
-# Need better examples.
+# TODO Need better examples.
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -43,7 +44,7 @@ tools = [
     {
         "type": "function",
         "name": "task_reasoner",
-        # More detailed, provide examples.
+        # TODO More detailed, provide examples.
         "description": "Activate the Bro reasoner by providing a summary of the user's goal and necessary context",
         "parameters": {
             "type": "object",
@@ -77,6 +78,20 @@ class Task:
 
     channel: Channel
     summary: str
+
+
+def _parse_message(msg_data: str) -> tuple[str, str, str] | None:
+    try:
+        metadata, text = msg_data.split("\n---\n", 1)
+        metadata = yaml.safe_load(metadata)
+        via, user = metadata.get("via"), metadata.get("user")
+    except (AttributeError, KeyError, TypeError) as e:
+        _logger.error(f"Wrong message format. Error: {e}")
+        return
+    except Exception as e:
+        _logger.error(f"Unknown error: {e}")
+        return
+    return via, user, text
 
 
 class ConversationHandler:
@@ -162,12 +177,14 @@ class ConversationHandler:
         if msgs:
             for msg in msgs:
                 _logger.info(f"Processing text from user: {msg}")
-                input_data = f"""
-                via: {msg.via.name} 
-                user: {msg.user.name}
+                input_data = textwrap.dedent(
+                    f"""
+                via: {msg.via.name!r} 
+                user: {msg.user.name!r}
                 ---
                 {msg.text}
                 """
+                )
                 self._context += [
                     {
                         "role": "user",
@@ -190,28 +207,24 @@ class ConversationHandler:
                     _logger.info(f"Received output item: {item}")
                     msg_data, text = self._process(item)
                     if msg_data:
-                        _logger.info(f"Received message data: {msg_data}.")
-                        try:
-                            metadata, text = msg_data.split("\n---\n", 1)
-                            metadata = yaml.safe_load(metadata)
-                            via, user = metadata["via"], metadata["user"]
-                        except (AttributeError, KeyError, TypeError) as e:
-                            _logger.error(f"Wrong message format. Error: {e}")
-                            return
-                        except Exception as e:
-                            _logger.error(f"Unknown error: {e}")
-                            return
+                        via, user, text = _parse_message(msg_data)
                         if item.get("call_id"):
                             self._context += [
                                 {
                                     "type": "function_call_output",
                                     "call_id": item["call_id"],
-                                    "output": msg,
+                                    "output": msg_data,
                                 }
                             ]
+                        _logger.info(f"Received message data: {msg_data}.")
+                        # TODO write tests for parsing function
                         self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
                     elif text:
-                        _logger.error(f"Received text: {text}.")
+                        """
+                        Message data is usually response from the LLM, while text is usually a brief progress update
+                        such as "successfully task the reasoner".
+                        """
+                        _logger.info(f"Received text: {text}.")
                         self.connector.send(Message(text=text, attachments=[]), self._current_task.channel)
             return True
         return False
