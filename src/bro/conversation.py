@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any
 import textwrap
@@ -121,7 +122,7 @@ class ConversationHandler:
         return ctx
 
     def _process(self, item: dict[str, Any]) -> tuple[str, None] | tuple[None, str]:
-        _logger.debug(f"Processing item: {item}")
+        _logger.info(f"Processing item from reasoner response: {item}")
         msg, text = None, None
         match item["type"]:
             case "message":
@@ -139,7 +140,7 @@ class ConversationHandler:
                         # TODO: add a way to interrupt the current task.
                         prompt = json.loads(item["arguments"])["prompt"]
                         channel = json.loads(item["arguments"])["channel"]
-                        _logger.info(f"Reasoner prompt:  {prompt}")
+                        _logger.info(f"Reasoner prompt: {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             _logger.info(f"Current task is set. Updates will be sent to channel {channel}.")
@@ -148,6 +149,8 @@ class ConversationHandler:
                             text = "Sorry the reasoner is busy. Please try again later."
                     case "get_reasoner_status":
                         msg = self._reasoner.legilimens()
+                        if msg is None:
+                            text = "No update from the reasoner. It's probably no task is running."
                     case _:
                         text = f"ERROR: Unrecognized function call: {name!r}({args})"
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
@@ -155,7 +158,7 @@ class ConversationHandler:
 
     def spin(self) -> bool:
         msgs = self.connector.poll()
-        _logger.info("Polling...")
+        _logger.info("Polling for user messages...")
         # TODO (architectural issue): The reasoner should be stepped from a separate thread,
         # TODO such that we can still talk to the user(s) while the reasoner is busy.
         match self._reasoner.step():
@@ -176,7 +179,7 @@ class ConversationHandler:
                 pass
         if msgs:
             for msg in msgs:
-                _logger.info(f"Processing text from user: {msg}")
+                _logger.info(f"Processing user message: {msg}")
                 input_data = textwrap.dedent(
                     f"""
                 via: {msg.via.name!r} 
@@ -193,38 +196,30 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                response = self._request_inference(self._context)
-                output = response["output"]
+                _logger.info(f"Added user message to context.")
+                reasoner_response = self._request_inference(self._context)
+                _logger.info("Generating response from the reasoner...")
+                output = reasoner_response["output"]
                 if not output:
-                    _logger.warning("No output from model; response: %s", response)
+                    _logger.warning("No output from model; response: %s", reasoner_response)
 
-                for out in output:
-                    if out.get("type") == "reasoning":
-                        del out["status"]
-
-                self._context += output
                 for item in output:
-                    _logger.info(f"Received output item: {item}")
+                    _logger.info(f"Received item from the reasoner: {item}")
+                    if item.get("type") == "reasoning":
+                        _logger.info("Ignoring reasoning message...")
+                        continue
                     msg_data, text = self._process(item)
+                    _logger.info(f"After processing, got msg_data: {msg_data}. Text: {text}")
                     if msg_data:
                         via, user, text = _parse_message(msg_data)
-                        if item.get("call_id"):
-                            self._context += [
-                                {
-                                    "type": "function_call_output",
-                                    "call_id": item["call_id"],
-                                    "output": msg_data,
-                                }
-                            ]
-                        _logger.info(f"Received message data: {msg_data}.")
-                        # TODO write tests for parsing function
+                        _logger.info(f"Message from the reasoner after parsing: {text}.")
                         self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
                     elif text:
                         """
                         Message data is usually response from the LLM, while text is usually a brief progress update
                         such as "successfully task the reasoner".
                         """
-                        _logger.info(f"Received text: {text}.")
+                        _logger.info(f"Received update status: {text}.")
                         self.connector.send(Message(text=text, attachments=[]), self._current_task.channel)
             return True
         return False
