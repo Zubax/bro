@@ -52,7 +52,7 @@ class SlackConnector(Connector):
                 client.send_socket_mode_response(response)
                 event_id = req.payload["event_id"]
                 user_id = req.payload["event"]["user"]
-                _logger.info(f"Received event payload: {req.payload['event']}")
+                _logger.debug(f"Received event payload: {req.payload['event']}")
                 if event_id in self._seen_events:
                     return
                 self._seen_events.add(event_id)
@@ -82,7 +82,7 @@ class SlackConnector(Connector):
                     _logger.info("Received a total of %d attachments." % len(attachments))
                     user_info = self._web_client.users_info(user=user_id)["user"]
                     user_name = user_info["name"]
-                    _logger.info(f"User info: id={user_id}, name={user_name}")
+                    _logger.debug(f"User info: id={user_id}, name={user_name}")
                     self._unread_msgs.append(
                         ReceivedMessage(
                             via=Channel(name=channel_id), user=User(name=user_name), text=text, attachments=attachments

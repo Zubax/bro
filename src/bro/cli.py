@@ -106,12 +106,13 @@ def main() -> None:
 
         # Main loop
         _logger.info("🚀 START")
+
         while True:
-            if conversation.spin():
-                snap = rsn.snapshot()
-                snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-                continue
-            sleep(10)
+            if not conversation.spin():
+                sleep(10)
+            # This will probably go into a separate thread; see https://github.com/Zubax/bro/issues/28
+            snap = rsn.snapshot()
+            snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
 
     except KeyboardInterrupt:
         _logger.info("🚫 Task aborted by user")
