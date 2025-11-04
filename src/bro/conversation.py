@@ -161,11 +161,20 @@ class ConversationHandler:
         match self._reasoner.step():
             case StepResultCompleted(message):
                 _logger.warning("🏁 " * 40 + "\n" + message)
+                input_data = textwrap.dedent(
+                    f"""\
+                via: {self._current_task.channel!r} 
+                user: Bro
+                ---
+                {message}
+                """
+                )
+
                 self._context += [
                     {
                         "type": "message",
                         "role": "user",
-                        "content": f"via: {self._current_task.channel} user: Bro --- {message}",
+                        "content": input_data,
                     }
                 ]
                 self._current_task = None
