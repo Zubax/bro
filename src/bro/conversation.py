@@ -1,4 +1,5 @@
 import json
+import threading
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -9,7 +10,7 @@ import yaml
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro.connector import Message, Connector, Channel
+from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
 
 _logger = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ user: "<user name>"
 ---
 <user message verbatim>
 ```
+
+When you received a message from user "Bro Reasoner", compose a message with the exact content then send to the user.
 
 Important:
 - When writing a prompt for the reasoner, provide only the goal, not step-by-step instructions.
@@ -100,6 +103,8 @@ class ConversationHandler:
     """
 
     def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
+        self._msgs = []
+        self._stepping_thread = None
         self._current_task = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
@@ -123,22 +128,23 @@ class ConversationHandler:
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
         msg = None
-        match item["type"]:
-            case "message":
-                msg = item["content"][0]["text"]
+        match item:
+            case {"type": "message", "content": content}:
+                msg = content[0]["text"]
 
-            case "reasoning":
+            case {"type": "reasoning"}:
                 for x in item["summary"]:
                     if x.get("type") == "summary_text":
                         _logger.debug(f"💭 {x['text']}")
 
-            case "function_call":
-                name, args = item["name"], json.loads(item["arguments"])
+            case {"type": "function_call", "name": name, "arguments": arguments}:
+                args = json.loads(arguments)
                 _logger.debug(f"Received function call arguments: {args}")
                 result = None
                 match name:
                     case "task_reasoner":
                         # TODO: add a way to interrupt the current task.
+                        _logger.info("Tasking the reasoner...")
                         prompt, channel = args["prompt"], args["channel"]
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
@@ -146,7 +152,17 @@ class ConversationHandler:
                             result = "Successfully tasked the reasoner."
 
                     case "get_reasoner_status":
+                        _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
+
+                        self._msgs.append(
+                            ReceivedMessage(
+                                via=Channel(name=self._current_task.channel),
+                                user=User(name="Bro"),
+                                text=result,
+                                attachments=[],
+                            )
+                        )
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
@@ -156,20 +172,19 @@ class ConversationHandler:
         return msg
 
     def spin(self) -> bool:
-        msgs = self.connector.poll()
+        self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
         match self._reasoner.step():
             case StepResultCompleted(message):
                 _logger.warning("🏁 " * 40 + "\n" + message)
                 input_data = textwrap.dedent(
                     f"""\
-                via: {self._current_task.channel!r} 
-                user: Bro
+                via:  
+                user: Bro Reasoner
                 ---
                 {message}
                 """
                 )
-
                 self._context += [
                     {
                         "type": "message",
@@ -187,9 +202,6 @@ class ConversationHandler:
 
                 for item in output:
                     _logger.debug(f"Received item from the conversation model: {item}")
-                    if item.get("type") == "reasoning":
-                        _logger.debug("Ignoring reasoning message...")
-                        continue
                     msg_data = self._process(item)
                     _logger.debug(f"After processing, got msg_data: {msg_data}")
                     if msg_data:
@@ -203,8 +215,8 @@ class ConversationHandler:
                 pass
             case StepResultNothingToDo():
                 pass
-        if msgs:
-            for msg in msgs:
+        if self._msgs:
+            for msg in self._msgs:
                 _logger.debug(f"Processing user message: {msg}")
                 input_data = textwrap.dedent(
                     f"""\
