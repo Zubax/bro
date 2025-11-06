@@ -16,7 +16,6 @@ from bro.connector import Connector, Channel, ReceivedMessage, Message, User
 _logger = logging.getLogger(__name__)
 
 ATTACHMENT_FOLDER = tempfile.mkdtemp()
-BRO_USER_ID = os.getenv("BRO_USER_ID")
 
 
 def _download_attachment(url: str) -> Path | None:
@@ -30,19 +29,20 @@ def _download_attachment(url: str) -> Path | None:
 class SlackConnector(Connector):
     """
     SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
-    This class needs BOT_TOKEN and APP_TOKEN variables.
-    Both can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token
+    The tokens can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token.
     """
 
-    def __init__(self, bot_token: str, app_token: str) -> None:
+    def __init__(self, bot_token: str, app_token: str, bro_user_id: str) -> None:
         self._web_client = WebClient(token=bot_token)
         self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
         self._unread_msgs: list[ReceivedMessage] = []
+        self._bro_user_id: str = bro_user_id
 
         self._client.socket_mode_request_listeners.append(self._process_message)
         self._client.connect()
         self._mutex = Lock()
 
+        # TODO this is a hack to filter out duplicate events from the Slack API
         self._seen_events = set()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
@@ -57,8 +57,9 @@ class SlackConnector(Connector):
                     return
                 self._seen_events.add(event_id)
                 if req.payload["event"]["type"] == "message":
-                    if req.payload["event"]["user"] == BRO_USER_ID:
-                        _logger.info("Bro sent a text message.")
+                    if req.payload["event"]["user"] == self._bro_user_id:
+                        text = req.payload["event"]["text"]
+                        _logger.debug("Bro sent a text message: %s", text)
                         return None
                     attachments = []
                     text = ""
