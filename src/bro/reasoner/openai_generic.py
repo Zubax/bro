@@ -13,7 +13,7 @@ import openai
 from openai import OpenAI
 
 from bro.executive import Executive, Effort as ExecutiveEffort
-from bro.reasoner import Reasoner, Context
+from bro.reasoner import Reasoner, Context, StepResultNothingToDo, StepResultCompleted, StepResultInProgress, StepResult
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -397,6 +397,7 @@ class OpenAiGenericReasoner(Reasoner):
         reasoning_effort: str = "high",
         service_tier: str = "default",
     ) -> None:
+        self._busy = False
         self._exe = executive
         self._ui = ui
         self._client = client
@@ -424,7 +425,9 @@ class OpenAiGenericReasoner(Reasoner):
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def task(self, ctx: Context, /) -> None:
+    def task(self, ctx: Context, /) -> bool:
+        if self._busy:
+            return False
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -439,8 +442,12 @@ class OpenAiGenericReasoner(Reasoner):
                     }
                 )
         self._context += self._screenshot()  # Add the initial screenshot
+        self._busy = True
+        return True
 
-    def step(self) -> str | None:
+    def step(self) -> StepResult:
+        if not self._busy:
+            return StepResultNothingToDo()
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
         self._step_number += 1
 
@@ -471,9 +478,14 @@ class OpenAiGenericReasoner(Reasoner):
         # Atomic context update: only add new items once the step is fully processed.
         # Otherwise, we may end up in an inconsistent state if the processing fails halfway.
         self._context += addendum
-        return final
+        if final:
+            self._busy = False
+            return StepResultCompleted(final)
+        return StepResultInProgress()
 
-    def legilimens(self) -> str:
+    def legilimens(self) -> str | None:
+        if not self._busy:
+            return None
         ctx = (
             prune_context_text_only(self._context)
             + self._screenshot()
@@ -491,6 +503,7 @@ class OpenAiGenericReasoner(Reasoner):
             "user_system_prompt": self._user_system_prompt,
             "strategy": self._strategy,
             "context": self._context,
+            "busy": self._busy,
         }
 
     def restore(self, state: Any, /) -> None:
@@ -501,6 +514,7 @@ class OpenAiGenericReasoner(Reasoner):
                 "user_system_prompt": user_system_prompt,
                 "strategy": strategy,
                 "context": context,
+                "busy": busy,
             } if (
                 (isinstance(version, list) and len(version) >= 2)
                 and (version[0] == __version_info__[0] and version[1] == __version_info__[1])
@@ -508,6 +522,7 @@ class OpenAiGenericReasoner(Reasoner):
                 and isinstance(user_system_prompt, (str, type(None)))
                 and isinstance(strategy, (str, type(None)))
                 and (isinstance(context, list) and all(isinstance(x, dict) for x in context))
+                and isinstance(busy, bool)
             ):
                 _logger.info(f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}")
                 self._model = model
@@ -516,6 +531,7 @@ class OpenAiGenericReasoner(Reasoner):
                 self._context = (
                     self._build_system_prompt() + [x for x in context if x.get("role") != "system"] + self._screenshot()
                 )
+                self._busy = busy
             case _:
                 raise ValueError(f"Snapshot not acceptable: {list(state) if isinstance(state, dict) else type(state)}")
 
@@ -819,7 +835,7 @@ class OpenAiGenericReasoner(Reasoner):
                 return [], None
 
     def _screenshot(self) -> list[dict[str, Any]]:
-        # The short sleep helps avoiding further waits while the UI is still updating.
+        # The short sleep helps avoid further waits while the UI is still updating.
         # It must happen after the last action and immediately BEFORE the next screenshot.
         time.sleep(0.5)
         im = self._ui.screenshot()

@@ -11,7 +11,7 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import SlackResponse
 
-from bro.connector import Messaging, Channel, ReceivedMessage, Message, User
+from bro.connector import Connector, Channel, ReceivedMessage, Message, User
 
 _logger = logging.getLogger(__name__)
 
@@ -26,34 +26,47 @@ def _download_attachment(url: str) -> Path | None:
     return file_location
 
 
-class SlackConnector(Messaging):
+class SlackConnector(Connector):
     """
-    SlackMessaging is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
-    This class needs BOT_TOKEN and APP_TOKEN variables.
-    Both can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token
+    SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
+    The tokens can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token.
     """
 
-    def __init__(self, bot_token: str, app_token: str) -> None:
+    def __init__(self, bot_token: str, app_token: str, bro_user_id: str) -> None:
         self._web_client = WebClient(token=bot_token)
         self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
         self._unread_msgs: list[ReceivedMessage] = []
+        self._bro_user_id: str = bro_user_id
 
         self._client.socket_mode_request_listeners.append(self._process_message)
         self._client.connect()
         self._mutex = Lock()
+
+        # TODO this is a hack to filter out duplicate events from the Slack API
+        self._seen_events = set()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
             if req.type == "events_api":
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
+                event_id = req.payload["event_id"]
+                user_id = req.payload["event"]["user"]
+                _logger.debug(f"Received event payload: {req.payload['event']}")
+                if event_id in self._seen_events:
+                    return
+                self._seen_events.add(event_id)
                 if req.payload["event"]["type"] == "message":
+                    if req.payload["event"]["user"] == self._bro_user_id:
+                        text = req.payload["event"]["text"]
+                        _logger.debug("Bro sent a text message: %s", text)
+                        return None
                     attachments = []
                     text = ""
                     channel_id = req.payload["event"]["channel"]
                     if req.payload["event"].get("text"):
                         text = req.payload["event"]["text"]
-                        _logger.info("Received a text message.")
+                        _logger.info("Received a text message: %s", text)
                     if req.payload["event"].get("subtype") == "file_share":
                         _logger.info("Received one attachment or more.")
                         files = req.payload["event"]["files"]
@@ -68,8 +81,13 @@ class SlackConnector(Messaging):
                                 _logger.exception(f"Failed to save attachment from {file_download_url!r}: {ex}")
                                 return None
                     _logger.info("Received a total of %d attachments." % len(attachments))
-                    self.unread_msgs.append(
-                        ReceivedMessage(via=Channel(name=channel_id), text=text, attachments=attachments)
+                    user_info = self._web_client.users_info(user=user_id)["user"]
+                    user_name = user_info["name"]
+                    _logger.debug(f"User info: id={user_id}, name={user_name}")
+                    self._unread_msgs.append(
+                        ReceivedMessage(
+                            via=Channel(name=channel_id), user=User(name=user_name), text=text, attachments=attachments
+                        )
                     )
                     return None
                 return None
@@ -81,21 +99,21 @@ class SlackConnector(Messaging):
                 types="public_channel, private_channel, mpim", exclude_archived=True
             )
             if response["ok"]:
-                return list(map(lambda c: Channel(c["name"]), response["channels"]))
+                return list(map(lambda c: Channel(c["id"]), response["channels"]))
             return response
 
-    def list_dms(self) -> list[User] | SlackResponse:
+    def list_users(self) -> list[User] | SlackResponse:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(types="im")
             if response["ok"]:
-                return list(map(lambda c: User(id=c["user"]), response["channels"]))
+                return list(map(lambda c: User(c["user"]), response["channels"]))
             return response
 
     def poll(self) -> list[ReceivedMessage]:
         with self._mutex:
             last_unread_msgs = self._unread_msgs
-            self.unread_msgs = []
-            return last_unread_msgs
+            self._unread_msgs = []
+        return last_unread_msgs
 
     def send(self, message: Message, via: Channel) -> None:
         with self._mutex:

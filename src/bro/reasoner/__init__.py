@@ -11,6 +11,26 @@ class Context:
     files: list[Path]
 
 
+@dataclass(frozen=True)
+class StepResult:
+    pass
+
+
+@dataclass(frozen=True)
+class StepResultCompleted(StepResult):
+    message: str
+
+
+@dataclass(frozen=True)
+class StepResultInProgress(StepResult):
+    pass
+
+
+@dataclass(frozen=True)
+class StepResultNothingToDo(StepResult):
+    pass
+
+
 class Reasoner(ABC):
     """
     The Reasoner is responsible for planning and decision-making based on the given context,
@@ -18,14 +38,16 @@ class Reasoner(ABC):
     """
 
     @abstractmethod
-    def task(self, ctx: Context, /) -> None:
+    def task(self, ctx: Context, /) -> bool:
         """
         Commence a new task with the given context.
+        Returns True if the task is accepted,
+        False if another task is still running.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def step(self) -> str | None:
+    def step(self) -> StepResult:
         """
         Perform a single reasoning-action step.
         Returns a string result if the task is complete, or None if more steps are needed.
@@ -33,10 +55,11 @@ class Reasoner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def legilimens(self) -> str:
+    def legilimens(self) -> str | None:
         """
         Provide a summary of the current internal state.
         This action does not affect the context or state.
+        Returns None if there is no task at the moment.
         """
         raise NotImplementedError
 

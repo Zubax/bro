@@ -19,7 +19,7 @@ class User:
     Represents either a user or a direct message channel. For example, `@pavel.kirenko`.
     """
 
-    id: str
+    name: str
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,7 @@ class Message:
 @dataclass(frozen=True)
 class ReceivedMessage(Message):
     via: Channel
+    user: User
 
 
 class MessagingError(Exception):
@@ -45,7 +46,7 @@ class MessagingError(Exception):
     pass
 
 
-class Messaging(ABC):
+class Connector(ABC):
     @abstractmethod
     def list_channels(self) -> list[Channel]:
         """Both group chats and channels."""
