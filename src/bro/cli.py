@@ -82,11 +82,7 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
     )
 
-    connector = SlackConnector(
-        bot_token=os.environ["SLACK_BOT_TOKEN"],
-        app_token=os.environ["SLACK_APP_TOKEN"],
-        bro_user_id=os.environ["BRO_USER_ID"],
-    )
+    connector = SlackConnector(bot_token=os.environ["SLACK_BOT_TOKEN"], app_token=os.environ["SLACK_APP_TOKEN"])
     conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 
     # Start the web UI
@@ -117,9 +113,9 @@ def main() -> None:
             # This will probably go into a separate thread; see https://github.com/Zubax/bro/issues/28
             snap = rsn.snapshot()
             snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-    except Exception as e:
-        _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)
-        sys.exit(1)
+
+    except KeyboardInterrupt:
+        _logger.info("🚫 Task aborted by user")
 
 
 class WebController(web_ui.Controller):
