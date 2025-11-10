@@ -3,6 +3,7 @@ import logging
 from threading import Lock
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import requests
 from slack_sdk import WebClient
@@ -43,7 +44,7 @@ class SlackConnector(Connector):
         self._client.connect()
         self._mutex = Lock()
 
-        self._seen_events = set()
+        self._seen_events: set[Any] = set()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:

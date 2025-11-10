@@ -30,7 +30,7 @@ class Message:
     preserved.
     """
 
-    text: str
+    text: str | None
     attachments: list[Path]
 
 
