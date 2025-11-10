@@ -14,15 +14,14 @@ from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothi
 
 _logger = logging.getLogger(__name__)
 
-# TODO Need better examples.
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
 It can analyze data, search the Web, write and run programs, and do anything else you would expect a human user to do.
 
-An example of what the reasoner can do is open browser, giving summary of a document or web page.
-An example of what it cannot do is run periodic activities or actions that involve delays, such as schedule a task, 
-or click then wait.
+An example of what the reasoner can do is searching the web, compiling reports, entering data into bookkeeping 
+software, creating and running programs, installing software, creating user accounts, and so on. An example of what 
+it cannot do is run periodic activities or actions that involve delays, such as waiting for events.
 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
@@ -35,10 +34,12 @@ user: "<user name>"
 <user message verbatim>
 ```
 
-When you received a message from user "Bro Reasoner", compose a message with the exact content then send to the user.
+The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
+consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
+necessary.
 
 Important:
-- When writing a prompt for the reasoner, provide only the goal, not step-by-step instructions.
+- When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - There is no need to check the reasoner’s status before calling task_reasoner.
 """
 
@@ -104,7 +105,6 @@ class ConversationHandler:
 
     def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
         self._msgs: list[ReceivedMessage] = []
-        self._stepping_thread = None
         self._current_task: Task | None = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector

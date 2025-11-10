@@ -82,7 +82,11 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
     )
 
-    connector = SlackConnector(bot_token=os.environ["SLACK_BOT_TOKEN"], app_token=os.environ["SLACK_APP_TOKEN"])
+    connector = SlackConnector(
+        bot_token=os.environ["SLACK_BOT_TOKEN"],
+        app_token=os.environ["SLACK_APP_TOKEN"],
+        bro_user_id=os.environ["BRO_USER_ID"],
+    )
     conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 
     # Start the web UI
@@ -114,8 +118,9 @@ def main() -> None:
             snap = rsn.snapshot()
             snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
 
-    except KeyboardInterrupt:
-        _logger.info("🚫 Task aborted by user")
+    except Exception as e:
+        _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)
+        sys.exit(1)
 
 
 class WebController(web_ui.Controller):
