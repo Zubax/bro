@@ -103,7 +103,9 @@ class ConversationHandler:
     This class handles receiving messages, replying to them, and delegating tasks to the Reasoner.
     """
 
-    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
+    def __init__(
+        self, connector: Connector, user_system_prompt: str | None, client: OpenAI, reasoner: Reasoner
+    ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
         self._user_system_prompt = user_system_prompt

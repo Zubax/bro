@@ -30,7 +30,7 @@ class Controller(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_reflection(self) -> str:
+    def get_reflection(self) -> str | None:
         raise NotImplementedError
 
     @abstractmethod

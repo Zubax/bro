@@ -132,7 +132,7 @@ class WebController(web_ui.Controller):
     def get_screenshot(self) -> ui_io.Image.Image:
         return self._ui.screenshot()
 
-    def get_reflection(self) -> str:
+    def get_reflection(self) -> str | None:
         return self._rsn.legilimens()
 
     def get_db(self) -> sqlite3.Connection:
