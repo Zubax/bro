@@ -412,7 +412,7 @@ class OpenAiGenericReasoner(Reasoner):
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
-        ctx = [
+        ctx: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": [
@@ -492,7 +492,7 @@ class OpenAiGenericReasoner(Reasoner):
             + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         )
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
-        reflection = response["output"][-1]["content"][0]["text"]
+        reflection: str | None = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
@@ -585,7 +585,7 @@ class OpenAiGenericReasoner(Reasoner):
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
-                result = None
+                result: str | dict[str, Any] | None = None
                 final = None
                 context = []
                 match name:
