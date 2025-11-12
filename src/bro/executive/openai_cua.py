@@ -161,7 +161,7 @@ class OpenAiCuaExecutive(Executive):
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
-                result = None
+                result: Any = None
                 final = None
                 match name:
                     case "get_local_time":
@@ -183,7 +183,7 @@ class OpenAiCuaExecutive(Executive):
                     case {"type": "move", "x": int(x), "y": int(y)}:
                         self._ui.do(ui_io.MoveAction(coord=(x, y)))
                     case {"type": "click", "x": int(x), "y": int(y), **rest}:
-                        self._ui.do(ui_io.ClickAction(coord=(x, y), button=rest.get("button", "left")))
+                        self._ui.do(ui_io.ClickAction(coord=(x, y), button=str(rest.get("button", "left"))))
                     case {"type": "double_click", "x": int(x), "y": int(y)}:
                         self._ui.do(ui_io.ClickAction(coord=(x, y), button="left", count=2))
                     case {"type": "drag", "path": list(path)}:
@@ -191,9 +191,11 @@ class OpenAiCuaExecutive(Executive):
                     case {"type": "scroll", **rest} if "scroll_x" in rest or "scroll_y" in rest:
                         self._ui.do(
                             ui_io.ScrollAction(
-                                coord=(int(rest["x"]), int(rest["y"])) if "x" in rest and "y" in rest else None,
-                                scroll_x=int(rest.get("scroll_x", 0) or 0),
-                                scroll_y=int(rest.get("scroll_y", 0) or 0),
+                                coord=(
+                                    (int(str(rest["x"])), int(str(rest["y"]))) if "x" in rest and "y" in rest else None
+                                ),
+                                scroll_x=int(str(rest.get("scroll_x", 0)) or 0),
+                                scroll_y=int(str(rest.get("scroll_y", 0)) or 0),
                             )
                         )
                     case {"type": "type", "text": str(text)}:
