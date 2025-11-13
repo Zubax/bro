@@ -210,18 +210,20 @@ class ConversationHandler:
                 if not output:
                     _logger.warning("No output from conversation model; response: %s", conversation_response)
 
-                for item in output:
-                    _logger.debug(f"Received item from the conversation model: {item}")
-                    msg_data = self._process(item)
-                    _logger.debug(f"After processing, got msg_data: {msg_data}")
+                    for item in output:
+                        _logger.debug(f"Received item from the conversation model: {item}")
+                        msg_data = self._process(item)
+                        _logger.debug(f"After processing, got msg_data: {msg_data}")
 
-                    if msg_data:
-                        parsed_msg = _parse_message(msg_data)
-                        if parsed_msg:
-                            via, user, text = parsed_msg
-                            _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                            self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
-
+                        if msg_data:
+                            parsed_msg = _parse_message(msg_data)
+                            if parsed_msg:
+                                via, user, text = parsed_msg
+                                _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                            else:
+                                _logger.error(f"Message can't be parsed. Received data: {msg_data}")
+                                # TODO rerunning inference using Tenacity
                 _logger.info("Generating response from the reasoner...")
 
             case StepResultInProgress():

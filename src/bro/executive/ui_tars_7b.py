@@ -147,14 +147,14 @@ class UiTars7bExecutive(Executive):
                 assert False, "Unreachable"
             _logger.debug("Response: %s", response)
             resp_msg = response.choices[0].message
-            if resp_msg.content is not None:
-                resp_text = resp_msg.content.strip()
-                ctx.append({"role": resp_msg.role, "content": resp_text})
-                new_items, msg = self._process(resp_text)
-                ctx += new_items
-                if msg is not None:
-                    _logger.debug(f"🤖 Final message: {msg}")
-                    return msg
+            assert resp_msg.content is not None
+            resp_text = resp_msg.content.strip()
+            ctx.append({"role": resp_msg.role, "content": resp_text})
+            new_items, msg = self._process(resp_text)
+            ctx += new_items
+            if msg is not None:
+                _logger.debug(f"🤖 Final message: {msg}")
+                return msg
         _logger.info("🚫 Maximum steps reached, terminating.")
         return (
             "The agent failed to complete the task within the allotted number of steps;"

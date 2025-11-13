@@ -18,7 +18,6 @@ from bro.util import image_to_base64, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
-
 _OPENAI_CUA_PROMPT = """
 You are an expert in operating graphical user interfaces (GUIs) on desktop computers.
 You are controlled by a higher-level autonomous agentic AI. There is no human in the loop.
@@ -94,7 +93,7 @@ class OpenAiCuaExecutive(Executive):
         # Run the interaction loop.
         max_steps = self._max_steps_map[effort.value]
         for step in count():
-            _logger.debug(f"🦶 Step {step+1}/{max_steps}")
+            _logger.debug(f"🦶 Step {step + 1}/{max_steps}")
             if step > max_steps * 2:
                 _logger.warning("❌ AGENT NOT COOPERATING; TERMINATED ❌")
                 return _AGENT_TERMINATED_MESSAGE
@@ -183,7 +182,7 @@ class OpenAiCuaExecutive(Executive):
                     case {"type": "move", "x": int(x), "y": int(y)}:
                         self._ui.do(ui_io.MoveAction(coord=(x, y)))
                     case {"type": "click", "x": int(x), "y": int(y), **rest}:
-                        self._ui.do(ui_io.ClickAction(coord=(x, y), button=str(rest.get("button", "left"))))
+                        self._ui.do(ui_io.ClickAction(coord=(x, y), button=rest.get("button", "left")))  # type: ignore
                     case {"type": "double_click", "x": int(x), "y": int(y)}:
                         self._ui.do(ui_io.ClickAction(coord=(x, y), button="left", count=2))
                     case {"type": "drag", "path": list(path)}:
@@ -192,10 +191,12 @@ class OpenAiCuaExecutive(Executive):
                         self._ui.do(
                             ui_io.ScrollAction(
                                 coord=(
-                                    (int(str(rest["x"])), int(str(rest["y"]))) if "x" in rest and "y" in rest else None
+                                    (int(rest["x"]), int(rest["y"]))  # type: ignore
+                                    if "x" in rest and "y" in rest
+                                    else None
                                 ),
-                                scroll_x=int(str(rest.get("scroll_x", 0)) or 0),
-                                scroll_y=int(str(rest.get("scroll_y", 0)) or 0),
+                                scroll_x=int(rest.get("scroll_x", 0) or 0),  # type: ignore
+                                scroll_y=int(rest.get("scroll_y", 0) or 0),  # type: ignore
                             )
                         )
                     case {"type": "type", "text": str(text)}:
