@@ -117,6 +117,7 @@ def main() -> None:
             # This will probably go into a separate thread; see https://github.com/Zubax/bro/issues/28
             snap = rsn.snapshot()
             snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+
     except Exception as e:
         _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)
         sys.exit(1)
@@ -131,7 +132,7 @@ class WebController(web_ui.Controller):
     def get_screenshot(self) -> ui_io.Image.Image:
         return self._ui.screenshot()
 
-    def get_reflection(self) -> str:
+    def get_reflection(self) -> str | None:
         return self._rsn.legilimens()
 
     def get_db(self) -> sqlite3.Connection:

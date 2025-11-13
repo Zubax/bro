@@ -11,6 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from PIL import Image
 
 from nicegui import ui
+from nicegui.elements.date import Date
+from nicegui.elements.input import Input
+from nicegui.elements.menu import Menu
+from nicegui.elements.select import Select
 
 from bro import __version__
 from bro.util import get_upstream_ip, image_to_base64, format_exception
@@ -30,7 +34,7 @@ class Controller(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_reflection(self) -> str:
+    def get_reflection(self) -> str | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -172,6 +176,7 @@ class View:
         host: str | None = None,
         port: int | None = None,
     ) -> None:
+        auto_reload_recent: bool
         self._ctrl = ctrl
         host = host or HOST
         port = port or PORT
@@ -251,7 +256,7 @@ class View:
         scrolling to the bottom. For now I'm keeping this but it needs to be redone.
         """
 
-        def scroll_bottom():
+        def scroll_bottom() -> None:
             try:
                 # language=js
                 ui.run_javascript(
@@ -310,8 +315,9 @@ class View:
                 date_input = ui.input("Show logs from date range").props("readonly").classes("w-56")
                 date_input.on("click", lambda: date_menu.open())
                 with date_input:
+                    date_menu: Menu
                     with ui.menu() as date_menu:  # hidden until input is clicked
-                        date_picker = ui.date().props("range")
+                        date_picker: Date = ui.date().props("range")
                         date_picker.on_value_change(load)
                 date_picker.bind_value(
                     date_input,
@@ -320,9 +326,9 @@ class View:
                         {"from": s.split(" - ")[0], "to": s.split(" - ")[1]} if " - " in (s or "") else None
                     ),
                 )
-                level_select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
+                level_select: Select = ui.select(options=list(_LOG_LEVELS.keys()), value="INFO").classes("w-32")
                 level_select.on("update:model-value", lambda _: load())
-                wildcard = ui.input(
+                wildcard: Input = ui.input(
                     label="Name wildcard",
                     value="bro.*",
                     placeholder="* matches any, ? matches one",
@@ -359,7 +365,7 @@ class View:
 
                 with ui.column().classes("w-1/3 h-full"):
                     # Screenshot area
-                    def update_screenshot():
+                    def update_screenshot() -> None:
                         im = self._ctrl.get_screenshot()
                         src = "data:image/png;base64," + image_to_base64(im)
                         screenshot_thumb.props(f"src={src!r}")
@@ -377,6 +383,9 @@ class View:
                         try:
                             _logger.debug("🪞 Reflecting...")
                             r = self._ctrl.get_reflection()
+                            if r is None:
+                                _logger.debug(f"The reasoner has finished. Nothing to reflect.")
+                                return
                             _logger.debug(f"🪞 Reflection:\n{r}")
                             reflection.set_content(r)
                             reflection_timestamp.set_text(f"Reflected {_now()}")
@@ -388,7 +397,7 @@ class View:
                             )
                             ui.update(reflection)
 
-                    def update_reflection_begin():
+                    def update_reflection_begin() -> None:
                         reflection.set_content("*🪞 Reflecting...*")
                         reflection_timestamp.set_text(f"Started {_now()}")
                         nonlocal fut_reflection

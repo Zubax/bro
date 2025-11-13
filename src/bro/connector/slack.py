@@ -3,6 +3,7 @@ import logging
 from threading import Lock
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import requests
 from slack_sdk import WebClient
@@ -32,7 +33,7 @@ class SlackConnector(Connector):
     The tokens can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token.
     """
 
-    def __init__(self, bot_token: str, app_token: str, bro_user_id: str) -> None:
+    def __init__(self, *, bot_token: str, app_token: str, bro_user_id: str) -> None:
         self._web_client = WebClient(token=bot_token)
         self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
         self._unread_msgs: list[ReceivedMessage] = []
@@ -43,7 +44,7 @@ class SlackConnector(Connector):
         self._mutex = Lock()
 
         # TODO this is a hack to filter out duplicate events from the Slack API
-        self._seen_events = set()
+        self._seen_events: set[Any] = set()
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
@@ -130,6 +131,10 @@ if __name__ == "__main__":
     logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
     _logger.setLevel(logging.INFO)
 
-    connector = SlackConnector(os.environ["SLACK_BOT_TOKEN"], os.environ["SLACK_APP_TOKEN"])
+    connector = SlackConnector(
+        bot_token=os.environ["SLACK_BOT_TOKEN"],
+        app_token=os.environ["SLACK_APP_TOKEN"],
+        bro_user_id=os.environ["BRO_USER_ID"],
+    )
     while True:
         connector.poll()

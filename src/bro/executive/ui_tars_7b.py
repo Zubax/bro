@@ -18,7 +18,6 @@ from bro.util import image_to_base64, format_exception, get_local_time_llm
 
 _logger = logging.getLogger(__name__)
 
-
 _PROMPT_GUI_LOCATOR = """\
 You are an expert in GUI interfaces, and your task is to determine the position of the specified GUI elements
 on the provided screenshot. You will be given a screenshot of a GUI interface, and a description of the GUI element
@@ -113,9 +112,9 @@ class UiTars7bExecutive(Executive):
     def act(self, goal: str, effort: Effort) -> str:
         _ = effort  # This implementation currently does not use the mode
         scr_w, scr_h = self._ui.screen_width_height
-        ctx = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
+        ctx: list[Any] = self._context + [{"role": "user", "content": f"{goal}\n\nDO NOT DO ANYTHING ELSE"}]
         for step in range(self._max_steps):
-            _logger.debug(f"🤖 Step #{step+1}/{self._max_steps}...")
+            _logger.debug(f"🤖 Step #{step + 1}/{self._max_steps}...")
             ctx += [
                 {
                     "role": "user",
@@ -148,6 +147,7 @@ class UiTars7bExecutive(Executive):
                 assert False, "Unreachable"
             _logger.debug("Response: %s", response)
             resp_msg = response.choices[0].message
+            assert resp_msg.content is not None
             resp_text = resp_msg.content.strip()
             ctx.append({"role": resp_msg.role, "content": resp_text})
             new_items, msg = self._process(resp_text)
@@ -306,7 +306,7 @@ class _GuiLocator:
         return self._fuse(options, screenshot)
 
     def _once(self, description: str, screenshot_b64: str) -> str:
-        messages = [
+        messages: list[Any] = [
             {"role": "system", "content": _PROMPT_GUI_LOCATOR},
             {
                 "role": "user",
@@ -333,7 +333,7 @@ class _GuiLocator:
         else:
             assert False, "Unreachable"
         _logger.debug("Response: %s", response)
-        return response.choices[0].message.content.strip()
+        return str(response.choices[0].message.content).strip()
 
     def _fuse(self, proposals_raw: list[str], screenshot: Image.Image) -> ui_io.ScreenCoord | None:
         proposals = [pc for pc in (self._extract_coord(pr) for pr in proposals_raw) if pc is not None]

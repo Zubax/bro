@@ -21,9 +21,7 @@ from bro import __version_info__
 
 _logger = logging.getLogger(__name__)
 
-
 _FILE_READ_SIZE_LIMIT = 1024 * 1024
-
 
 _OPENAI_REASONER_PROMPT = """
 You are a confident autonomous AI agent named Bro designed to autonomously complete complex tasks by reasoning,
@@ -412,7 +410,7 @@ class OpenAiGenericReasoner(Reasoner):
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
-        ctx = [
+        ctx: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": [
@@ -492,7 +490,7 @@ class OpenAiGenericReasoner(Reasoner):
             + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         )
         response = self._request_inference(ctx, tools=[], reasoning_effort="minimal")
-        reflection = response["output"][-1]["content"][0]["text"]
+        reflection: str = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
@@ -553,7 +551,7 @@ class OpenAiGenericReasoner(Reasoner):
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
-        return self._client.responses.create(
+        return self._client.responses.create(  # type: ignore
             model=model or self._model,
             input=ctx,
             tools=tools if tools is not None else self._tools,
@@ -585,7 +583,7 @@ class OpenAiGenericReasoner(Reasoner):
 
             case "function_call":
                 name, args = item["name"], json.loads(item["arguments"])
-                result = None
+                result: str | dict[str, Any] | None = None
                 final = None
                 context = []
                 match name:

@@ -235,7 +235,7 @@ class HierarchicalExecutive(Executive):
     def _request_inference(self, ctx: list[dict[str, Any]]) -> Any:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
-        return self._client.chat.completions.create(
+        return self._client.chat.completions.create(  # type: ignore
             model=self._model,
             reasoning_effort=self._reasoning_effort_map[self._effort.value],
             messages=ctx,

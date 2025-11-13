@@ -1,0 +1,32 @@
+name: Test
+on:
+  - push
+  - pull_request
+
+jobs:
+  nox:
+    timeout-minutes: 240
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' ||
+      contains(github.event.head_commit.message, '#test') ||
+      github.ref == 'refs/heads/main'
+    name: Nox
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: recursive
+    # language=bash
+    - run: |
+        pip install nox
+        nox
+    - name: Clean up unnecessary outputs upon successful run
+      run: rm -rf .nox/*/lib .nox/*/bin
+    - name: Upload the outputs of the test run
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: outputs
+        path: .
+        include-hidden-files: true
+        compression-level: 9

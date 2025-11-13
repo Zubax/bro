@@ -40,11 +40,11 @@ def prune_context_text_only(
     Everything else (images, files, tool calls) is removed.
     Consecutive duplicate messages are also removed.
     """
-    out_ctx = []
+    out_ctx: list[dict[str, Any]] = []
     for src in context:
         if src.get("role") not in keep_roles:
             continue
-        content = []
+        content: list[dict[str, Any]] = []
         out_item = {"role": src["role"], "content": content}
         for in_item in src.get("content", []) or []:
             match in_item:
@@ -92,7 +92,7 @@ def get_upstream_ip() -> str | None:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("1.1.1.1", 80))  # datagram connect does not send packets
-            return s.getsockname()[0]
+            return str(s.getsockname()[0])
     except OSError:
         return None
 

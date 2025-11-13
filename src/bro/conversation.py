@@ -66,7 +66,8 @@ tools = [
     {
         "type": "function",
         "name": "get_reasoner_status",
-        "description": "Update users on current task progress.",
+        "description": "Update users on the current task’s progress. If the response is None, it means there is no "
+        "active task and the reasoner has finished its work",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
@@ -90,10 +91,10 @@ def _parse_message(msg_data: str) -> tuple[str, str, str] | None:
         via, user = metadata.get("via"), metadata.get("user")
     except (AttributeError, KeyError, TypeError) as e:
         _logger.error(f"Wrong message format. Error: {e}")
-        return
+        return None
     except Exception as e:
         _logger.error(f"Unknown error: {e}")
-        return
+        return None
     return via, user, text
 
 
@@ -102,9 +103,11 @@ class ConversationHandler:
     This class handles receiving messages, replying to them, and delegating tasks to the Reasoner.
     """
 
-    def __init__(self, connector: Connector, user_system_prompt: str, client: OpenAI, reasoner: Reasoner) -> None:
-        self._msgs = []
-        self._current_task = None
+    def __init__(
+        self, connector: Connector, user_system_prompt: str | None, client: OpenAI, reasoner: Reasoner
+    ) -> None:
+        self._msgs: list[ReceivedMessage] = []
+        self._current_task: Task | None = None
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
@@ -112,7 +115,7 @@ class ConversationHandler:
         self._reasoner = reasoner
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
-        ctx = [
+        ctx: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": [
@@ -154,18 +157,26 @@ class ConversationHandler:
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
 
-                        self._msgs.append(
-                            ReceivedMessage(
-                                via=Channel(name=self._current_task.channel),
-                                user=User(name="Bro"),
-                                text=result,
-                                attachments=[],
+                        if result:
+                            if not self._current_task:
+                                _logger.error(
+                                    f"Missing current task context. Cannot route message to any channel. Message "
+                                    f"content: {result}"
+                                )
+                                return None
+
+                            self._msgs.append(
+                                ReceivedMessage(
+                                    via=self._current_task.channel,
+                                    user=User(name="Bro"),
+                                    text=result,
+                                    attachments=[],
+                                )
                             )
-                        )
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
-                _logger.info(result)
+                _logger.info(f"Function call result: {result}")
                 self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
 
         return msg
@@ -199,15 +210,20 @@ class ConversationHandler:
                 if not output:
                     _logger.warning("No output from conversation model; response: %s", conversation_response)
 
-                for item in output:
-                    _logger.debug(f"Received item from the conversation model: {item}")
-                    msg_data = self._process(item)
-                    _logger.debug(f"After processing, got msg_data: {msg_data}")
-                    if msg_data:
-                        via, user, text = _parse_message(msg_data)
-                        _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                        self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                    for item in output:
+                        _logger.debug(f"Received item from the conversation model: {item}")
+                        msg_data = self._process(item)
+                        _logger.debug(f"After processing, got msg_data: {msg_data}")
 
+                        if msg_data:
+                            parsed_msg = _parse_message(msg_data)
+                            if parsed_msg:
+                                via, user, text = parsed_msg
+                                _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                            else:
+                                _logger.error(f"Message can't be parsed. Received data: {msg_data}")
+                                # TODO rerunning inference using Tenacity
                 _logger.info("Generating response from the reasoner...")
 
             case StepResultInProgress():
@@ -256,9 +272,11 @@ class ConversationHandler:
                     msg_data = self._process(item)
                     _logger.debug(f"After processing, got msg_data: {msg_data}")
                     if msg_data:
-                        via, user, text = _parse_message(msg_data)
-                        _logger.debug(f"Message from the reasoner after parsing: {text}.")
-                        self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                        parsed_msg = _parse_message(msg_data)
+                        if parsed_msg:
+                            via, user, text = parsed_msg
+                            _logger.debug(f"Message from the reasoner after parsing: {text}.")
+                            self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
             return True
         return False
         # TODO: attach file to ctx
@@ -273,7 +291,7 @@ class ConversationHandler:
     def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
-        return self._client.responses.create(
+        return self._client.responses.create(  # type: ignore
             model="gpt-5",
             input=ctx,
             tools=tools,
