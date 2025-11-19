@@ -10,7 +10,7 @@ from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
-from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
+from bro.reasoner import Context, Reasoner
 
 _logger = logging.getLogger(__name__)
 
@@ -127,6 +127,46 @@ class ConversationHandler:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
+    def on_task_completed_cb(self, message: str) -> None:
+        _logger.warning("🏁 " * 40 + "\n" + message)
+        input_data = textwrap.dedent(
+            f"""\
+        via:  
+        user: Bro Reasoner
+        ---
+        {message}
+        """
+        )
+        self._context += [
+            {
+                "type": "message",
+                "role": "user",
+                "content": input_data,
+            }
+        ]
+
+        _logger.info("Requesting conversation response after receiving reasoner response...")
+        conversation_response = self._request_inference(self._context)
+        output = conversation_response["output"]
+
+        if not output:
+            _logger.warning("No output from conversation model; response: %s", conversation_response)
+
+        for item in output:
+            _logger.debug(f"Received item from the conversation model: {item}")
+            msg_data = self._process(item)
+            _logger.debug(f"After processing, got msg_data: {msg_data}")
+
+            if msg_data:
+                parsed_msg = _parse_message(msg_data)
+                if parsed_msg:
+                    via, user, text = parsed_msg
+                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
+                else:
+                    _logger.error(f"Message can't be parsed. Received data: {msg_data}")
+                    # TODO rerunning inference using Tenacity
+
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
         msg = None
@@ -149,7 +189,9 @@ class ConversationHandler:
                         _logger.info("Tasking the reasoner...")
                         prompt, channel = args["prompt"], args["channel"]
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
-                        if self._reasoner.task(Context(prompt=prompt, files=[])):
+                        if self._reasoner.task(
+                            Context(prompt=prompt, files=[]), lambda response: self.on_task_completed_cb(response)
+                        ):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
 
@@ -184,52 +226,6 @@ class ConversationHandler:
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
-        match self._reasoner.step():
-            case StepResultCompleted(message):
-                _logger.warning("🏁 " * 40 + "\n" + message)
-                input_data = textwrap.dedent(
-                    f"""\
-                via:  
-                user: Bro Reasoner
-                ---
-                {message}
-                """
-                )
-                self._context += [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": input_data,
-                    }
-                ]
-                self._current_task = None
-
-                _logger.info("Requesting conversation response after receiving reasoner response...")
-                conversation_response = self._request_inference(self._context)
-                output = conversation_response["output"]
-                if not output:
-                    _logger.warning("No output from conversation model; response: %s", conversation_response)
-
-                    for item in output:
-                        _logger.debug(f"Received item from the conversation model: {item}")
-                        msg_data = self._process(item)
-                        _logger.debug(f"After processing, got msg_data: {msg_data}")
-
-                        if msg_data:
-                            parsed_msg = _parse_message(msg_data)
-                            if parsed_msg:
-                                via, user, text = parsed_msg
-                                _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
-                            else:
-                                _logger.error(f"Message can't be parsed. Received data: {msg_data}")
-                                # TODO rerunning inference using Tenacity
-                _logger.info("Generating response from the reasoner...")
-
-            case StepResultInProgress():
-                pass
-            case StepResultNothingToDo():
-                pass
         if self._msgs:
             for msg in self._msgs:
                 _logger.debug(f"Processing user message: {msg}")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,26 +11,6 @@ class Context:
     files: list[Path]
 
 
-@dataclass(frozen=True)
-class StepResult:
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultCompleted(StepResult):
-    message: str
-
-
-@dataclass(frozen=True)
-class StepResultInProgress(StepResult):
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultNothingToDo(StepResult):
-    pass
-
-
 class Reasoner(ABC):
     """
     The Reasoner is responsible for planning and decision-making based on the given context,
@@ -38,7 +18,7 @@ class Reasoner(ABC):
     """
 
     @abstractmethod
-    def task(self, ctx: Context, /) -> bool:
+    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None], /) -> bool:
         """
         Commence a new task with the given context.
         Returns True if the task is accepted,
@@ -47,10 +27,9 @@ class Reasoner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self) -> StepResult:
+    def close(self) -> None:
         """
-        Perform a single reasoning-action step.
-        Returns a string result if the task is complete, or None if more steps are needed.
+        Close the background thread.
         """
         raise NotImplementedError
 

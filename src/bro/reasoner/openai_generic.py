@@ -2,8 +2,10 @@ from __future__ import annotations
 import os
 import copy
 import json
+import threading
 import time
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 import logging
 from pathlib import Path
 
@@ -13,7 +15,7 @@ import openai
 from openai import OpenAI
 
 from bro.executive import Executive, Effort as ExecutiveEffort
-from bro.reasoner import Reasoner, Context, StepResultNothingToDo, StepResultCompleted, StepResultInProgress, StepResult
+from bro.reasoner import Reasoner, Context
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -383,6 +385,26 @@ Feel free to add dark humor if pertinent. Please do not include the questions in
 """
 
 
+@dataclass(frozen=True)
+class StepResult:
+    pass
+
+
+@dataclass(frozen=True)
+class StepResultCompleted(StepResult):
+    message: str
+
+
+@dataclass(frozen=True)
+class StepResultInProgress(StepResult):
+    pass
+
+
+@dataclass(frozen=True)
+class StepResultNothingToDo(StepResult):
+    pass
+
+
 class OpenAiGenericReasoner(Reasoner):
     def __init__(
         self,
@@ -407,6 +429,10 @@ class OpenAiGenericReasoner(Reasoner):
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
         self._step_number = 0
+        self._thread = threading.Thread(target=self.process_reasoner_output)
+        self.on_task_completed_cb = None
+        self._thread_stop = False
+        self._thread.start()
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
@@ -423,9 +449,10 @@ class OpenAiGenericReasoner(Reasoner):
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def task(self, ctx: Context, /) -> bool:
+    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None], /) -> bool:
         if self._busy:
             return False
+        self.on_task_completed_cb = on_task_completed_cb
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -443,7 +470,20 @@ class OpenAiGenericReasoner(Reasoner):
         self._busy = True
         return True
 
-    def step(self) -> StepResult:
+    def process_reasoner_output(self) -> None:
+        while not self._thread_stop:
+            while not self._busy:
+                time.sleep(1)
+            match self._step():
+                case StepResultCompleted(message):
+                    _logger.debug("Calling the callback...")
+                    self.on_task_completed_cb(message)
+                case StepResultInProgress():
+                    time.sleep(1)
+                case StepResultNothingToDo():
+                    time.sleep(1)
+
+    def _step(self) -> StepResult:
         if not self._busy:
             return StepResultNothingToDo()
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
@@ -493,6 +533,10 @@ class OpenAiGenericReasoner(Reasoner):
         reflection: str = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
+
+    def close(self):
+        self._thread_stop = True
+        self._thread.join()
 
     def snapshot(self) -> Any:
         return {
