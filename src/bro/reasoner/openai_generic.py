@@ -430,7 +430,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._context = self._build_system_prompt()
         self._step_number = 0
         self._thread = threading.Thread(target=self.process_reasoner_output)
-        self.on_task_completed_cb = None
+        self.on_task_completed_cb: Callable[[str], None] | None = None
         self._thread_stop = False
         self._thread.start()
 
@@ -449,7 +449,7 @@ class OpenAiGenericReasoner(Reasoner):
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None], /) -> bool:
+    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None] | None, /) -> bool:
         if self._busy:
             return False
         self.on_task_completed_cb = on_task_completed_cb
@@ -477,6 +477,7 @@ class OpenAiGenericReasoner(Reasoner):
             match self._step():
                 case StepResultCompleted(message):
                     _logger.debug("Calling the callback...")
+                    assert self.on_task_completed_cb is not None
                     self.on_task_completed_cb(message)
                 case StepResultInProgress():
                     time.sleep(1)
@@ -534,7 +535,7 @@ class OpenAiGenericReasoner(Reasoner):
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
-    def close(self):
+    def close(self) -> None:
         self._thread_stop = True
         self._thread.join()
 
