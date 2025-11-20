@@ -127,7 +127,21 @@ class ConversationHandler:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def on_task_completed_cb(self, message: str) -> None:
+    def _process_response_output(self, output: Any) -> None:
+        for item in output:  # TODO: extract common parts into a method (or several)
+            _logger.debug(f"Received item from the conversation model: {item}")
+            msg_data = self._process(item)
+            _logger.debug(f"After processing, got msg_data: {msg_data}")
+            if msg_data:
+                if parsed_msg := _parse_message(msg_data):
+                    via, user, text = parsed_msg
+                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
+                else:
+                    _logger.error(f"Message can't be parsed. Received data: {msg_data}")
+                    # TODO rerunning inference using Tenacity
+
+    def _on_task_completed_cb(self, message: str) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
         input_data = textwrap.dedent(
             f"""\
@@ -152,20 +166,7 @@ class ConversationHandler:
         if not output:
             _logger.warning("No output from conversation model; response: %s", conversation_response)
 
-        for item in output:
-            _logger.debug(f"Received item from the conversation model: {item}")
-            msg_data = self._process(item)
-            _logger.debug(f"After processing, got msg_data: {msg_data}")
-
-            if msg_data:
-                parsed_msg = _parse_message(msg_data)
-                if parsed_msg:
-                    via, user, text = parsed_msg
-                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
-                else:
-                    _logger.error(f"Message can't be parsed. Received data: {msg_data}")
-                    # TODO rerunning inference using Tenacity
+        self._process_response_output(output)
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
@@ -190,7 +191,8 @@ class ConversationHandler:
                         prompt, channel = args["prompt"], args["channel"]
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
                         if self._reasoner.task(
-                            Context(prompt=prompt, files=[]), lambda response: self.on_task_completed_cb(response)
+                            Context(prompt=prompt, files=[]),
+                            lambda response: self._on_task_completed_cb(response),
                         ):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
@@ -198,7 +200,6 @@ class ConversationHandler:
                     case "get_reasoner_status":
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
-
                         if result:
                             if not self._current_task:
                                 _logger.error(
@@ -206,7 +207,6 @@ class ConversationHandler:
                                     f"content: {result}"
                                 )
                                 return None
-
                             self._msgs.append(
                                 ReceivedMessage(
                                     via=self._current_task.channel,
@@ -264,15 +264,7 @@ class ConversationHandler:
 
                 self._context += addendum
 
-                for item in output:
-                    msg_data = self._process(item)
-                    _logger.debug(f"After processing, got msg_data: {msg_data}")
-                    if msg_data:
-                        parsed_msg = _parse_message(msg_data)
-                        if parsed_msg:
-                            via, user, text = parsed_msg
-                            _logger.debug(f"Message from the reasoner after parsing: {text}.")
-                            self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                self._process_response_output(output)
             return True
         return False
         # TODO: attach file to ctx

@@ -4,8 +4,7 @@ import copy
 import json
 import threading
 import time
-from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 import logging
 from pathlib import Path
 
@@ -15,7 +14,7 @@ import openai
 from openai import OpenAI
 
 from bro.executive import Executive, Effort as ExecutiveEffort
-from bro.reasoner import Reasoner, Context
+from bro.reasoner import Reasoner, Context, OnTaskCompleted
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -385,26 +384,6 @@ Feel free to add dark humor if pertinent. Please do not include the questions in
 """
 
 
-@dataclass(frozen=True)
-class StepResult:
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultCompleted(StepResult):
-    message: str
-
-
-@dataclass(frozen=True)
-class StepResultInProgress(StepResult):
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultNothingToDo(StepResult):
-    pass
-
-
 class OpenAiGenericReasoner(Reasoner):
     def __init__(
         self,
@@ -429,8 +408,8 @@ class OpenAiGenericReasoner(Reasoner):
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
         self._step_number = 0
-        self._thread = threading.Thread(target=self.process_reasoner_output)
-        self.on_task_completed_cb: Callable[[str], None] | None = None
+        self._on_task_completed_cb: OnTaskCompleted = lambda _: None
+        self._thread = threading.Thread(target=self._run_thread)
         self._thread_stop = False
         self._thread.start()
 
@@ -449,10 +428,10 @@ class OpenAiGenericReasoner(Reasoner):
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None] | None, /) -> bool:
+    def task(self, ctx: Context, on_task_completed_cb: OnTaskCompleted, /) -> bool:
         if self._busy:
             return False
-        self.on_task_completed_cb = on_task_completed_cb
+        self._on_task_completed_cb = on_task_completed_cb
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -470,23 +449,24 @@ class OpenAiGenericReasoner(Reasoner):
         self._busy = True
         return True
 
-    def process_reasoner_output(self) -> None:
+    def _run_thread(self) -> None:
         while not self._thread_stop:
-            while not self._busy:
-                time.sleep(1)
-            match self._step():
-                case StepResultCompleted(message):
+            try:
+                final = self._step()
+                if final:
                     _logger.debug("Calling the callback...")
-                    assert self.on_task_completed_cb is not None
-                    self.on_task_completed_cb(message)
-                case StepResultInProgress():
+                    self._on_task_completed_cb(final)
+                else:
                     time.sleep(1)
-                case StepResultNothingToDo():
-                    time.sleep(1)
+            except Exception as ex:
+                _logger.exception("Stepping failed: %s", ex)
+                # TODO: use the cancel method once we introduced it instead of this
+                time.sleep(10)
+                # Alternative error handling: pass the exception into the on completed callback.
 
-    def _step(self) -> StepResult:
+    def _step(self) -> str | None:
         if not self._busy:
-            return StepResultNothingToDo()
+            return None
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
         self._step_number += 1
 
@@ -519,8 +499,8 @@ class OpenAiGenericReasoner(Reasoner):
         self._context += addendum
         if final:
             self._busy = False
-            return StepResultCompleted(final)
-        return StepResultInProgress()
+            return final
+        return None
 
     def legilimens(self) -> str | None:
         if not self._busy:

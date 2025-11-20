@@ -11,6 +11,9 @@ class Context:
     files: list[Path]
 
 
+OnTaskCompleted = Callable[[str], None]
+
+
 class Reasoner(ABC):
     """
     The Reasoner is responsible for planning and decision-making based on the given context,
@@ -18,9 +21,11 @@ class Reasoner(ABC):
     """
 
     @abstractmethod
-    def task(self, ctx: Context, on_task_completed_cb: Callable[[str], None], /) -> bool:
+    def task(self, ctx: Context, on_task_completed_cb: OnTaskCompleted, /) -> bool:
         """
         Commence a new task with the given context.
+        The callable is invoked from a worker thread with the final response once the task is finished.
+        TODO: allow the reasoner to return files and images.
         Returns True if the task is accepted,
         False if another task is still running.
         """
