@@ -56,7 +56,7 @@ class Reasoner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def restore(self, state: Any, /) -> None:
+    def restore(self) -> None:
         """
         Restore the Reasoner to a previously captured state as returned by `snapshot()`.
         """

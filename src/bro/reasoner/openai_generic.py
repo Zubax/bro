@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import copy
 import json
+import sys
 import threading
 import time
 from typing import Any
@@ -19,6 +20,7 @@ from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
 from bro import __version_info__
+from bro.brofiles import SNAPSHOT_FILE
 
 _logger = logging.getLogger(__name__)
 
@@ -409,9 +411,10 @@ class OpenAiGenericReasoner(Reasoner):
         self._context = self._build_system_prompt()
         self._step_number = 0
         self._on_task_completed_cb: OnTaskCompleted = lambda _: None
-        self._thread = threading.Thread(target=self._run_thread)
+        self._thread = threading.Thread(target=self._run_thread, daemon=True)
         self._thread_stop = False
         self._thread.start()
+        self._snapshot_file = SNAPSHOT_FILE.resolve()
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
@@ -453,9 +456,13 @@ class OpenAiGenericReasoner(Reasoner):
         while not self._thread_stop:
             try:
                 final = self._step()
-                if final:
+
+                if final is not None:
                     _logger.debug("Calling the callback...")
-                    self._on_task_completed_cb(final)
+                    try:
+                        self._on_task_completed_cb(final)
+                    except Exception as ex:
+                        _logger.exception("Unhandled exception in the callback: %s", ex)
                 else:
                     time.sleep(1)
             except Exception as ex:
@@ -497,6 +504,11 @@ class OpenAiGenericReasoner(Reasoner):
         # Atomic context update: only add new items once the step is fully processed.
         # Otherwise, we may end up in an inconsistent state if the processing fails halfway.
         self._context += addendum
+        snap = self.snapshot()
+        snapshot_file = SNAPSHOT_FILE.resolve()
+        _logger.debug("Snapshot is taken for the current step.")
+        snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+
         if final:
             self._busy = False
             return final
@@ -529,7 +541,12 @@ class OpenAiGenericReasoner(Reasoner):
             "busy": self._busy,
         }
 
-    def restore(self, state: Any, /) -> None:
+    def restore(self) -> None:
+        if not self._snapshot_file.is_file():
+            _logger.error(f"Cannot resume because file not found: {self._snapshot_file}")
+            sys.exit(1)
+        _logger.warning(f"Resuming {self._snapshot_file}")
+        state = json.loads(self._snapshot_file.read_text(encoding="utf-8"))
         match state:
             case {
                 "version": version,
@@ -555,6 +572,8 @@ class OpenAiGenericReasoner(Reasoner):
                     self._build_system_prompt() + [x for x in context if x.get("role") != "system"] + self._screenshot()
                 )
                 self._busy = busy
+                _logger.info(f"Busy flag is now {self._busy}")
+
             case _:
                 raise ValueError(f"Snapshot not acceptable: {list(state) if isinstance(state, dict) else type(state)}")
 

@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import os
-import shutil
 import sqlite3
 import sys
 from time import sleep
@@ -97,25 +96,14 @@ def main() -> None:
         _logger.info(f"🌐 Web UI at {web_view.endpoint}")
 
         # Restore from snapshot or start fresh
-        snapshot_file = SNAPSHOT_FILE.resolve()
         if args.resume:
-            if not snapshot_file.is_file():
-                _logger.error(f"Cannot resume because file not found: {snapshot_file}")
-                sys.exit(1)
-            _logger.warning(f"Resuming {snapshot_file}")
-            bak = snapshot_file.with_name(snapshot_file.name + ".bak")
-            bak.unlink(missing_ok=True)
-            shutil.copy(snapshot_file, bak)
-            rsn.restore(json.loads(snapshot_file.read_text(encoding="utf-8")))
+            rsn.restore()
 
         # Main loop
         _logger.info("🚀 START")
         while True:
             if not conversation.spin():
                 sleep(10)
-            # This will probably go into a separate thread; see https://github.com/Zubax/bro/issues/28
-            snap = rsn.snapshot()
-            snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
 
     except Exception as e:
         _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)

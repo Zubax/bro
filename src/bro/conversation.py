@@ -128,7 +128,7 @@ class ConversationHandler:
         return ctx
 
     def _process_response_output(self, output: Any) -> None:
-        for item in output:  # TODO: extract common parts into a method (or several)
+        for item in output:
             _logger.debug(f"Received item from the conversation model: {item}")
             msg_data = self._process(item)
             _logger.debug(f"After processing, got msg_data: {msg_data}")
@@ -158,14 +158,11 @@ class ConversationHandler:
                 "content": input_data,
             }
         ]
-
         _logger.info("Requesting conversation response after receiving reasoner response...")
         conversation_response = self._request_inference(self._context)
         output = conversation_response["output"]
-
         if not output:
             _logger.warning("No output from conversation model; response: %s", conversation_response)
-
         self._process_response_output(output)
 
     def _process(self, item: dict[str, Any]) -> str | None:
@@ -184,11 +181,10 @@ class ConversationHandler:
                 args = json.loads(arguments)
                 _logger.debug(f"Received function call arguments: {args}")
                 result = None
-                match name:
-                    case "task_reasoner":
+                match name, args:
+                    case ("task_reasoner", {"prompt": prompt, "channel": channel}):
                         # TODO: add a way to interrupt the current task.
                         _logger.info("Tasking the reasoner...")
-                        prompt, channel = args["prompt"], args["channel"]
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
                         if self._reasoner.task(
                             Context(prompt=prompt, files=[]),
@@ -197,7 +193,7 @@ class ConversationHandler:
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
 
-                    case "get_reasoner_status":
+                    case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
                         if result:
@@ -249,21 +245,16 @@ class ConversationHandler:
                 _logger.debug("Generating response from the conversation model...")
                 conversation_response = self._request_inference(self._context)
                 output = conversation_response["output"]
-
                 if not output:
                     _logger.warning("No output from model; response: %s", conversation_response)
-
                 addendum = output.copy()
-
                 for item in addendum:
                     _logger.debug(f"Received item from the conversation model: {item}")
                     if item.get("type") == "reasoning" and "status" in item:
                         del item["status"]
                         _logger.debug("Ignoring reasoning message...")
                         continue
-
                 self._context += addendum
-
                 self._process_response_output(output)
             return True
         return False
