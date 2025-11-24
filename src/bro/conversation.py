@@ -11,6 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
+from bro.util import prune_context_text_only
 
 _logger = logging.getLogger(__name__)
 
@@ -41,6 +42,17 @@ necessary.
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - There is no need to check the reasoner’s status before calling task_reasoner.
+"""
+
+_RESPOND_OR_IGNORE_PROMPT = """
+Determine whether the incoming message is directed to you and requires a response.
+If the message is not intended for you (e.g., general conversation between users), do not respond.
+
+Calling your name (e.g., “Bro”) often indicates that the message is meant for you, but this is not always the case.
+Use the full context of the conversation to decide whether the sender is actually addressing you.
+
+Important:
+Return only a boolean: True if you should respond, False if you should ignore the message.
 """
 
 tools = [
@@ -217,6 +229,19 @@ class ConversationHandler:
 
         return msg
 
+    def _determine_response_required(self) -> bool | None:
+        ctx = prune_context_text_only(self._context) + [
+            {"role": "user", "content": [{"type": "input_text", "text": _RESPOND_OR_IGNORE_PROMPT}]}
+        ]
+
+        response = self._request_inference(ctx, model="gpt-5-mini")
+        should_respond: str = response["output"][-1]["content"][0]["text"]
+
+        if "True" in should_respond:
+            _logger.info(f"Bro thinks it needs to respond.")
+            return True
+        return None
+
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
@@ -240,20 +265,37 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                _logger.debug("Generating response from the conversation model...")
-                conversation_response = self._request_inference(self._context)
-                output = conversation_response["output"]
-                if not output:
-                    _logger.warning("No output from model; response: %s", conversation_response)
-                addendum = output.copy()
-                for item in addendum:
-                    _logger.debug(f"Received item from the conversation model: {item}")
-                    if item.get("type") == "reasoning" and "status" in item:
-                        del item["status"]
-                        _logger.debug("Ignoring reasoning message...")
-                        continue
-                self._context += addendum
-                self._process_response_output(output)
+                _should_respond = self._determine_response_required()
+                if _should_respond:
+                    _logger.debug("Generating response from the conversation model...")
+                    conversation_response = self._request_inference(self._context)
+                    output = conversation_response["output"]
+
+                    if not output:
+                        _logger.warning("No output from model; response: %s", conversation_response)
+
+                    addendum = output.copy()
+
+                    for item in addendum:
+                        _logger.debug(f"Received item from the conversation model: {item}")
+                        if item.get("type") == "reasoning" and "status" in item:
+                            del item["status"]
+                            _logger.debug("Ignoring reasoning message...")
+                            continue
+
+                    self._context += addendum
+
+                    for item in output:
+                        msg_data = self._process(item)
+                        _logger.debug(f"After processing, got msg_data: {msg_data}")
+                        if msg_data:
+                            parsed_msg = _parse_message(msg_data)
+                            if parsed_msg:
+                                via, user, text = parsed_msg
+                                _logger.debug(f"Message from the reasoner after parsing: {text}.")
+                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                else:
+                    _logger.info("Response isn't required or can't be determined.")
             return True
         return False
         # TODO: attach file to ctx
@@ -265,11 +307,11 @@ class ConversationHandler:
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
+    def _request_inference(self, ctx: list[dict[str, Any]], /, *, model: str | None = None) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore
-            model="gpt-5",
+            model=model or "gpt-5.1",
             input=ctx,
             tools=tools,
             reasoning={"effort": "low", "summary": "detailed"},

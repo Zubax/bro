@@ -59,14 +59,14 @@ def main() -> None:
                 inferior=UiTars7bExecutive(ui=ui, client=openrouter_client),
                 ui=ui,
                 client=openai_client,
-                model="gpt-5",
+                model="gpt-5.1",
             )
         case "gpt-5+openai-cua":
             exe = HierarchicalExecutive(
                 inferior=OpenAiCuaExecutive(ui=ui, client=openai_client),
                 ui=ui,
                 client=openai_client,
-                model="gpt-5",
+                model="gpt-5.1",
             )
         case "openai-cua":
             exe = OpenAiCuaExecutive(ui=ui, client=openai_client)
