@@ -46,18 +46,3 @@ class Reasoner(ABC):
         Returns None if there is no task at the moment.
         """
         raise NotImplementedError
-
-    @abstractmethod
-    def snapshot(self) -> Any:
-        """
-        Capture the current state of the Reasoner for later restoration.
-        The value is opaque but JSON-serializable.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def restore(self) -> None:
-        """
-        Restore the Reasoner to a previously captured state as returned by `snapshot()`.
-        """
-        raise NotImplementedError

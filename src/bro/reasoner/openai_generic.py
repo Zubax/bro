@@ -20,7 +20,6 @@ from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
 from bro import __version_info__
-from bro.brofiles import SNAPSHOT_FILE
 
 _logger = logging.getLogger(__name__)
 
@@ -397,6 +396,8 @@ class OpenAiGenericReasoner(Reasoner):
         model: str = "gpt-5",
         reasoning_effort: str = "high",
         service_tier: str = "default",
+        snapshot_file: Path,
+        resume: bool = False,
     ) -> None:
         self._busy = False
         self._exe = executive
@@ -414,7 +415,9 @@ class OpenAiGenericReasoner(Reasoner):
         self._thread = threading.Thread(target=self._run_thread, daemon=True)
         self._thread_stop = False
         self._thread.start()
-        self._snapshot_file = SNAPSHOT_FILE.resolve()
+        self._snapshot_file = snapshot_file
+        if resume:
+            self._restore()
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
@@ -504,10 +507,10 @@ class OpenAiGenericReasoner(Reasoner):
         # Atomic context update: only add new items once the step is fully processed.
         # Otherwise, we may end up in an inconsistent state if the processing fails halfway.
         self._context += addendum
-        snap = self.snapshot()
-        snapshot_file = SNAPSHOT_FILE.resolve()
-        _logger.debug("Snapshot is taken for the current step.")
+        snap = self._snapshot()
+        snapshot_file = self._snapshot_file.resolve()
         snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
+        _logger.debug("Snapshot is taken for the current step.")
 
         if final:
             self._busy = False
@@ -531,7 +534,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._thread_stop = True
         self._thread.join()
 
-    def snapshot(self) -> Any:
+    def _snapshot(self) -> Any:
         return {
             "version": __version_info__,
             "model": self._model,
@@ -541,7 +544,7 @@ class OpenAiGenericReasoner(Reasoner):
             "busy": self._busy,
         }
 
-    def restore(self) -> None:
+    def _restore(self) -> None:
         if not self._snapshot_file.is_file():
             _logger.error(f"Cannot resume because file not found: {self._snapshot_file}")
             sys.exit(1)

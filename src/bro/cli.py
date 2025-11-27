@@ -79,6 +79,8 @@ def main() -> None:
         ui=ui,
         client=openai_client,
         user_system_prompt=user_system_prompt,
+        resume=args.resume,
+        snapshot_file=SNAPSHOT_FILE,
     )
 
     connector = SlackConnector(
@@ -95,16 +97,11 @@ def main() -> None:
         web_view.start()
         _logger.info(f"🌐 Web UI at {web_view.endpoint}")
 
-        # Restore from snapshot or start fresh
-        if args.resume:
-            rsn.restore()
-
         # Main loop
         _logger.info("🚀 START")
         while True:
             if not conversation.spin():
                 sleep(10)
-
     except Exception as e:
         _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)
         rsn.close()
