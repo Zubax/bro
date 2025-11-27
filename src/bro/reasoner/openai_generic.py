@@ -536,7 +536,7 @@ class OpenAiGenericReasoner(Reasoner):
             + self._screenshot()
             + [{"role": "user", "content": [{"type": "input_text", "text": _LEGILIMENS_PROMPT}]}]
         )
-        response = self._request_inference(ctx, tools=[], reasoning_effort="low")
+        response = self._request_inference(ctx, tools=[], reasoning_effort="none")
         reflection: str = response["output"][-1]["content"][0]["text"]
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
