@@ -21,14 +21,23 @@ class Reasoner(ABC):
     """
 
     @abstractmethod
-    def task(self, ctx: Context, on_task_completed_cb: OnTaskCompleted, /) -> bool:
+    def task(self, ctx: Context, /) -> bool:
         """
-        Commence a new task with the given context.
-        The callable is invoked from a worker thread with the final response once the task is finished.
+        Commence a new task with the given context. The callback set via on_task_completed_cb is invoked from a
+        worker thread with the final response once the task is finished.
         TODO: allow the reasoner to return files and images.
-        Returns True if the task is accepted,
-        False if another task is still running.
+        Returns True if the task is accepted, False if another task is still running.
         """
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def on_task_completed_cb(self) -> OnTaskCompleted:
+        raise NotImplementedError
+
+    @on_task_completed_cb.setter
+    @abstractmethod
+    def on_task_completed_cb(self, value: OnTaskCompleted) -> None:
         raise NotImplementedError
 
     @abstractmethod

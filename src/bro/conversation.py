@@ -113,6 +113,7 @@ class ConversationHandler:
         self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
+        self._reasoner.on_task_completed_cb = self._on_task_completed_cb
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -186,10 +187,7 @@ class ConversationHandler:
                         # TODO: add a way to interrupt the current task.
                         _logger.info("Tasking the reasoner...")
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
-                        if self._reasoner.task(
-                            Context(prompt=prompt, files=[]),
-                            lambda response: self._on_task_completed_cb(response),
-                        ):
+                        if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
 
