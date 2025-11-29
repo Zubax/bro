@@ -9,6 +9,7 @@ import yaml
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
+from bro import util
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only
@@ -45,14 +46,13 @@ Important:
 """
 
 _RESPOND_OR_IGNORE_PROMPT = """
-Determine whether the incoming message is directed to you and requires a response.
-If the message is not intended for you (e.g., general conversation between users), do not respond.
-
-Calling your name (e.g., “Bro”) often indicates that the message is meant for you, but this is not always the case.
-Use the full context of the conversation to decide whether the sender is actually addressing you.
-
-Important:
-Return only a boolean: True if you should respond, False if you should ignore the message.
+You are given a conversation history between an agentic AI named Bro and a number of 
+human users. Your objective is to determine if the conversation warrants a response or an action on behalf of Bro. 
+This would be the case if any of the humans are directly or indirectly addressing Bro, or responding to one of its 
+earlier posts. This would not be the case if the human users are merely talking to each other. In case of ambiguity 
+err toward non-engagement. The response shall contain a brief summary of the observed conversation history, 
+followed by a detailed elaboration of whether Bro needs to engage, and why exactly. Finally, the response shall end 
+with a JSON block following the schema below: { "response_required": bool }
 """
 
 tools = [
@@ -235,9 +235,11 @@ class ConversationHandler:
         ]
 
         response = self._request_inference(ctx, model="gpt-5-mini")
-        should_respond: str = response["output"][-1]["content"][0]["text"]
+        output: str = response["output"][-1]["content"][0]["text"]
 
-        if "True" in should_respond:
+        response_required_json = util.split_trailing_json(output)[1]
+        response_required = response_required_json.get("response_required")
+        if response_required is True:
             _logger.info(f"Bro thinks it needs to respond.")
             return True
         return None
@@ -265,8 +267,8 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                _should_respond = self._determine_response_required()
-                if _should_respond:
+                should_respond = self._determine_response_required()
+                if should_respond:
                     _logger.debug("Generating response from the conversation model...")
                     conversation_response = self._request_inference(self._context)
                     output = conversation_response["output"]

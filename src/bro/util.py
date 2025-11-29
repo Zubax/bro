@@ -181,7 +181,14 @@ def split_trailing_json(text: str) -> tuple[str, Any]:
     return text, None
 
 
+# TODO: write tests
 _RE_TRAILING_JSON_WONKY = [
-    re.compile(r"(?is)`+(?:json)?\n(.+?)\n*`*\s*$"),
-    re.compile(r"(?i)(.+?)\s*$"),
+    # ```json\n{ ... }\n```  (or ```\n{ ... }\n```)
+    re.compile(r"(?is)`+(?:json)?\s*\n(\{[\s\S]*\})\s*`+\s*$"),
+    # ```json\n[ ... ]\n```  (or ```\n[ ... ]\n```)
+    re.compile(r"(?is)`+(?:json)?\s*\n(\[[\s\S]*\])\s*`+\s*$"),
+    # Bare JSON object at the end of the message
+    re.compile(r"(?is)(\{[\s\S]*\})\s*$"),
+    # Bare JSON array at the end of the message
+    re.compile(r"(?is)(\[[\s\S]*\])\s*$"),
 ]
