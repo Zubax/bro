@@ -10,7 +10,7 @@ from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
-from bro.reasoner import Context, Reasoner, StepResultCompleted, StepResultNothingToDo, StepResultInProgress
+from bro.reasoner import Context, Reasoner
 
 _logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class ConversationHandler:
         self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
+        self._reasoner.on_task_completed_cb = self._on_task_completed_cb
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -126,6 +127,44 @@ class ConversationHandler:
         if self._user_system_prompt:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
+
+    def _process_response_output(self, output: Any) -> None:
+        for item in output:
+            _logger.debug(f"Received item from the conversation model: {item}")
+            msg_data = self._process(item)
+            _logger.debug(f"After processing, got msg_data: {msg_data}")
+            if msg_data:
+                if parsed_msg := _parse_message(msg_data):
+                    via, user, text = parsed_msg
+                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
+                else:
+                    _logger.error(f"Message can't be parsed. Received data: {msg_data}")
+                    # TODO rerunning inference using Tenacity
+
+    def _on_task_completed_cb(self, message: str) -> None:
+        _logger.warning("🏁 " * 40 + "\n" + message)
+        input_data = textwrap.dedent(
+            f"""\
+        via:  
+        user: Bro Reasoner
+        ---
+        {message}
+        """
+        )
+        self._context += [
+            {
+                "type": "message",
+                "role": "user",
+                "content": input_data,
+            }
+        ]
+        _logger.info("Requesting conversation response after receiving reasoner response...")
+        conversation_response = self._request_inference(self._context)
+        output = conversation_response["output"]
+        if not output:
+            _logger.warning("No output from conversation model; response: %s", conversation_response)
+        self._process_response_output(output)
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
@@ -143,20 +182,18 @@ class ConversationHandler:
                 args = json.loads(arguments)
                 _logger.debug(f"Received function call arguments: {args}")
                 result = None
-                match name:
-                    case "task_reasoner":
+                match name, args:
+                    case ("task_reasoner", {"prompt": prompt, "channel": channel}):
                         # TODO: add a way to interrupt the current task.
                         _logger.info("Tasking the reasoner...")
-                        prompt, channel = args["prompt"], args["channel"]
                         _logger.debug(f"Prompt for the reasoner: {prompt}")
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
 
-                    case "get_reasoner_status":
+                    case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
-
                         if result:
                             if not self._current_task:
                                 _logger.error(
@@ -164,7 +201,6 @@ class ConversationHandler:
                                     f"content: {result}"
                                 )
                                 return None
-
                             self._msgs.append(
                                 ReceivedMessage(
                                     via=self._current_task.channel,
@@ -184,52 +220,6 @@ class ConversationHandler:
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
-        match self._reasoner.step():
-            case StepResultCompleted(message):
-                _logger.warning("🏁 " * 40 + "\n" + message)
-                input_data = textwrap.dedent(
-                    f"""\
-                via:  
-                user: Bro Reasoner
-                ---
-                {message}
-                """
-                )
-                self._context += [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": input_data,
-                    }
-                ]
-                self._current_task = None
-
-                _logger.info("Requesting conversation response after receiving reasoner response...")
-                conversation_response = self._request_inference(self._context)
-                output = conversation_response["output"]
-                if not output:
-                    _logger.warning("No output from conversation model; response: %s", conversation_response)
-
-                    for item in output:
-                        _logger.debug(f"Received item from the conversation model: {item}")
-                        msg_data = self._process(item)
-                        _logger.debug(f"After processing, got msg_data: {msg_data}")
-
-                        if msg_data:
-                            parsed_msg = _parse_message(msg_data)
-                            if parsed_msg:
-                                via, user, text = parsed_msg
-                                _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
-                            else:
-                                _logger.error(f"Message can't be parsed. Received data: {msg_data}")
-                                # TODO rerunning inference using Tenacity
-                _logger.info("Generating response from the reasoner...")
-
-            case StepResultInProgress():
-                pass
-            case StepResultNothingToDo():
-                pass
         if self._msgs:
             for msg in self._msgs:
                 _logger.debug(f"Processing user message: {msg}")
@@ -253,30 +243,17 @@ class ConversationHandler:
                 _logger.debug("Generating response from the conversation model...")
                 conversation_response = self._request_inference(self._context)
                 output = conversation_response["output"]
-
                 if not output:
                     _logger.warning("No output from model; response: %s", conversation_response)
-
                 addendum = output.copy()
-
                 for item in addendum:
                     _logger.debug(f"Received item from the conversation model: {item}")
                     if item.get("type") == "reasoning" and "status" in item:
                         del item["status"]
                         _logger.debug("Ignoring reasoning message...")
                         continue
-
                 self._context += addendum
-
-                for item in output:
-                    msg_data = self._process(item)
-                    _logger.debug(f"After processing, got msg_data: {msg_data}")
-                    if msg_data:
-                        parsed_msg = _parse_message(msg_data)
-                        if parsed_msg:
-                            via, user, text = parsed_msg
-                            _logger.debug(f"Message from the reasoner after parsing: {text}.")
-                            self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                self._process_response_output(output)
             return True
         return False
         # TODO: attach file to ctx

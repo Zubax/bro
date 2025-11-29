@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,24 +11,7 @@ class Context:
     files: list[Path]
 
 
-@dataclass(frozen=True)
-class StepResult:
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultCompleted(StepResult):
-    message: str
-
-
-@dataclass(frozen=True)
-class StepResultInProgress(StepResult):
-    pass
-
-
-@dataclass(frozen=True)
-class StepResultNothingToDo(StepResult):
-    pass
+OnTaskCompleted = Callable[[str], None]
 
 
 class Reasoner(ABC):
@@ -40,17 +23,27 @@ class Reasoner(ABC):
     @abstractmethod
     def task(self, ctx: Context, /) -> bool:
         """
-        Commence a new task with the given context.
-        Returns True if the task is accepted,
-        False if another task is still running.
+        Commence a new task with the given context. The callback set via on_task_completed_cb is invoked from a
+        worker thread with the final response once the task is finished.
+        TODO: allow the reasoner to return files and images.
+        Returns True if the task is accepted, False if another task is still running.
         """
         raise NotImplementedError
 
+    @property
     @abstractmethod
-    def step(self) -> StepResult:
+    def on_task_completed_cb(self) -> OnTaskCompleted:
+        raise NotImplementedError
+
+    @on_task_completed_cb.setter
+    @abstractmethod
+    def on_task_completed_cb(self, value: OnTaskCompleted) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
         """
-        Perform a single reasoning-action step.
-        Returns a string result if the task is complete, or None if more steps are needed.
+        Close the background thread.
         """
         raise NotImplementedError
 
@@ -60,20 +53,5 @@ class Reasoner(ABC):
         Provide a summary of the current internal state.
         This action does not affect the context or state.
         Returns None if there is no task at the moment.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def snapshot(self) -> Any:
-        """
-        Capture the current state of the Reasoner for later restoration.
-        The value is opaque but JSON-serializable.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def restore(self, state: Any, /) -> None:
-        """
-        Restore the Reasoner to a previously captured state as returned by `snapshot()`.
         """
         raise NotImplementedError

@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import os
-import shutil
 import sqlite3
 import sys
 from time import sleep
@@ -80,6 +79,8 @@ def main() -> None:
         ui=ui,
         client=openai_client,
         user_system_prompt=user_system_prompt,
+        resume=args.resume,
+        snapshot_file=SNAPSHOT_FILE,
     )
 
     connector = SlackConnector(
@@ -89,38 +90,24 @@ def main() -> None:
     )
     conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 
-    # Start the web UI
-    web_ctrl = WebController(ui=ui, rsn=rsn)
-    web_view = web_ui.View(ctrl=web_ctrl)
-    web_view.start()
-    _logger.info(f"🌐 Web UI at {web_view.endpoint}")
-
     try:
-        # Restore from snapshot or start fresh
-        snapshot_file = SNAPSHOT_FILE.resolve()
-        if args.resume:
-            if not snapshot_file.is_file():
-                _logger.error(f"Cannot resume because file not found: {snapshot_file}")
-                sys.exit(1)
-            _logger.warning(f"Resuming {snapshot_file}")
-            bak = snapshot_file.with_name(snapshot_file.name + ".bak")
-            bak.unlink(missing_ok=True)
-            shutil.copy(snapshot_file, bak)
-            rsn.restore(json.loads(snapshot_file.read_text(encoding="utf-8")))
+        # Start the web UI
+        web_ctrl = WebController(ui=ui, rsn=rsn)
+        web_view = web_ui.View(ctrl=web_ctrl)
+        web_view.start()
+        _logger.info(f"🌐 Web UI at {web_view.endpoint}")
 
         # Main loop
         _logger.info("🚀 START")
-
         while True:
             if not conversation.spin():
                 sleep(10)
-            # This will probably go into a separate thread; see https://github.com/Zubax/bro/issues/28
-            snap = rsn.snapshot()
-            snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
-
     except Exception as e:
         _logger.error(f"🚫 Unknown error: {e!r}", exc_info=True)
+        rsn.close()
         sys.exit(1)
+    finally:
+        rsn.close()
 
 
 class WebController(web_ui.Controller):

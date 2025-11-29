@@ -2,6 +2,8 @@ from __future__ import annotations
 import os
 import copy
 import json
+import sys
+import threading
 import time
 from typing import Any
 import logging
@@ -13,7 +15,7 @@ import openai
 from openai import OpenAI
 
 from bro.executive import Executive, Effort as ExecutiveEffort
-from bro.reasoner import Reasoner, Context, StepResultNothingToDo, StepResultCompleted, StepResultInProgress, StepResult
+from bro.reasoner import Reasoner, Context, OnTaskCompleted
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -383,6 +385,10 @@ Feel free to add dark humor if pertinent. Please do not include the questions in
 """
 
 
+def _dummy_cb(_: Any) -> None:
+    _logger.error("The dummy callback is not supposed to be invoked")
+
+
 class OpenAiGenericReasoner(Reasoner):
     def __init__(
         self,
@@ -394,6 +400,8 @@ class OpenAiGenericReasoner(Reasoner):
         model: str = "gpt-5",
         reasoning_effort: str = "high",
         service_tier: str = "default",
+        snapshot_file: Path,
+        resume: bool = False,
     ) -> None:
         self._busy = False
         self._exe = executive
@@ -407,6 +415,13 @@ class OpenAiGenericReasoner(Reasoner):
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
         self._step_number = 0
+        self._on_task_completed_cb: OnTaskCompleted = _dummy_cb
+        self._thread = threading.Thread(target=self._run_thread, daemon=True)
+        self._thread_stop = False
+        self._thread.start()
+        self._snapshot_file = snapshot_file
+        if resume:
+            self._restore()
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         env = "\n".join(f"{k}={v}" for k, v in os.environ.items())
@@ -426,6 +441,8 @@ class OpenAiGenericReasoner(Reasoner):
     def task(self, ctx: Context, /) -> bool:
         if self._busy:
             return False
+        if self._on_task_completed_cb is _dummy_cb:
+            raise RuntimeError("Please configure the callback first")
         self._strategy = None
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
@@ -443,9 +460,38 @@ class OpenAiGenericReasoner(Reasoner):
         self._busy = True
         return True
 
-    def step(self) -> StepResult:
+    @property
+    def on_task_completed_cb(self) -> OnTaskCompleted:
+        return self._on_task_completed_cb
+
+    @on_task_completed_cb.setter
+    def on_task_completed_cb(self, value: OnTaskCompleted) -> None:
+        self._on_task_completed_cb = value
+
+    def _run_thread(self) -> None:
+        while not self._thread_stop:
+            try:
+                final = self._step()
+                if final is not None:
+                    while self._on_task_completed_cb is _dummy_cb:
+                        _logger.info("Waiting for the callback to be set...")
+                        time.sleep(1)
+                    _logger.debug("Calling the callback...")
+                    try:
+                        self._on_task_completed_cb(final)
+                    except Exception as ex:
+                        _logger.exception("Unhandled exception in the callback: %s", ex)
+                else:
+                    time.sleep(1)
+            except Exception as ex:
+                _logger.exception("Stepping failed: %s", ex)
+                # TODO: use the cancel method once we introduced it instead of this
+                time.sleep(10)
+                # Alternative error handling: pass the exception into the on completed callback.
+
+    def _step(self) -> str | None:
         if not self._busy:
-            return StepResultNothingToDo()
+            return None
         _logger.info(f"👣 Step #{self._step_number} with {len(self._context)} context items")
         self._step_number += 1
 
@@ -476,10 +522,11 @@ class OpenAiGenericReasoner(Reasoner):
         # Atomic context update: only add new items once the step is fully processed.
         # Otherwise, we may end up in an inconsistent state if the processing fails halfway.
         self._context += addendum
+        self._snapshot()
         if final:
             self._busy = False
-            return StepResultCompleted(final)
-        return StepResultInProgress()
+            return final
+        return None
 
     def legilimens(self) -> str | None:
         if not self._busy:
@@ -494,8 +541,12 @@ class OpenAiGenericReasoner(Reasoner):
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
-    def snapshot(self) -> Any:
-        return {
+    def close(self) -> None:
+        self._thread_stop = True
+        self._thread.join()
+
+    def _snapshot(self) -> None:
+        snap = {
             "version": __version_info__,
             "model": self._model,
             "user_system_prompt": self._user_system_prompt,
@@ -503,8 +554,15 @@ class OpenAiGenericReasoner(Reasoner):
             "context": self._context,
             "busy": self._busy,
         }
+        snapshot_file = self._snapshot_file.resolve()
+        _logger.debug(f"Saving snapshot with {len(self._context)} context items into {snapshot_file}")
+        snapshot_file.write_text(json.dumps(snap, indent=2), encoding="utf-8")
 
-    def restore(self, state: Any, /) -> None:
+    def _restore(self) -> None:
+        if not self._snapshot_file.is_file():
+            raise RuntimeError(f"Cannot resume because file not found: {self._snapshot_file}")
+        _logger.warning(f"Resuming {self._snapshot_file}")
+        state = json.loads(self._snapshot_file.read_text(encoding="utf-8"))
         match state:
             case {
                 "version": version,
@@ -522,7 +580,9 @@ class OpenAiGenericReasoner(Reasoner):
                 and (isinstance(context, list) and all(isinstance(x, dict) for x in context))
                 and isinstance(busy, bool)
             ):
-                _logger.info(f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}")
+                _logger.info(
+                    f"Restoring snapshot: model={model}, strategy={'set' if strategy else 'unset'}, busy={busy}"
+                )
                 self._model = model
                 self._strategy = strategy
                 self._user_system_prompt = user_system_prompt
@@ -530,6 +590,7 @@ class OpenAiGenericReasoner(Reasoner):
                     self._build_system_prompt() + [x for x in context if x.get("role") != "system"] + self._screenshot()
                 )
                 self._busy = busy
+
             case _:
                 raise ValueError(f"Snapshot not acceptable: {list(state) if isinstance(state, dict) else type(state)}")
 
