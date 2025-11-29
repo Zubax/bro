@@ -239,20 +239,16 @@ class ConversationHandler:
 
         return msg
 
-    def _determine_response_required(self) -> bool | None:
+    def _determine_response_required(self) -> bool:
         ctx = prune_context_text_only(self._context) + [
             {"role": "user", "content": [{"type": "input_text", "text": _RESPOND_OR_IGNORE_PROMPT}]}
         ]
-
         response = self._request_inference(ctx, model="gpt-5-mini")
         output: str = response["output"][-1]["content"][0]["text"]
-
         response_required_json = util.split_trailing_json(output)[1]
-        response_required = response_required_json.get("response_required")
-        if response_required is True:
-            _logger.info(f"Bro thinks it needs to respond.")
-            return True
-        return None
+        response_required = response_required_json.get("response_required", True)
+        _logger.info(f"Response required: {response_required}")
+        return response_required
 
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
@@ -306,8 +302,6 @@ class ConversationHandler:
                                 via, user, text = parsed_msg
                                 _logger.debug(f"Message from the reasoner after parsing: {text}.")
                                 self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
-                else:
-                    _logger.info("Response isn't required or can't be determined.")
             return True
         return False
         # TODO: attach file to ctx
