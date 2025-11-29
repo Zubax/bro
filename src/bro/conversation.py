@@ -46,13 +46,23 @@ Important:
 """
 
 _RESPOND_OR_IGNORE_PROMPT = """
-You are given a conversation history between an agentic AI named Bro and a number of 
-human users. Your objective is to determine if the conversation warrants a response or an action on behalf of Bro. 
-This would be the case if any of the humans are directly or indirectly addressing Bro, or responding to one of its 
-earlier posts. This would not be the case if the human users are merely talking to each other. In case of ambiguity 
-err toward non-engagement. The response shall contain a brief summary of the observed conversation history, 
-followed by a detailed elaboration of whether Bro needs to engage, and why exactly. Finally, the response shall end 
-with a JSON block following the schema below: { "response_required": bool }
+You are given a conversation history between an agentic AI named Bro and a number of human users.
+Your objective is to determine if the conversation warrants a response or an action on behalf of Bro.
+This would be the case if any of the humans are directly or indirectly addressing Bro,
+or responding to one of its earlier posts.
+This would not be the case if the human users are merely talking to each other.
+
+In case of ambiguity err toward non-engagement.
+
+The response shall contain a brief summary of the observed conversation history,
+followed by a detailed elaboration of whether Bro needs to engage, and why exactly.
+Finally, the response shall end with a JSON block following the schema below:
+
+```
+{
+    "response_required": bool
+}
+```
 """
 
 tools = [
