@@ -184,4 +184,5 @@ def split_trailing_json(text: str) -> tuple[str, Any]:
 _RE_TRAILING_JSON_WONKY = [
     re.compile(r"(?is)`+(?:json)?\n(.+?)\n*`*\s*$"),
     re.compile(r"(?i)(.+?)\s*$"),
+    re.compile(r"(?s)({.*})$"),
 ]

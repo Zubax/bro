@@ -246,7 +246,10 @@ class ConversationHandler:
         response = self._request_inference(ctx, model="gpt-5-mini")
         output: str = response["output"][-1]["content"][0]["text"]
         response_required_json = util.split_trailing_json(output)[1]
-        response_required = response_required_json.get("response_required", True)
+        if not response_required_json:
+            _logger.info(f"Can't determine whether response is required. Default to True.")
+            return True
+        response_required: bool = response_required_json.get("response_required", True)
         _logger.info(f"Response required: {response_required}")
         return response_required
 
