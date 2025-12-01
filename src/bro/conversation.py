@@ -243,7 +243,7 @@ class ConversationHandler:
         ctx = prune_context_text_only(self._context) + [
             {"role": "user", "content": [{"type": "input_text", "text": _RESPOND_OR_IGNORE_PROMPT}]}
         ]
-        response = self._request_inference(ctx, model="gpt-5-mini")
+        response = self._request_inference(ctx, reasoning_effort="none")
         output: str = response["output"][-1]["content"][0]["text"]
         response_required_json = util.split_trailing_json(output)[1]
         if not response_required_json:
@@ -316,14 +316,16 @@ class ConversationHandler:
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(self, ctx: list[dict[str, Any]], /, *, model: str | None = None) -> dict[str, Any]:
+    def _request_inference(
+        self, ctx: list[dict[str, Any]], /, *, model: str | None = None, reasoning_effort: str | None = None
+    ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
             tools=tools,
-            reasoning={"effort": "low", "summary": "detailed"},
+            reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
             truncation="auto",
