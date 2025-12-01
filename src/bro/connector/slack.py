@@ -48,53 +48,61 @@ class SlackConnector(Connector):
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
-            if req.type == "events_api":
-                response = SocketModeResponse(envelope_id=req.envelope_id)
-                client.send_socket_mode_response(response)
-                event_id = req.payload["event_id"]
-                _logger.debug(f"Received event payload: {req.payload['event']}")
-                if event_id in self._seen_events:
-                    return
-                self._seen_events.add(event_id)
-                if req.payload["event"]["type"] == "message" and req.payload["event"].get("subtype") in [
-                    "file_share",
-                    None,
-                ]:
-                    user_id = req.payload["event"]["user"]
-                    if user_id == self._bro_user_id:
-                        text = req.payload["event"]["text"]
-                        _logger.debug("Bro sent a text message: %s", text)
-                        return None
-                    attachments = []
-                    text = ""
-                    channel_id = req.payload["event"]["channel"]
-                    if req.payload["event"].get("text"):
-                        text = req.payload["event"]["text"]
-                        _logger.info("Received a text message: %s", text)
-                    if req.payload["event"].get("subtype") == "file_share":
-                        _logger.info("Received one attachment or more.")
-                        files = req.payload["event"]["files"]
-                        for file in files:
-                            try:
-                                file_info = self._web_client.files_info(file=file["id"])
-                                file_download_url = file_info["file"]["url_private_download"]
-                                file_download_path = _download_attachment(url=file_download_url)
-                                if file_download_path:
-                                    attachments.append(file_download_path)
-                            except Exception as ex:
-                                _logger.exception(f"Failed to save attachment from {file_download_url!r}: {ex}")
-                                return None
-                    _logger.info("Received a total of %d attachments." % len(attachments))
+            event_id = req.payload["event_id"]
+            if event_id in self._seen_events:
+                return None
+
+            event = req.payload["event"]
+            user_id = event.get("user")
+            text = event.get("text") or ""
+            if user_id == self._bro_user_id:
+                _logger.debug("Bro sent a text message: %s", text)
+                return None
+
+            subtype = event.get("subtype")
+            channel_id = event.get("channel")
+
+            match (req.type, event.get("type")):
+                case ("events_api", "message"):
+                    self._seen_events.add(event_id)
+                    response = SocketModeResponse(envelope_id=req.envelope_id)
+                    client.send_socket_mode_response(response)
+                    _logger.debug(f"Received event payload: {req.payload['event']}")
+                    match subtype:
+                        case "file_share":
+                            attachments = []
+                            _logger.info("Received one attachment or more.")
+                            files = event.get("files")
+                            for file in files:
+                                file_id = file["id"]
+                                try:
+                                    file_info = self._web_client.files_info(file=file_id)
+                                    file_download_url = file_info["file"]["url_private_download"]
+                                    file_download_path = _download_attachment(url=file_download_url)
+                                    if file_download_path:
+                                        attachments.append(file_download_path)
+                                except Exception as ex:
+                                    _logger.exception("Failed to save attachment for file %r: %s", file_id, ex)
+                                    return None
+                            _logger.info("Received a total of %d attachments." % len(attachments))
+                        case None:
+                            pass
+                        case _:
+                            _logger.debug("Ignoring message with subtype %r", subtype)
+                            return None
+
                     user_info = self._web_client.users_info(user=user_id)["user"]
                     user_name = user_info["name"]
                     _logger.debug(f"User info: id={user_id}, name={user_name}")
                     self._unread_msgs.append(
                         ReceivedMessage(
-                            via=Channel(name=channel_id), user=User(name=user_name), text=text, attachments=attachments
+                            via=Channel(name=channel_id),
+                            user=User(name=user_name),
+                            text=text,
+                            attachments=attachments,
                         )
                     )
                     return None
-                return None
             return None
 
     def list_channels(self) -> list[Channel] | SlackResponse:
