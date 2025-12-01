@@ -52,13 +52,13 @@ class SlackConnector(Connector):
                 response = SocketModeResponse(envelope_id=req.envelope_id)
                 client.send_socket_mode_response(response)
                 event_id = req.payload["event_id"]
-                user_id = req.payload["event"]["user"]
                 _logger.debug(f"Received event payload: {req.payload['event']}")
                 if event_id in self._seen_events:
                     return
                 self._seen_events.add(event_id)
                 if req.payload["event"]["type"] == "message":
-                    if req.payload["event"]["user"] == self._bro_user_id:
+                    user_id = req.payload["event"]["user"]
+                    if user_id == self._bro_user_id:
                         text = req.payload["event"]["text"]
                         _logger.debug("Bro sent a text message: %s", text)
                         return None
