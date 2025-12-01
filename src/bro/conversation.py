@@ -9,8 +9,10 @@ import yaml
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
+from bro import util
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
+from bro.util import prune_context_text_only
 
 _logger = logging.getLogger(__name__)
 
@@ -41,6 +43,26 @@ necessary.
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - There is no need to check the reasoner’s status before calling task_reasoner.
+"""
+
+_RESPOND_OR_IGNORE_PROMPT = """
+You are given a conversation history between an agentic AI named Bro and a number of human users.
+Your objective is to determine if the conversation warrants a response or an action on behalf of Bro.
+This would be the case if any of the humans are directly or indirectly addressing Bro,
+or responding to one of its earlier posts.
+This would not be the case if the human users are merely talking to each other.
+
+In case of ambiguity err toward non-engagement.
+
+The response shall contain a brief summary of the observed conversation history,
+followed by a detailed elaboration of whether Bro needs to engage, and why exactly.
+Finally, the response shall end with a JSON block following the schema below:
+
+```
+{
+    "response_required": bool
+}
+```
 """
 
 tools = [
@@ -217,6 +239,20 @@ class ConversationHandler:
 
         return msg
 
+    def _determine_response_required(self) -> bool:
+        ctx = prune_context_text_only(self._context) + [
+            {"role": "user", "content": [{"type": "input_text", "text": _RESPOND_OR_IGNORE_PROMPT}]}
+        ]
+        response = self._request_inference(ctx, model="gpt-5-mini")
+        output: str = response["output"][-1]["content"][0]["text"]
+        response_required_json = util.split_trailing_json(output)[1]
+        if not response_required_json:
+            _logger.info(f"Can't determine whether response is required. Default to True.")
+            return True
+        response_required: bool = response_required_json.get("response_required", True)
+        _logger.info(f"Response required: {response_required}")
+        return response_required
+
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
@@ -240,20 +276,35 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                _logger.debug("Generating response from the conversation model...")
-                conversation_response = self._request_inference(self._context)
-                output = conversation_response["output"]
-                if not output:
-                    _logger.warning("No output from model; response: %s", conversation_response)
-                addendum = output.copy()
-                for item in addendum:
-                    _logger.debug(f"Received item from the conversation model: {item}")
-                    if item.get("type") == "reasoning" and "status" in item:
-                        del item["status"]
-                        _logger.debug("Ignoring reasoning message...")
-                        continue
-                self._context += addendum
-                self._process_response_output(output)
+                should_respond = self._determine_response_required()
+                if should_respond:
+                    _logger.debug("Generating response from the conversation model...")
+                    conversation_response = self._request_inference(self._context)
+                    output = conversation_response["output"]
+
+                    if not output:
+                        _logger.warning("No output from model; response: %s", conversation_response)
+
+                    addendum = output.copy()
+
+                    for item in addendum:
+                        _logger.debug(f"Received item from the conversation model: {item}")
+                        if item.get("type") == "reasoning" and "status" in item:
+                            del item["status"]
+                            _logger.debug("Ignoring reasoning message...")
+                            continue
+
+                    self._context += addendum
+
+                    for item in output:
+                        msg_data = self._process(item)
+                        _logger.debug(f"After processing, got msg_data: {msg_data}")
+                        if msg_data:
+                            parsed_msg = _parse_message(msg_data)
+                            if parsed_msg:
+                                via, user, text = parsed_msg
+                                _logger.debug(f"Message from the reasoner after parsing: {text}.")
+                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
             return True
         return False
         # TODO: attach file to ctx
@@ -265,11 +316,11 @@ class ConversationHandler:
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(self, ctx: list[dict[str, Any]]) -> dict[str, Any]:
+    def _request_inference(self, ctx: list[dict[str, Any]], /, *, model: str | None = None) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore
-            model="gpt-5",
+            model=model or "gpt-5.1",
             input=ctx,
             tools=tools,
             reasoning={"effort": "low", "summary": "detailed"},
