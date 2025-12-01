@@ -56,7 +56,10 @@ class SlackConnector(Connector):
                 if event_id in self._seen_events:
                     return
                 self._seen_events.add(event_id)
-                if req.payload["event"]["type"] == "message":
+                if req.payload["event"]["type"] == "message" and req.payload["event"].get("subtype") in [
+                    "file_share",
+                    None,
+                ]:
                     user_id = req.payload["event"]["user"]
                     if user_id == self._bro_user_id:
                         text = req.payload["event"]["text"]
