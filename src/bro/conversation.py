@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 from dataclasses import dataclass
@@ -180,7 +179,6 @@ class ConversationHandler:
             f"""\
         via:  
         user: Bro Reasoner
-        attachments: []
         ---
         {message}
         """
