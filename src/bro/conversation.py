@@ -1,6 +1,8 @@
 import json
 import logging
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import textwrap
 
@@ -136,6 +138,8 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
+        self._vector_store = self._client.vector_stores.create(name="knowledge_base")
+        self._tools = tools + [{"type": "file_search", "vector_store_ids": [self._vector_store.id]}]
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -253,6 +257,12 @@ class ConversationHandler:
         _logger.info(f"Response required: {response_required}")
         return response_required
 
+    def _create_file(self, file_path: Path) -> str:
+        with open(file_path, "rb") as file_content:
+            result = self._client.files.create(file=file_content, purpose="assistants")
+            _logger.info("File created in vector store.")
+            return result.id
+
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
@@ -276,6 +286,32 @@ class ConversationHandler:
                         ],
                     },
                 ]
+                for file in msg.attachments:
+                    file_id = self._create_file(file)
+                    vs_file = self._client.vector_stores.files.create(
+                        vector_store_id=self._vector_store.id, file_id=file_id
+                    )
+                    while True:
+                        match vs_file.status:
+                            case "completed":
+                                _logger.info("File is ready.")
+                                break
+
+                            case "failed":
+                                _logger.info("This file type isn't supported. Failed.")
+                                break
+
+                            case "in_progress":
+                                time.sleep(1)
+                                vs_file = self._client.vector_stores.files.retrieve(
+                                    vector_store_id=self._vector_store.id, file_id=vs_file.id
+                                )
+                                continue
+
+                            case _:
+                                _logger.info(f"Unknown file status: {vs_file.status}")
+                                break
+
                 should_respond = self._determine_response_required()
                 if should_respond:
                     _logger.debug("Generating response from the conversation model...")
@@ -324,7 +360,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=tools,
+            tools=self._tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",

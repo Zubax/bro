@@ -19,14 +19,6 @@ _logger = logging.getLogger(__name__)
 ATTACHMENT_FOLDER = tempfile.mkdtemp()
 
 
-def _download_attachment(url: str) -> Path | None:
-    response = requests.get(url)
-    file_location = Path(ATTACHMENT_FOLDER) / url.split("/")[-1]
-    file_location.write_bytes(response.content)
-    _logger.info(f"File is saved at {file_location}")
-    return file_location
-
-
 class SlackConnector(Connector):
     """
     SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
@@ -35,6 +27,7 @@ class SlackConnector(Connector):
 
     def __init__(self, *, bot_token: str, app_token: str, bro_user_id: str) -> None:
         self._web_client = WebClient(token=bot_token)
+        self._bot_token = bot_token
         self._client = SocketModeClient(app_token=app_token, web_client=self._web_client)
         self._unread_msgs: list[ReceivedMessage] = []
         self._bro_user_id: str = bro_user_id
@@ -46,15 +39,29 @@ class SlackConnector(Connector):
         # TODO this is a hack to filter out duplicate events from the Slack API
         self._seen_events: set[Any] = set()
 
+    def _download_attachment(self, url: str) -> Path | None:
+        headers = {"Authorization": f"Bearer {self._bot_token}"}
+        file_location = Path(ATTACHMENT_FOLDER) / url.split("/")[-1]
+        try:
+            response = requests.get(url, headers=headers)
+            file_location.write_bytes(response.content)
+            _logger.info(f"File is saved at {file_location}")
+            return file_location
+        except Exception as ex:
+            _logger.exception(f"Failed to save attachment to {file_location!r}: {ex}")
+            return None
+
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
             event_id = req.payload["event_id"]
             if event_id in self._seen_events:
                 return None
+            self._seen_events.add(event_id)
 
             event = req.payload["event"]
             user_id = event.get("user")
             text = event.get("text") or ""
+            attachments = []
             if user_id == self._bro_user_id:
                 _logger.debug("Bro sent a text message: %s", text)
                 return None
@@ -64,13 +71,11 @@ class SlackConnector(Connector):
 
             match (req.type, event.get("type")):
                 case ("events_api", "message"):
-                    self._seen_events.add(event_id)
                     response = SocketModeResponse(envelope_id=req.envelope_id)
                     client.send_socket_mode_response(response)
                     _logger.debug(f"Received event payload: {req.payload['event']}")
                     match subtype:
                         case "file_share":
-                            attachments = []
                             _logger.info("Received one attachment or more.")
                             files = event.get("files")
                             for file in files:
@@ -78,7 +83,7 @@ class SlackConnector(Connector):
                                 try:
                                     file_info = self._web_client.files_info(file=file_id)
                                     file_download_url = file_info["file"]["url_private_download"]
-                                    file_download_path = _download_attachment(url=file_download_url)
+                                    file_download_path = self._download_attachment(url=file_download_url)
                                     if file_download_path:
                                         attachments.append(file_download_path)
                                 except Exception as ex:
