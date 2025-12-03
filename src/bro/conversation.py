@@ -95,6 +95,44 @@ tools = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
+    {
+        "type": "function",
+        "name": "read_files",
+        "description": """\
+        Add the contents of the specified local files (text or binary) to the LLM context (conversation). This function works
+        with any files that are accessible on the local system, including files that are not text files.
+        This is usually more efficient than asking the computer-using agent to open and read files from the screen.
+        
+        File names don't need to be the full paths; just a name will suffice as long as it is unique in the filesystem;
+        if you provide a full or partial path, it will help locate the file more quickly and avoid ambiguities.
+        You can use `~` to refer to the home directory.
+        """,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_names": {
+                    "type": "array",
+                    "description": "The names of the files to read"
+                    " Preferably, these should be full or at least partial paths rather than just names;"
+                    " otherwise, the environment will use (unreliable) heuristics to find the file on the computer.",
+                    "items": {
+                        "type": "string",
+                        "description": "For example: `~/Downloads/invoice.pdf` or `my_project/notes.txt`",
+                    },
+                    "minItems": 1,
+                },
+                "category": {
+                    "type": "string",
+                    # We have explicit "pdf" here because sometimes LLM attempts to read it as an image
+                    "enum": ["image", "text", "pdf", "other"],
+                    "description": "High-level file category. Applies to all files at once."
+                    " If you need to read files of different categories, call this function multiple times.",
+                },
+            },
+            "additionalProperties": False,
+            "required": ["file_names", "category"],
+        },
+    },
 ]
 
 
@@ -298,7 +336,19 @@ class ConversationHandler:
                                 break
 
                             case "failed":
-                                _logger.info("This file type isn't supported. Failed.")
+                                last_error = vs_file.last_error
+                                _logger.info(f"File processing error: {last_error}")
+                                self._context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"Inform the user about the error: {last_error.message}",
+                                            },
+                                        ],
+                                    },
+                                ]
                                 break
 
                             case "in_progress":
@@ -309,7 +359,24 @@ class ConversationHandler:
                                 continue
 
                             case _:
-                                _logger.info(f"Unknown file status: {vs_file.status}")
+                                status, last_error = vs_file.status, vs_file.last_error
+                                _logger.info(f"Unknown file status: {status}. Error: {last_error}")
+                                msg = (
+                                    f"Inform the user about the unknown status: {status} "
+                                    f"and error message: {last_error.message if last_error else None}"
+                                )
+                                self._context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": msg,
+                                            },
+                                        ],
+                                    },
+                                ]
+
                                 break
 
                 should_respond = self._determine_response_required()
