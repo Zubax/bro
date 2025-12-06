@@ -1,20 +1,20 @@
+import base64
 import json
 import logging
-import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 import textwrap
 
 import openai
 import yaml
+from PIL import Image
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro import util
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
-from bro.util import prune_context_text_only
+from bro.util import prune_context_text_only, image_to_base64, detect_file_format
 
 _logger = logging.getLogger(__name__)
 
@@ -95,44 +95,6 @@ tools = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
-    {
-        "type": "function",
-        "name": "read_files",
-        "description": """\
-        Add the contents of the specified local files (text or binary) to the LLM context (conversation). This function works
-        with any files that are accessible on the local system, including files that are not text files.
-        This is usually more efficient than asking the computer-using agent to open and read files from the screen.
-        
-        File names don't need to be the full paths; just a name will suffice as long as it is unique in the filesystem;
-        if you provide a full or partial path, it will help locate the file more quickly and avoid ambiguities.
-        You can use `~` to refer to the home directory.
-        """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "file_names": {
-                    "type": "array",
-                    "description": "The names of the files to read"
-                    " Preferably, these should be full or at least partial paths rather than just names;"
-                    " otherwise, the environment will use (unreliable) heuristics to find the file on the computer.",
-                    "items": {
-                        "type": "string",
-                        "description": "For example: `~/Downloads/invoice.pdf` or `my_project/notes.txt`",
-                    },
-                    "minItems": 1,
-                },
-                "category": {
-                    "type": "string",
-                    # We have explicit "pdf" here because sometimes LLM attempts to read it as an image
-                    "enum": ["image", "text", "pdf", "other"],
-                    "description": "High-level file category. Applies to all files at once."
-                    " If you need to read files of different categories, call this function multiple times.",
-                },
-            },
-            "additionalProperties": False,
-            "required": ["file_names", "category"],
-        },
-    },
 ]
 
 
@@ -176,8 +138,6 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
-        self._vector_store = self._client.vector_stores.create(name="knowledge_base")
-        self._tools = tools + [{"type": "file_search", "vector_store_ids": [self._vector_store.id]}]
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -295,12 +255,6 @@ class ConversationHandler:
         _logger.info(f"Response required: {response_required}")
         return response_required
 
-    def _create_file(self, file_path: Path) -> str:
-        with open(file_path, "rb") as file_content:
-            result = self._client.files.create(file=file_content, purpose="assistants")
-            _logger.info("File created in vector store.")
-            return result.id
-
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
         _logger.info("Polling for user messages...")
@@ -324,60 +278,64 @@ class ConversationHandler:
                         ],
                     },
                 ]
-                for file in msg.attachments:
-                    file_id = self._create_file(file)
-                    vs_file = self._client.vector_stores.files.create(
-                        vector_store_id=self._vector_store.id, file_id=file_id
-                    )
-                    while True:
-                        match vs_file.status:
-                            case "completed":
-                                _logger.info("File is ready.")
-                                break
 
-                            case "failed":
-                                last_error = vs_file.last_error
-                                _logger.info(f"File processing error: {last_error}")
+                for file_path in msg.attachments:
+                    file_format = detect_file_format(file_path)
+                    msg = {"type": "input_text", "text": f"User uploaded this file: {file_path}"}
+                    match file_format:
+                        case "text/plain":
+                            with open(file_path, "rb") as file_content:
                                 self._context += [
                                     {
                                         "role": "user",
                                         "content": [
-                                            {
-                                                "type": "input_text",
-                                                "text": f"Inform the user about the error: {last_error.message}",
-                                            },
+                                            msg,
+                                            {"type": "input_text", "text": f"file content {file_content.read()}"},
                                         ],
-                                    },
+                                    }
                                 ]
-                                break
-
-                            case "in_progress":
-                                time.sleep(1)
-                                vs_file = self._client.vector_stores.files.retrieve(
-                                    vector_store_id=self._vector_store.id, file_id=vs_file.id
-                                )
-                                continue
-
-                            case _:
-                                status, last_error = vs_file.status, vs_file.last_error
-                                _logger.info(f"Unknown file status: {status}. Error: {last_error}")
-                                msg = (
-                                    f"Inform the user about the unknown status: {status} "
-                                    f"and error message: {last_error.message if last_error else None}"
-                                )
+                        case "application/pdf":
+                            with open(file_path, "rb") as file_content:
+                                file_bytes = base64.b64encode(file_content.read())
                                 self._context += [
                                     {
                                         "role": "user",
                                         "content": [
+                                            msg,
                                             {
-                                                "type": "input_text",
-                                                "text": msg,
+                                                "type": "input_file",
+                                                "filename": file_path.name,
+                                                "file_data": f"data:{file_format};base64,{file_bytes.decode()}",
                                             },
                                         ],
                                     },
                                 ]
-
-                                break
+                        case _ if "image" in file_format:
+                            self._context += [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        msg,
+                                        {
+                                            "type": "input_image",
+                                            "image_url": f"data:{file_format};base64,{image_to_base64(Image.open(file_path))}",
+                                        },
+                                    ],
+                                },
+                            ]
+                        case _:
+                            self._context += [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        msg,
+                                        {
+                                            "type": "input_text",
+                                            "text": f"Sorry this file type can't be determined or isn't supported!",
+                                        },
+                                    ],
+                                },
+                            ]
 
                 should_respond = self._determine_response_required()
                 if should_respond:
@@ -399,15 +357,7 @@ class ConversationHandler:
 
                     self._context += addendum
 
-                    for item in output:
-                        msg_data = self._process(item)
-                        _logger.debug(f"After processing, got msg_data: {msg_data}")
-                        if msg_data:
-                            parsed_msg = _parse_message(msg_data)
-                            if parsed_msg:
-                                via, user, text = parsed_msg
-                                _logger.debug(f"Message from the reasoner after parsing: {text}.")
-                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                    self._process_response_output(output)
             return True
         return False
         # TODO: attach file to ctx
@@ -427,7 +377,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=self._tools,
+            tools=tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
