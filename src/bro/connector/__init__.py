@@ -65,8 +65,3 @@ class Connector(ABC):
     def send(self, message: Message, via: Channel) -> None:
         """Submit message for transmission."""
         raise NotImplementedError
-
-    @abstractmethod
-    def upload_file(self, file_path: str, title: str, channel: str, comment: str) -> None:
-        """Upload local file for user access."""
-        raise NotImplementedError

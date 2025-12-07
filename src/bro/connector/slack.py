@@ -126,18 +126,6 @@ class SlackConnector(Connector):
                 return list(map(lambda c: User(c["user"]), response["channels"]))
             return response
 
-    def upload_file(self, file_path: str, title: str, channel: str, comment: str) -> None | SlackResponse:
-        with self._mutex:
-            response: SlackResponse = self._web_client.files_upload_v2(
-                file=file_path,
-                title=title,
-                channel=channel,
-                initial_comment=comment,
-            )
-            if response["ok"]:
-                return response
-            return None
-
     def poll(self) -> list[ReceivedMessage]:
         with self._mutex:
             last_unread_msgs = self._unread_msgs
@@ -146,10 +134,14 @@ class SlackConnector(Connector):
 
     def send(self, message: Message, via: Channel) -> None:
         with self._mutex:
-            self._web_client.chat_postMessage(
-                channel=via.name,
-                text=message.text,
-            )
+            self._web_client.chat_postMessage(channel=via.name, text=message.text)
+            if message.attachments:
+                for file_path in message.attachments:
+                    self._web_client.files_upload_v2(
+                        file=file_path,
+                        channel=via.name,
+                    )
+            return None
 
 
 if __name__ == "__main__":

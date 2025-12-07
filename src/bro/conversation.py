@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import textwrap
 
@@ -34,6 +35,7 @@ All messages MUST follow the schema defined below:
 ```
 via: "<channel name>"
 user: "<user name>"
+attachments: "<list of file paths separated by a comma>"
 ---
 <user message verbatim>
 ```
@@ -95,29 +97,6 @@ tools = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
-    {
-        "type": "function",
-        "name": "upload_file",
-        "description": "Upload local file. This should be used when the user requests the file not file path only.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "the location of the file on the local system",
-                },
-                "title": {
-                    "type": "string",
-                    "description": "the title of the file",
-                },
-                "channel": {"type": "string", "description": "the channel of the user to send the file"},
-                "comment": {"type": "string", "description": "comment related to the file"},
-            },
-            "required": ["file_path", "title", "channel", "comment"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
 ]
 
 
@@ -131,18 +110,18 @@ class Task:
     summary: str
 
 
-def _parse_message(msg_data: str) -> tuple[str, str, str] | None:
+def _parse_message(msg_data: str) -> tuple[str, str, str, str] | None:
     try:
         metadata, text = msg_data.split("\n---", 1)
         metadata = yaml.safe_load(metadata)
-        via, user = metadata.get("via"), metadata.get("user")
+        via, user, attachments = metadata.get("via"), metadata.get("user"), metadata.get("attachments")
     except (AttributeError, KeyError, TypeError) as e:
         _logger.error(f"Wrong message format. Error: {e}")
         return None
     except Exception as e:
         _logger.error(f"Unknown error: {e}")
         return None
-    return via, user, text
+    return via, user, text, attachments
 
 
 class ConversationHandler:
@@ -182,9 +161,13 @@ class ConversationHandler:
             _logger.debug(f"After processing, got msg_data: {msg_data}")
             if msg_data:
                 if parsed_msg := _parse_message(msg_data):
-                    via, user, text = parsed_msg
+                    via, user, text, attachments = parsed_msg
                     _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
+                    if attachments != "":
+                        attachments = [Path(file_path.strip()) for file_path in attachments.split(",")]
+                    else:
+                        attachments = []
+                    self.connector.send(Message(text=text, attachments=attachments), via=Channel(via))
                 else:
                     _logger.error(f"Message can't be parsed. Received data: {msg_data}")
                     # TODO rerunning inference using Tenacity
@@ -195,6 +178,7 @@ class ConversationHandler:
             f"""\
         via:  
         user: Bro Reasoner
+        attachments:
         ---
         {message}
         """
@@ -257,13 +241,6 @@ class ConversationHandler:
                                 )
                             )
 
-                    case (
-                        "upload_file",
-                        {"file_path": file_path, "title": title, "comment": comment, "channel": channel},
-                    ):
-                        _logger.info("Uploading local file...")
-                        result = self.connector.upload_file(file_path, title, channel, comment)
-
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -296,6 +273,7 @@ class ConversationHandler:
                     f"""\
                 via: {msg.via.name!r} 
                 user: {msg.user.name!r}
+                attachments: {msg.attachments!r}
                 ---
                 {msg.text}
                 """
@@ -312,7 +290,13 @@ class ConversationHandler:
 
                 for file_path in msg.attachments:
                     file_format = detect_file_format(file_path)
-                    text_msg = {"type": "input_text", "text": f"User uploaded this file: {file_path}"}
+                    text_msg = {
+                        "type": "input_text",
+                        "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
+                    }
+                    # If the file is too large, don't add it to the context but instead store it locally and
+                    # add the path to the context, explaining that the file is too large so only the reasoner can
+                    # can access it.
                     match file_format:
                         case "text/plain":
                             with open(file_path, "rb") as file_content:
@@ -321,7 +305,7 @@ class ConversationHandler:
                                         "role": "user",
                                         "content": [
                                             text_msg,
-                                            {"type": "input_text", "text": f"file content {file_content.read()!r}"},
+                                            {"type": "input_text", "text": file_content.read().decode()},
                                         ],
                                     }
                                 ]
@@ -355,6 +339,7 @@ class ConversationHandler:
                                 },
                             ]
                         case _:
+                            # TODO handle unknown files the same way as you handle large files.
                             self._context += [
                                 {
                                     "role": "user",
@@ -369,6 +354,7 @@ class ConversationHandler:
                             ]
 
                 should_respond = self._determine_response_required()
+
                 if should_respond:
                     _logger.debug("Generating response from the conversation model...")
                     conversation_response = self._request_inference(self._context)
@@ -391,7 +377,6 @@ class ConversationHandler:
                     self._process_response_output(output)
             return True
         return False
-        # TODO: attach file to ctx
 
     @retry(
         reraise=True,
