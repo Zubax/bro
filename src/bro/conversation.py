@@ -95,6 +95,29 @@ tools = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
+    {
+        "type": "function",
+        "name": "upload_file",
+        "description": "Upload local file. This should be used when the user requests the file not file path only.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "the location of the file on the local system",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "the title of the file",
+                },
+                "channel": {"type": "string", "description": "the channel of the user to send the file"},
+                "comment": {"type": "string", "description": "comment related to the file"},
+            },
+            "required": ["file_path", "title", "channel", "comment"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
 ]
 
 
@@ -234,8 +257,16 @@ class ConversationHandler:
                                 )
                             )
 
+                    case (
+                        "upload_file",
+                        {"file_path": file_path, "title": title, "comment": comment, "channel": channel},
+                    ):
+                        _logger.info("Uploading local file...")
+                        result = self.connector.upload_file(file_path, title, channel, comment)
+
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
+
                 _logger.info(f"Function call result: {result}")
                 self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
 
