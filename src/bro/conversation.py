@@ -110,7 +110,7 @@ class Task:
 
 def _parse_message(msg_data: str) -> tuple[str, str, str] | None:
     try:
-        metadata, text = msg_data.split("\n---\n", 1)
+        metadata, text = msg_data.split("\n---", 1)
         metadata = yaml.safe_load(metadata)
         via, user = metadata.get("via"), metadata.get("user")
     except (AttributeError, KeyError, TypeError) as e:
