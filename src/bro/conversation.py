@@ -281,7 +281,7 @@ class ConversationHandler:
 
                 for file_path in msg.attachments:
                     file_format = detect_file_format(file_path)
-                    msg = {"type": "input_text", "text": f"User uploaded this file: {file_path}"}
+                    text_msg = {"type": "input_text", "text": f"User uploaded this file: {file_path}"}
                     match file_format:
                         case "text/plain":
                             with open(file_path, "rb") as file_content:
@@ -289,8 +289,8 @@ class ConversationHandler:
                                     {
                                         "role": "user",
                                         "content": [
-                                            msg,
-                                            {"type": "input_text", "text": f"file content {file_content.read()}"},
+                                            text_msg,
+                                            {"type": "input_text", "text": f"file content {file_content.read()!r}"},
                                         ],
                                     }
                                 ]
@@ -301,7 +301,7 @@ class ConversationHandler:
                                     {
                                         "role": "user",
                                         "content": [
-                                            msg,
+                                            text_msg,
                                             {
                                                 "type": "input_file",
                                                 "filename": file_path.name,
@@ -310,12 +310,12 @@ class ConversationHandler:
                                         ],
                                     },
                                 ]
-                        case _ if "image" in file_format:
+                        case _ if file_format and "image" in file_format:
                             self._context += [
                                 {
                                     "role": "user",
                                     "content": [
-                                        msg,
+                                        text_msg,
                                         {
                                             "type": "input_image",
                                             "image_url": f"data:{file_format};base64,{image_to_base64(Image.open(file_path))}",
