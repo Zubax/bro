@@ -193,7 +193,10 @@ class ConversationHandler:
             }
         ]
         _logger.info("Requesting conversation response after receiving reasoner response...")
-        conversation_response = self._request_inference(self._context)
+        try:
+            conversation_response = self._request_inference(self._context)
+        except:
+            _logger.info(self._context[6])
         output = conversation_response["output"]
         if not output:
             _logger.warning("No output from conversation model; response: %s", conversation_response)
@@ -234,19 +237,20 @@ class ConversationHandler:
                                     f"content: {result}"
                                 )
                                 return None
-                            self._msgs.append(
-                                ReceivedMessage(
-                                    via=self._current_task.channel,
-                                    user=User(name="Bro"),
-                                    text=result,
-                                    attachments=[],
-                                )
-                            )
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 _logger.info(f"Function call result: {result}")
+                self._msgs.append(
+                    ReceivedMessage(
+                        via=self._current_task.channel,
+                        user=User(name="Bro"),
+                        text=f"Inform the user: {result}",
+                        attachments=[],
+                    )
+                )
+
                 self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
 
         return msg

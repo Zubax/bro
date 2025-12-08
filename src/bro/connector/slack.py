@@ -137,10 +137,13 @@ class SlackConnector(Connector):
             self._web_client.chat_postMessage(channel=via.name, text=message.text)
             if message.attachments:
                 for file_path in message.attachments:
-                    self._web_client.files_upload_v2(
-                        file=file_path,
-                        channel=via.name,
-                    )
+                    if file_path.is_file():
+                        self._web_client.files_upload_v2(
+                            file=file_path,
+                            channel=via.name,
+                        )
+                    else:
+                        _logger.error(f"File {file_path} doesn't exist.")
             return None
 
 
