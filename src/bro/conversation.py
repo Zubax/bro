@@ -4,7 +4,7 @@ import logging
 import os.path
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 import textwrap
 
 import openai
@@ -163,10 +163,10 @@ class ConversationHandler:
             _logger.debug(f"After processing, got msg_data: {msg_data}")
             if msg_data:
                 if parsed_msg := _parse_message(msg_data):
-                    via, user, text, attachments = parsed_msg
+                    via, user, text, fpaths = parsed_msg
                     _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                    if attachments != "":
-                        attachments = [Path(file_path.strip()) for file_path in attachments.split(",")]
+                    if fpaths != "":
+                        attachments = [Path(file_path.strip()) for file_path in fpaths.split(",")]
                     else:
                         attachments = []
                     self.connector.send(Message(text=text, attachments=attachments), via=Channel(via))
@@ -193,10 +193,7 @@ class ConversationHandler:
             }
         ]
         _logger.info("Requesting conversation response after receiving reasoner response...")
-        try:
-            conversation_response = self._request_inference(self._context)
-        except:
-            _logger.info(self._context[6])
+        conversation_response = self._request_inference(self._context)
         output = conversation_response["output"]
         if not output:
             _logger.warning("No output from conversation model; response: %s", conversation_response)
@@ -204,10 +201,9 @@ class ConversationHandler:
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
-        msg = None
         match item:
             case {"type": "message", "content": content}:
-                msg = content[0]["text"]
+                return str(content[0]["text"])
 
             case {"type": "reasoning"}:
                 for x in item["summary"]:
@@ -230,30 +226,30 @@ class ConversationHandler:
                     case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
-                        if result:
-                            if not self._current_task:
-                                _logger.error(
-                                    f"Missing current task context. Cannot route message to any channel. Message "
-                                    f"content: {result}"
-                                )
-                                return None
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
-                _logger.info(f"Function call result: {result}")
-                self._msgs.append(
-                    ReceivedMessage(
-                        via=self._current_task.channel,
-                        user=User(name="Bro"),
-                        text=f"Inform the user: {result}",
-                        attachments=[],
-                    )
-                )
+                if result:
+                    _logger.info(f"Function call result: {result}")
 
-                self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
+                    self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
 
-        return msg
+                    if self._current_task:
+                        self._msgs.append(
+                            ReceivedMessage(
+                                via=self._current_task.channel,
+                                user=User(name="Bro"),
+                                text=f"Inform the user: {result}",
+                                attachments=[],
+                            )
+                        )
+                    else:
+                        _logger.error(
+                            f"Missing current task context. Cannot route message to any channel. Message "
+                            f"content: {result}"
+                        )
+        return None
 
     def _determine_response_required(self) -> bool:
         ctx = prune_context_text_only(self._context) + [
