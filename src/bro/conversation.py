@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os.path
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from bro.util import prune_context_text_only, image_to_base64, detect_file_forma
 
 _logger = logging.getLogger(__name__)
 
+_FILE_UPLOAD_LIMIT = 1_000_000
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -273,7 +275,7 @@ class ConversationHandler:
                     f"""\
                 via: {msg.via.name!r} 
                 user: {msg.user.name!r}
-                attachments: {msg.attachments!r}
+                attachments: {msg.attachments}
                 ---
                 {msg.text}
                 """
@@ -289,16 +291,14 @@ class ConversationHandler:
                 ]
 
                 for file_path in msg.attachments:
-                    file_format = detect_file_format(file_path)
                     text_msg = {
                         "type": "input_text",
                         "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
                     }
-                    # If the file is too large, don't add it to the context but instead store it locally and
-                    # add the path to the context, explaining that the file is too large so only the reasoner can
-                    # can access it.
-                    match file_format:
-                        case "text/plain":
+                    file_size = os.path.getsize(file_path)
+                    file_format = detect_file_format(file_path)
+                    match (file_format, file_size):
+                        case ("text/plain", size) if size < _FILE_UPLOAD_LIMIT:
                             with open(file_path, "rb") as file_content:
                                 self._context += [
                                     {
@@ -309,7 +309,7 @@ class ConversationHandler:
                                         ],
                                     }
                                 ]
-                        case "application/pdf":
+                        case ("application/pdf", size) if size < _FILE_UPLOAD_LIMIT:
                             with open(file_path, "rb") as file_content:
                                 file_bytes = base64.b64encode(file_content.read())
                                 self._context += [
@@ -325,7 +325,7 @@ class ConversationHandler:
                                         ],
                                     },
                                 ]
-                        case _ if file_format and "image" in file_format:
+                        case (fmt, size) if fmt and "image" in fmt and size < _FILE_UPLOAD_LIMIT:
                             self._context += [
                                 {
                                     "role": "user",
@@ -333,21 +333,21 @@ class ConversationHandler:
                                         text_msg,
                                         {
                                             "type": "input_image",
-                                            "image_url": f"data:{file_format};base64,{image_to_base64(Image.open(file_path))}",
+                                            "image_url": f"data:{fmt};base64,{image_to_base64(Image.open(file_path))}",
                                         },
                                     ],
                                 },
                             ]
                         case _:
-                            # TODO handle unknown files the same way as you handle large files.
                             self._context += [
                                 {
                                     "role": "user",
                                     "content": [
-                                        msg,
                                         {
                                             "type": "input_text",
-                                            "text": f"Sorry this file type can't be determined or isn't supported!",
+                                            "text": f"User uploaded this file: {file_path}."
+                                            f"File can't be processed because it is too big or file format "
+                                            f"isn't supported. Please try task the reasoner instead.",
                                         },
                                     ],
                                 },
