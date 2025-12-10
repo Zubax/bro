@@ -20,7 +20,7 @@ from bro.util import prune_context_text_only, image_to_base64, detect_file_forma
 
 _logger = logging.getLogger(__name__)
 
-_FILE_UPLOAD_LIMIT = 1_000_000
+_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 1_000_000
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -33,11 +33,12 @@ it cannot do is run periodic activities or actions that involve delays, such as 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
-All messages MUST follow the schema defined below:
+All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
+with the message. If there are no attachments, this should be [].
 ```
 via: "<channel name>"
 user: "<user name>"
-attachments: "<list of file paths separated by a comma>"
+attachments: ["path/to/file1", "path/to/file2", ...]
 ---
 <user message verbatim>
 ```
@@ -166,7 +167,7 @@ class ConversationHandler:
                     via, user, text, fpaths = parsed_msg
                     _logger.debug(f"Message from the conversation model after parsing: {text}.")
                     if fpaths != "":
-                        attachments = [Path(file_path.strip()) for file_path in fpaths.split(",")]
+                        attachments = [Path(file_path.strip()) for file_path in fpaths]
                     else:
                         attachments = []
                     self.connector.send(Message(text=text, attachments=attachments), via=Channel(via))
@@ -180,7 +181,7 @@ class ConversationHandler:
             f"""\
         via:  
         user: Bro Reasoner
-        attachments:
+        attachments: []
         ---
         {message}
         """
@@ -275,7 +276,7 @@ class ConversationHandler:
                     f"""\
                 via: {msg.via.name!r} 
                 user: {msg.user.name!r}
-                attachments: {msg.attachments}
+                attachments: {list(map(str, msg.attachments))}
                 ---
                 {msg.text}
                 """
@@ -298,7 +299,7 @@ class ConversationHandler:
                     file_size = os.path.getsize(file_path)
                     file_format = detect_file_format(file_path)
                     match (file_format, file_size):
-                        case ("text/plain", size) if size < _FILE_UPLOAD_LIMIT:
+                        case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
                             with open(file_path, "rb") as file_content:
                                 self._context += [
                                     {
@@ -309,7 +310,7 @@ class ConversationHandler:
                                         ],
                                     }
                                 ]
-                        case ("application/pdf", size) if size < _FILE_UPLOAD_LIMIT:
+                        case ("application/pdf", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
                             with open(file_path, "rb") as file_content:
                                 file_bytes = base64.b64encode(file_content.read())
                                 self._context += [
@@ -325,7 +326,7 @@ class ConversationHandler:
                                         ],
                                     },
                                 ]
-                        case (fmt, size) if fmt and "image" in fmt and size < _FILE_UPLOAD_LIMIT:
+                        case (fmt, size) if fmt and "image" in fmt and size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
                             self._context += [
                                 {
                                     "role": "user",
@@ -347,7 +348,7 @@ class ConversationHandler:
                                             "type": "input_text",
                                             "text": f"User uploaded this file: {file_path}."
                                             f"File can't be processed because it is too big or file format "
-                                            f"isn't supported. Please try task the reasoner instead.",
+                                            f"isn't supported. Please task the reasoner instead.",
                                         },
                                     ],
                                 },

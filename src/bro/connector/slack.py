@@ -16,7 +16,7 @@ from bro.connector import Connector, Channel, ReceivedMessage, Message, User
 
 _logger = logging.getLogger(__name__)
 
-ATTACHMENT_FOLDER = tempfile.mkdtemp()
+ATTACHMENT_FOLDER = tempfile.mkdtemp(f".conversation.pid{os.getpid()}.bro")
 
 
 class SlackConnector(Connector):
@@ -137,13 +137,22 @@ class SlackConnector(Connector):
             self._web_client.chat_postMessage(channel=via.name, text=message.text)
             if message.attachments:
                 for file_path in message.attachments:
-                    if file_path.is_file():
+                    try:
                         self._web_client.files_upload_v2(
                             file=file_path,
                             channel=via.name,
                         )
-                    else:
-                        _logger.error(f"File {file_path} doesn't exist.")
+                    except Exception as e:
+                        _logger.error(f"Can't upload file. Exception: {e}")
+                        self._unread_msgs.append(
+                            ReceivedMessage(
+                                via=via,
+                                user=User(name="Bro"),
+                                text=f"Inform the user about file upload error. Exception {e}",
+                                attachments=[],
+                            )
+                        )
+
             return None
 
 

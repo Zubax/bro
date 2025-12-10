@@ -31,7 +31,10 @@ def image_to_base64(im: Image.Image) -> str:
 
 
 def detect_file_format(file_path: Path) -> str | None:
-    file_type, encoding = mimetypes.guess_type(file_path)
+    """
+    Returns the MIME type of the file based on file name.
+    """
+    file_type, encoding = mimetypes.guess_type(file_path, strict=True)
     _logger.info(f"Detected file of type {file_type} and encoding {encoding}.")
     return file_type
 
