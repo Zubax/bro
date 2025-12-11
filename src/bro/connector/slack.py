@@ -135,23 +135,15 @@ class SlackConnector(Connector):
     def send(self, message: Message, via: Channel) -> None:
         with self._mutex:
             self._web_client.chat_postMessage(channel=via.name, text=message.text)
-            if message.attachments:
-                for file_path in message.attachments:
-                    try:
-                        self._web_client.files_upload_v2(
-                            file=file_path,
-                            channel=via.name,
-                        )
-                    except Exception as e:
-                        _logger.error(f"Can't upload file. Exception: {e}")
-                        self._unread_msgs.append(
-                            ReceivedMessage(
-                                via=via,
-                                user=User(name="Bro"),
-                                text=f"Inform the user about file upload error. Exception {e}",
-                                attachments=[],
-                            )
-                        )
+            for file_path in message.attachments:
+                try:
+                    self._web_client.files_upload_v2(
+                        file=file_path,
+                        channel=via.name,
+                    )
+                except Exception as e:
+                    _logger.error(f"Can't upload file. Exception: {e}")
+                    self._web_client.chat_postMessage(channel=via.name, text=f"File upload error: {e}")
 
             return None
 
