@@ -197,6 +197,17 @@ class ConversationHandler:
         return ctx
 
     def _process_response_output(self, output: Any) -> None:
+        addendum = output.copy()
+
+        for item in addendum:
+            _logger.debug(f"Received item from the conversation model: {item}")
+            if item.get("type") == "reasoning" and "status" in item:
+                del item["status"]
+                _logger.debug("Ignoring reasoning message...")
+                continue
+
+        self._context += addendum
+
         for item in output:
             _logger.debug(f"Received item from the conversation model: {item}")
             msg_data = self._process(item)
@@ -415,17 +426,6 @@ class ConversationHandler:
 
                     if not output:
                         _logger.warning("No output from model; response: %s", conversation_response)
-
-                    addendum = output.copy()
-
-                    for item in addendum:
-                        _logger.debug(f"Received item from the conversation model: {item}")
-                        if item.get("type") == "reasoning" and "status" in item:
-                            del item["status"]
-                            _logger.debug("Ignoring reasoning message...")
-                            continue
-
-                    self._context += addendum
 
                     self._process_response_output(output)
             return True
