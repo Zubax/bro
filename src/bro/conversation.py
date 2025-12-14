@@ -9,6 +9,7 @@ import openai
 import yaml
 from PIL import Image
 from openai import OpenAI
+from openmemory import OpenMemory
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro import util
@@ -98,6 +99,38 @@ tools = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
+    {
+        "type": "function",
+        "name": "add_memory",
+        "description": "Add memory about the user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "memory": {"type": "string", "description": "the information about the user to be memorized."}
+            },
+            "required": ["memory"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "get_memory",
+        "description": "Query the long term memory to get information about the user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "the user identifier",
+                },
+                "query": {"type": "string", "description": "the question about the user to be answered."},
+            },
+            "required": ["user_id", "query"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
 ]
 
 
@@ -131,7 +164,12 @@ class ConversationHandler:
     """
 
     def __init__(
-        self, connector: Connector, user_system_prompt: str | None, client: OpenAI, reasoner: Reasoner
+        self,
+        connector: Connector,
+        user_system_prompt: str | None,
+        client: OpenAI,
+        reasoner: Reasoner,
+        memory: OpenMemory,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -141,6 +179,7 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
+        self._memory = memory
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -224,29 +263,42 @@ class ConversationHandler:
                     case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
+                        if not self._current_task:
+                            _logger.error(
+                                f"Missing current task context. Cannot route message to any channel. Message "
+                                f"content: {result}"
+                            )
+                        else:
+                            self._msgs.append(
+                                ReceivedMessage(
+                                    via=self._current_task.channel,
+                                    user=User(name="Bro"),
+                                    text=f"Send message to the user: {result}",
+                                    attachments=[],
+                                )
+                            )
 
+                    case ("add_memory", {"memory": memory}):
+                        _logger.info(f"Adding to memory: {memory} ...")
+                        assert self._memory.add(memory) is not None
+                        result = "memory is added."
+
+                    case ("get_memory", {"user_id": user_id, "query": query}):
+                        _logger.info("Getting the memory about the user...")
+                        results = self._memory.query(query, filters={"user_id": user_id})
+                        _logger.debug(results)
+                        if not results:
+                            result = "Sorry the memory is empty."
+                        else:
+                            result = results[0]["content"]
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
-
                     self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
+                    self._on_task_completed_cb(result)
 
-                    if self._current_task:
-                        self._msgs.append(
-                            ReceivedMessage(
-                                via=self._current_task.channel,
-                                user=User(name="Bro"),
-                                text=f"Inform the user: {result}",
-                                attachments=[],
-                            )
-                        )
-                    else:
-                        _logger.error(
-                            f"Missing current task context. Cannot route message to any channel. Message "
-                            f"content: {result}"
-                        )
         return None
 
     def _determine_response_required(self) -> bool:
