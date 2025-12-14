@@ -8,6 +8,7 @@ from typing import Any
 import requests
 from slack_sdk import WebClient
 from slack_sdk.socket_mode import SocketModeClient
+from slack_sdk.socket_mode.client import BaseSocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import SlackResponse
@@ -51,7 +52,7 @@ class SlackConnector(Connector):
             _logger.exception(f"Failed to save attachment to {file_location!r}: {ex}")
             return None
 
-    def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
+    def _process_message(self, client: BaseSocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
             event_id = req.payload["event_id"]
             if event_id in self._seen_events:
@@ -110,21 +111,23 @@ class SlackConnector(Connector):
                     return None
             return None
 
-    def list_channels(self) -> list[Channel] | SlackResponse:
+    def list_channels(self) -> list[Channel]:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(
                 types="public_channel, private_channel, mpim", exclude_archived=True
             )
             if response["ok"]:
                 return list(map(lambda c: Channel(c["id"]), response["channels"]))
-            return response
+            _logger.error(response)
+            return []
 
-    def list_users(self) -> list[User] | SlackResponse:
+    def list_users(self) -> list[User]:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(types="im")
             if response["ok"]:
                 return list(map(lambda c: User(c["user"]), response["channels"]))
-            return response
+            _logger.error(response)
+            return []
 
     def poll(self) -> list[ReceivedMessage]:
         with self._mutex:
