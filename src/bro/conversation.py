@@ -122,13 +122,9 @@ tools = [
         "parameters": {
             "type": "object",
             "properties": {
-                "user_id": {
-                    "type": "string",
-                    "description": "the user identifier",
-                },
                 "query": {"type": "string", "description": "the question about the user to be answered."},
             },
-            "required": ["user_id", "query"],
+            "required": ["query"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -297,10 +293,9 @@ class ConversationHandler:
                         assert self._memory.add(memory) is not None
                         result = "memory is added."
 
-                    case ("get_memory", {"user_id": user_id, "query": query}):
+                    case ("get_memory", {"query": query}):
                         _logger.info("Getting the memory about the user...")
-                        results = self._memory.query(query, filters={"user_id": user_id})
-                        _logger.debug(results)
+                        results = self._memory.query(query)
                         if not results:
                             result = "Sorry the memory is empty."
                         else:
