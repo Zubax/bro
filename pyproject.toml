@@ -19,6 +19,8 @@ dependencies = [
     "tenacity~=9.1",
     "colorlog~=6.9",
     "nicegui~=2.23",
+    "openmemory-py>=1.2.3",
+    "slack-sdk>=3.39.0",
 ]
 
 [project.scripts]
@@ -54,5 +56,5 @@ show_error_context = true
 mypy_path = []
 
 [[tool.mypy.overrides]]
-module = ["pyautogui", "pynput.*", "slack_sdk.*", "requests", "yaml"]
+module = ["pyautogui", "pynput.*", "slack_sdk.*", "requests", "yaml", "openmemory"]
 ignore_missing_imports = true

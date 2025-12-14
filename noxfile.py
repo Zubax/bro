@@ -1,7 +1,6 @@
 # Copyright (C) 2025 Pavel Kirienko <pavel.kirienko@zubax.com>
 # type: ignore
 
-import shlex
 import shutil
 from pathlib import Path
 
