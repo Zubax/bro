@@ -12,7 +12,7 @@ def setup(*, log_file: Path, db_file: Path) -> None:
 
     # Console handler
     console_handler = colorlog.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(
         colorlog.ColoredFormatter(
             "%(asctime)s %(log_color)s%(levelname)-3.3s %(name)s%(reset)s: %(message)s", "%H:%M:%S"

@@ -1,5 +1,7 @@
+import base64
 import json
 import logging
+import os.path
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -191,6 +193,7 @@ class ConversationHandler:
         return ctx
 
     def _process_response_output(self, output: Any) -> None:
+        _logger.info("Processing response output...")
         addendum = output.copy()
 
         for item in addendum:
@@ -203,13 +206,13 @@ class ConversationHandler:
         self._context += addendum
 
         for item in output:
-            _logger.debug(f"Received item from the conversation model: {item}")
+            _logger.info(f"Received item from the conversation model: {item}")
             msg_data = self._process(item)
-            _logger.debug(f"After processing, got msg_data: {msg_data}")
+            _logger.info(f"After processing, got msg_data: {msg_data}")
             if msg_data:
                 if parsed_msg := _parse_message(msg_data):
                     via, user, text, fpaths = parsed_msg
-                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                    _logger.info(f"Message from the conversation model after parsing: {text}.")
                     if fpaths != "":
                         attachments = [Path(file_path.strip()) for file_path in fpaths]
                     else:
@@ -225,6 +228,7 @@ class ConversationHandler:
             f"""\
         via:  
         user: Bro Reasoner
+        attachments: []
         ---
         {message}
         """
@@ -323,10 +327,9 @@ class ConversationHandler:
 
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
-        _logger.info("Polling for user messages...")
         if self._msgs:
             for msg in self._msgs:
-                _logger.debug(f"Processing user message: {msg}")
+                _logger.info(f"Processing user message: {msg}")
                 input_data = textwrap.dedent(
                     f"""\
                 via: {msg.via.name!r} 
@@ -351,7 +354,7 @@ class ConversationHandler:
                         "type": "input_text",
                         "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
                     }
-                    file_size = Path.stat(file_path).st_size
+                    file_size = os.path.getsize(file_path)
                     file_format = detect_file_format(file_path)
                     match (file_format, file_size):
                         case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
@@ -409,9 +412,13 @@ class ConversationHandler:
                                 },
                             ]
 
-                should_respond = self._determine_response_required()
+                if msg.via.name.startswith("D"):  # always answer messages from direct channel
+                    should_respond = True
+                else:
+                    should_respond = self._determine_response_required()
+
                 if should_respond:
-                    _logger.debug("Generating response from the conversation model...")
+                    _logger.info("Generating response from the conversation model...")
                     conversation_response = self._request_inference(self._context)
                     output = conversation_response["output"]
 
