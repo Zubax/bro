@@ -11,17 +11,16 @@ import openai
 import yaml
 from PIL import Image
 from openai import OpenAI
-from openmemory import OpenMemory
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro import util
+from bro import util, openmemory
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
 
 _logger = logging.getLogger(__name__)
 
-_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 1_000_000
+_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 10_000_000
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -73,7 +72,7 @@ Finally, the response shall end with a JSON block following the schema below:
 ```
 """
 
-tools = [
+_TOOLS = [
     {
         "type": "function",
         "name": "task_reasoner",
@@ -99,34 +98,6 @@ tools = [
         "description": "Update users on the current task’s progress. If the response is None, it means there is no "
         "active task and the reasoner has finished its work",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        "strict": True,
-    },
-    {
-        "type": "function",
-        "name": "add_memory",
-        "description": "Add memory about the user.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "memory": {"type": "string", "description": "the information about the user to be memorized."}
-            },
-            "required": ["memory"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
-    {
-        "type": "function",
-        "name": "get_memory",
-        "description": "Query the long term memory to get information about the user.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "the question about the user to be answered."},
-            },
-            "required": ["query"],
-            "additionalProperties": False,
-        },
         "strict": True,
     },
 ]
@@ -167,7 +138,6 @@ class ConversationHandler:
         user_system_prompt: str | None,
         client: OpenAI,
         reasoner: Reasoner,
-        memory: OpenMemory,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -177,7 +147,6 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
-        self._memory = memory
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -270,7 +239,6 @@ class ConversationHandler:
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
-
                     case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
@@ -288,19 +256,8 @@ class ConversationHandler:
                                     attachments=[],
                                 )
                             )
-
-                    case ("add_memory", {"memory": memory}):
-                        _logger.info(f"Adding to memory: {memory} ...")
-                        assert self._memory.add(memory) is not None
-                        result = "memory is added."
-
-                    case ("get_memory", {"query": query}):
-                        _logger.info("Getting the memory about the user...")
-                        results = self._memory.query(query)
-                        if not results:
-                            result = "Sorry the memory is empty."
-                        else:
-                            result = results[0]["content"]
+                    case ("recall" | "remember", _):
+                        result = openmemory.memory_handler(name, args)
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -444,7 +401,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=tools,
+            tools=_TOOLS + openmemory.tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",

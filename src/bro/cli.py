@@ -6,7 +6,6 @@ import os
 import sqlite3
 import sys
 from time import sleep
-from openmemory import OpenMemory
 
 try:
     import readline  # noqa: F401
@@ -21,7 +20,7 @@ from bro.executive import Executive
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.executive.openai_cua import OpenAiCuaExecutive
-from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE, MEMORY_FILE
+from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
 from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
 
@@ -49,12 +48,6 @@ def main() -> None:
 
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
-    memory = OpenMemory(
-        mode="local",
-        path=MEMORY_FILE,
-        tier="smart",
-        embeddings={"provider": "openai", "apiKey": os.getenv("OPENAI_API_KEY"), "model": "text-embedding-3-small"},
-    )
 
     # Construct the system
     ui = ui_io.make_controller()
@@ -94,7 +87,7 @@ def main() -> None:
         app_token=os.environ["SLACK_APP_TOKEN"],
         bro_user_id=os.environ["BRO_USER_ID"],
     )
-    conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn, memory=memory)
+    conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 
     try:
         # Start the web UI

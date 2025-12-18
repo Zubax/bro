@@ -2,7 +2,6 @@ from __future__ import annotations
 import os
 import copy
 import json
-import sys
 import threading
 import time
 from typing import Any
@@ -20,6 +19,7 @@ from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
 from bro import __version_info__
+from bro import openmemory
 
 _logger = logging.getLogger(__name__)
 
@@ -410,7 +410,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
-        self._tools = copy.deepcopy(_TOOLS)
+        self._tools = _TOOLS + openmemory.tools
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
@@ -876,6 +876,9 @@ class OpenAiGenericReasoner(Reasoner):
                         _logger.info("😴 ...resuming")
                         now = get_local_time_llm()
                         result = f"Woke up after {duration_sec} seconds of suspension. The current time is: {now}"
+
+                    case "recall" | "remember":
+                        result = openmemory.memory_handler(name, args)
 
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"
