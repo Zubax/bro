@@ -39,17 +39,13 @@ class SlackConnector(Connector):
         # TODO this is a hack to filter out duplicate events from the Slack API
         self._seen_events: set[Any] = set()
 
-    def _download_attachment(self, url: str) -> Path | None:
+    def _download_attachment(self, url: str) -> Path:
         headers = {"Authorization": f"Bearer {self._bot_token}"}
         file_location = Path(ATTACHMENT_FOLDER) / url.split("/")[-1]
-        try:
-            response = requests.get(url, headers=headers)
-            file_location.write_bytes(response.content)
-            _logger.info(f"File is saved at {file_location}")
-            return file_location
-        except Exception as ex:
-            _logger.exception(f"Failed to save attachment to {file_location!r}: {ex}")
-            return None
+        response = requests.get(url, headers=headers)
+        file_location.write_bytes(response.content)
+        _logger.info(f"File is saved at {file_location}")
+        return file_location
 
     def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
@@ -84,8 +80,7 @@ class SlackConnector(Connector):
                                     file_info = self._web_client.files_info(file=file_id)
                                     file_download_url = file_info["file"]["url_private_download"]
                                     file_download_path = self._download_attachment(url=file_download_url)
-                                    if file_download_path:
-                                        attachments.append(file_download_path)
+                                    attachments.append(file_download_path)
                                 except Exception as ex:
                                     _logger.exception("Failed to save attachment for file %r: %s", file_id, ex)
                                     return None
@@ -142,7 +137,7 @@ class SlackConnector(Connector):
                         channel=via.name,
                     )
                 except Exception as e:
-                    _logger.error(f"Can't upload file. Exception: {e}")
+                    _logger.error(f"Can't upload file {file_path}. Exception: {e}")
                     self._web_client.chat_postMessage(channel=via.name, text=f"File upload error: {e}")
 
             return None

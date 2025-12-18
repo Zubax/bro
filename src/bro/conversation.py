@@ -1,10 +1,9 @@
 import base64
 import json
 import logging
-import os.path
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 import textwrap
 
 import openai
@@ -296,7 +295,7 @@ class ConversationHandler:
                         "type": "input_text",
                         "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
                     }
-                    file_size = os.path.getsize(file_path)
+                    file_size = Path.stat(file_path).st_size
                     file_format = detect_file_format(file_path)
                     match (file_format, file_size):
                         case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
@@ -355,7 +354,6 @@ class ConversationHandler:
                             ]
 
                 should_respond = self._determine_response_required()
-
                 if should_respond:
                     _logger.debug("Generating response from the conversation model...")
                     conversation_response = self._request_inference(self._context)
