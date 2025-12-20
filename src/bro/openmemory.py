@@ -1,21 +1,45 @@
 import logging
 import os
+from typing import Any
 
 from openmemory import OpenMemory
 
 from bro.brofiles import MEMORY_FILE
 
+_ADDING_MEMORY_PROMPT = """
+When adding new information to the memory, you need to also decide the tags of the information. 
+The tags are a list containing the information sector and keywords related to the context of the conversation.
+There are 5 types of information sectors: EPISODIC, SEMANTIC, PROCEDURAL, EMOTIONAL and REFLECTIVE. 
+For example:
+
+```
+{
+    "text": "My morning routine: coffee, then check emails, then code",
+    "tags": ["routine", "procedural"]
+},
+{
+    "text": "I feel really excited about the new AI project",
+    "tags": ["emotion", "ai"]
+},
+{
+    "text": "I went to Paris yesterday and loved the Eiffel Tower", 
+    "tags": ["episodic", "travel", "paris"]
+}
+```
+"""
+
 tools = [
     {
         "type": "function",
         "name": "remember",
-        "description": "Add memory by text.",  # TODO BETTER DESCRIPTION WITH EXAMPLES; CHECK MCP OR EXISTING TOOLS
+        "description": _ADDING_MEMORY_PROMPT,
         "parameters": {
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "the information to be memorized."},
+                "tags": {"type": "string", "description": "the list of information sector and keywords."},
             },
-            "required": ["text"],
+            "required": ["text", "tags"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -47,21 +71,28 @@ _memory = OpenMemory(
 
 
 def memory_handler(name: str, args: str) -> str:
-    result = ""
     match name, args:
-        case ("remember", {"text": text}):
+        case ("remember", {"text": text, "tags": tags}):
+            _logger.info("Adding memory...")
             try:
-                _memory.add(text)
-                result = "memory is added."
+                mem = _memory.add(text, tags=tags)
+                _logger.info(f"Memory stored: {mem['id']} with tags {tags}")
+                return "Memory is added."
             except Exception as e:
-                result = f"Sorry memory can't be added. Error: {e}"
+                return f"Memory can't be added. Error: {e}"
 
         case ("recall", {"query": query}):
-            _logger.info("Searching the memory...")
+            _logger.info("Querying memories...")
             results = _memory.query(query)
+            _logger.info(f"Found {len(results)} matching memories:")
             if not results:
-                result = "Sorry the memory is empty."
+                return "Found no matching memories."
             else:
-                result = results[0]["content"]
+                for i, match in enumerate(results):
+                    content_preview = match["content"][:50] + "..." if len(match["content"]) > 50 else match["content"]
+                    score = match.get("score", 0)
+                    _logger.info(f"     {i + 1}. [score: {score:.3f}] {content_preview}")
+                highest_match: dict[str, str] = max(results, key=lambda r: r.get("score", 0))
+                return highest_match["content"]
 
-    return result
+    return "Unrecognized function call."
