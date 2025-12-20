@@ -1,16 +1,15 @@
 import logging
 import os
-from typing import Any
 
 from openmemory import OpenMemory
 
 from bro.brofiles import MEMORY_FILE
 
-_ADDING_MEMORY_PROMPT = """
-When adding new information to the memory, you need to also decide the tags of the information. 
-The tags are a list containing the information sector and keywords related to the context of the conversation.
-There are 5 types of information sectors: EPISODIC, SEMANTIC, PROCEDURAL, EMOTIONAL and REFLECTIVE. 
-For example:
+_ADDING_AND_RECALLING_MEMORY = """When adding new information to the memory, you need to also decide the tags of the 
+information. The tags are a list containing the information sector and keywords related to the context of the 
+conversation. There are 5 types of information sectors: EPISODIC (Events & Experiences), SEMANTIC (Facts & 
+Knowledge), PROCEDURAL (Skills & How-to), EMOTIONAL (Feelings & Sentiment) and REFLECTIVE (Meta-cognition & 
+Insights). For example:
 
 ```
 {
@@ -19,20 +18,40 @@ For example:
 },
 {
     "text": "I feel really excited about the new AI project",
-    "tags": ["emotion", "ai"]
+    "tags": ["emotion", "ai"],
 },
 {
-    "text": "I went to Paris yesterday and loved the Eiffel Tower", 
-    "tags": ["episodic", "travel", "paris"]
+    "text": "The company address is at Tallinn, Estonia", 
+    "tags": ["episodic", "semantics"],
 }
 ```
+
+When querying the long term memory you need to decide which sectors to query. For example:
+
+```
+{
+    "text": "What is our company address?",
+    "sectors": ["procedural", "reflective", "semantic"]
+},
+{
+    "text": "How to flash GNSS using Dr Watson?",
+    "sectors": ["procedural", "reflective"]
+},
+{
+    "text": "What is the user preferred language for communication?",
+    "sectors": ["episodic", "reflective", "semantic"],
+},
+
+```
+
+
 """
 
 tools = [
     {
         "type": "function",
         "name": "remember",
-        "description": _ADDING_MEMORY_PROMPT,
+        "description": _ADDING_AND_RECALLING_MEMORY,
         "parameters": {
             "type": "object",
             "properties": {
@@ -47,13 +66,14 @@ tools = [
     {
         "type": "function",
         "name": "recall",
-        "description": "Query the long term memory.",
+        "description": _ADDING_AND_RECALLING_MEMORY,
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "the question to be answered."},
+                "sectors": {"type": "string", "description": "the list of sectors the information could belong to."},
             },
-            "required": ["query"],
+            "required": ["query", "sectors"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -67,6 +87,7 @@ _memory = OpenMemory(
     path=MEMORY_FILE,
     tier="smart",
     embeddings={"provider": "openai", "apiKey": os.getenv("OPENAI_API_KEY"), "model": "text-embedding-3-small"},
+    reflection={"enabled": True, "intervalMinutes": 1440, "minMemories": 10},  # Daily
 )
 
 
@@ -81,9 +102,9 @@ def memory_handler(name: str, args: str) -> str:
             except Exception as e:
                 return f"Memory can't be added. Error: {e}"
 
-        case ("recall", {"query": query}):
-            _logger.info("Querying memories...")
-            results = _memory.query(query)
+        case ("recall", {"query": query, "sectors": sectors}):
+            _logger.info(f"Querying memories in sectors {sectors}...")
+            results = _memory.query(query, filters={"sectors": sectors})
             _logger.info(f"Found {len(results)} matching memories:")
             if not results:
                 return "Found no matching memories."
