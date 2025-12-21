@@ -19,8 +19,8 @@ dependencies = [
     "tenacity~=9.1",
     "colorlog~=6.9",
     "nicegui~=2.23",
-    "openmemory-py>=1.2.3",
-    "slack-sdk>=3.39.0",
+    "openmemory-py~=1.2.3",
+    "slack-sdk~=3.39.0",
 ]
 
 [project.scripts]
