@@ -1,21 +1,25 @@
+import base64
 import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 import textwrap
 
 import openai
 import yaml
+from PIL import Image
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro import util
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
-from bro.util import prune_context_text_only
+from bro.util import prune_context_text_only, image_to_base64, detect_file_format
 
 _logger = logging.getLogger(__name__)
 
+_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 1_000_000
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -28,10 +32,12 @@ it cannot do is run periodic activities or actions that involve delays, such as 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
-All messages MUST follow the schema defined below:
+All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
+with the message. If there are no attachments, this should be [].
 ```
 via: "<channel name>"
 user: "<user name>"
+attachments: ["path/to/file1", "path/to/file2", ...]
 ---
 <user message verbatim>
 ```
@@ -106,18 +112,18 @@ class Task:
     summary: str
 
 
-def _parse_message(msg_data: str) -> tuple[str, str, str] | None:
+def _parse_message(msg_data: str) -> tuple[str, str, str, str] | None:
     try:
-        metadata, text = msg_data.split("\n---\n", 1)
+        metadata, text = msg_data.split("\n---", 1)
         metadata = yaml.safe_load(metadata)
-        via, user = metadata.get("via"), metadata.get("user")
+        via, user, attachments = metadata.get("via"), metadata.get("user"), metadata.get("attachments")
     except (AttributeError, KeyError, TypeError) as e:
         _logger.error(f"Wrong message format. Error: {e}")
         return None
     except Exception as e:
         _logger.error(f"Unknown error: {e}")
         return None
-    return via, user, text
+    return via, user, text, attachments
 
 
 class ConversationHandler:
@@ -157,9 +163,13 @@ class ConversationHandler:
             _logger.debug(f"After processing, got msg_data: {msg_data}")
             if msg_data:
                 if parsed_msg := _parse_message(msg_data):
-                    via, user, text = parsed_msg
+                    via, user, text, fpaths = parsed_msg
                     _logger.debug(f"Message from the conversation model after parsing: {text}.")
-                    self.connector.send(Message(text=text, attachments=[]), via=Channel(via))
+                    if fpaths != "":
+                        attachments = [Path(file_path.strip()) for file_path in fpaths]
+                    else:
+                        attachments = []
+                    self.connector.send(Message(text=text, attachments=attachments), via=Channel(via))
                 else:
                     _logger.error(f"Message can't be parsed. Received data: {msg_data}")
                     # TODO rerunning inference using Tenacity
@@ -170,6 +180,7 @@ class ConversationHandler:
             f"""\
         via:  
         user: Bro Reasoner
+        attachments: []
         ---
         {message}
         """
@@ -190,10 +201,9 @@ class ConversationHandler:
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
-        msg = None
         match item:
             case {"type": "message", "content": content}:
-                msg = content[0]["text"]
+                return str(content[0]["text"])
 
             case {"type": "reasoning"}:
                 for x in item["summary"]:
@@ -216,34 +226,36 @@ class ConversationHandler:
                     case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
-                        if result:
-                            if not self._current_task:
-                                _logger.error(
-                                    f"Missing current task context. Cannot route message to any channel. Message "
-                                    f"content: {result}"
-                                )
-                                return None
-                            self._msgs.append(
-                                ReceivedMessage(
-                                    via=self._current_task.channel,
-                                    user=User(name="Bro"),
-                                    text=result,
-                                    attachments=[],
-                                )
-                            )
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
-                _logger.info(f"Function call result: {result}")
-                self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
 
-        return msg
+                if result:
+                    _logger.info(f"Function call result: {result}")
+
+                    self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
+
+                    if self._current_task:
+                        self._msgs.append(
+                            ReceivedMessage(
+                                via=self._current_task.channel,
+                                user=User(name="Bro"),
+                                text=f"Inform the user: {result}",
+                                attachments=[],
+                            )
+                        )
+                    else:
+                        _logger.error(
+                            f"Missing current task context. Cannot route message to any channel. Message "
+                            f"content: {result}"
+                        )
+        return None
 
     def _determine_response_required(self) -> bool:
         ctx = prune_context_text_only(self._context) + [
             {"role": "user", "content": [{"type": "input_text", "text": _RESPOND_OR_IGNORE_PROMPT}]}
         ]
-        response = self._request_inference(ctx, model="gpt-5-mini")
+        response = self._request_inference(ctx, reasoning_effort="none")
         output: str = response["output"][-1]["content"][0]["text"]
         response_required_json = util.split_trailing_json(output)[1]
         if not response_required_json:
@@ -263,6 +275,7 @@ class ConversationHandler:
                     f"""\
                 via: {msg.via.name!r} 
                 user: {msg.user.name!r}
+                attachments: {list(map(str, msg.attachments))}
                 ---
                 {msg.text}
                 """
@@ -276,6 +289,70 @@ class ConversationHandler:
                         ],
                     },
                 ]
+
+                for file_path in msg.attachments:
+                    text_msg = {
+                        "type": "input_text",
+                        "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
+                    }
+                    file_size = Path.stat(file_path).st_size
+                    file_format = detect_file_format(file_path)
+                    match (file_format, file_size):
+                        case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
+                            with open(file_path, "rb") as file_content:
+                                self._context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            text_msg,
+                                            {"type": "input_text", "text": file_content.read().decode()},
+                                        ],
+                                    }
+                                ]
+                        case ("application/pdf", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
+                            with open(file_path, "rb") as file_content:
+                                file_bytes = base64.b64encode(file_content.read())
+                                self._context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            text_msg,
+                                            {
+                                                "type": "input_file",
+                                                "filename": file_path.name,
+                                                "file_data": f"data:{file_format};base64,{file_bytes.decode()}",
+                                            },
+                                        ],
+                                    },
+                                ]
+                        case (fmt, size) if fmt and "image" in fmt and size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
+                            self._context += [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        text_msg,
+                                        {
+                                            "type": "input_image",
+                                            "image_url": f"data:{fmt};base64,{image_to_base64(Image.open(file_path))}",
+                                        },
+                                    ],
+                                },
+                            ]
+                        case _:
+                            self._context += [
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": f"User uploaded this file: {file_path}."
+                                            f"File can't be processed because it is too big or file format "
+                                            f"isn't supported. Please task the reasoner instead.",
+                                        },
+                                    ],
+                                },
+                            ]
+
                 should_respond = self._determine_response_required()
                 if should_respond:
                     _logger.debug("Generating response from the conversation model...")
@@ -296,18 +373,9 @@ class ConversationHandler:
 
                     self._context += addendum
 
-                    for item in output:
-                        msg_data = self._process(item)
-                        _logger.debug(f"After processing, got msg_data: {msg_data}")
-                        if msg_data:
-                            parsed_msg = _parse_message(msg_data)
-                            if parsed_msg:
-                                via, user, text = parsed_msg
-                                _logger.debug(f"Message from the reasoner after parsing: {text}.")
-                                self.connector.send(Message(text=text, attachments=[]), Channel(name=via))
+                    self._process_response_output(output)
             return True
         return False
-        # TODO: attach file to ctx
 
     @retry(
         reraise=True,
@@ -316,14 +384,16 @@ class ConversationHandler:
         retry=(retry_if_exception_type(openai.OpenAIError)),
         before_sleep=before_sleep_log(_logger, logging.ERROR),
     )
-    def _request_inference(self, ctx: list[dict[str, Any]], /, *, model: str | None = None) -> dict[str, Any]:
+    def _request_inference(
+        self, ctx: list[dict[str, Any]], /, *, model: str | None = None, reasoning_effort: str | None = None
+    ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
             tools=tools,
-            reasoning={"effort": "low", "summary": "detailed"},
+            reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
             truncation="auto",

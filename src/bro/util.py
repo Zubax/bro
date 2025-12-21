@@ -15,7 +15,7 @@ import socket
 import subprocess
 
 from PIL import Image
-
+import mimetypes
 from openai import OpenAI
 from openai.types import FileObject
 from openai.types.file_create_params import ExpiresAfter
@@ -28,6 +28,15 @@ def image_to_base64(im: Image.Image) -> str:
     buf = BytesIO()
     im.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def detect_file_format(file_path: Path) -> str | None:
+    """
+    Returns the MIME type of the file based on file name.
+    """
+    file_type, encoding = mimetypes.guess_type(file_path, strict=True)
+    _logger.info(f"Detected file of type {file_type} and encoding {encoding}.")
+    return file_type
 
 
 def prune_context_text_only(
