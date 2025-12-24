@@ -150,9 +150,9 @@ class SlackConnector(Connector):
 
 if __name__ == "__main__":
     from bro import logs
-    from bro.brofiles import LOG_FILE, DB_FILE
+    from bro.brofiles import LOG_FILE, LOG_DB
 
-    logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
+    logs.setup(log_file=LOG_FILE, db_file=LOG_DB)
     _logger.setLevel(logging.INFO)
 
     connector = SlackConnector(

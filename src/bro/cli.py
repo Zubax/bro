@@ -20,7 +20,7 @@ from bro.executive import Executive
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.executive.openai_cua import OpenAiCuaExecutive
-from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, DB_FILE
+from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, LOG_DB
 from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
 
@@ -28,7 +28,7 @@ _logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
+    logs.setup(log_file=LOG_FILE, db_file=LOG_DB)
     _logger.debug("Session started")
 
     parser = argparse.ArgumentParser(description="Run Bro")
@@ -113,7 +113,7 @@ class WebController(web_ui.Controller):
     def __init__(self, ui: ui_io.UiObserver, rsn: OpenAiGenericReasoner) -> None:
         self._ui = ui
         self._rsn = rsn
-        self._db = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True, check_same_thread=False)
+        self._db = sqlite3.connect(f"file:{LOG_DB}?mode=ro", uri=True, check_same_thread=False)
 
     def get_screenshot(self) -> ui_io.Image.Image:
         return self._ui.screenshot()

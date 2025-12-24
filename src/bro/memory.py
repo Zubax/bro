@@ -3,7 +3,7 @@ import os
 
 from openmemory import OpenMemory
 
-from bro.brofiles import MEMORY_FILE
+from bro.brofiles import MEMORY_DB
 
 _ADDING_AND_RECALLING_MEMORY = """When adding new information to the memory, you need to also decide the tags of the 
 information. The tags are a list containing the information sector and keywords related to the context of the 
@@ -84,7 +84,7 @@ _logger = logging.getLogger(__name__)
 
 _memory = OpenMemory(
     mode="local",
-    path=MEMORY_FILE,
+    path=MEMORY_DB,
     tier="smart",
     embeddings={"provider": "openai", "apiKey": os.getenv("OPENAI_API_KEY"), "model": "text-embedding-3-small"},
     reflection={"enabled": True, "intervalMinutes": 1440, "minMemories": 10},  # Daily
