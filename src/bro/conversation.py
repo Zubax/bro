@@ -13,7 +13,7 @@ from PIL import Image
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro import util, openmemory
+from bro import util, memory
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
@@ -257,7 +257,7 @@ class ConversationHandler:
                                 )
                             )
                     case ("recall" | "remember", _):
-                        result = openmemory.memory_handler(name, args)
+                        result = memory.memory_handler(name, args)
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -401,7 +401,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=_TOOLS + openmemory.tools,
+            tools=_TOOLS + memory.tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
