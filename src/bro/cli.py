@@ -83,9 +83,9 @@ def main() -> None:
     )
 
     connector = SlackConnector(
-        bot_token=os.environ["SLACK_BOT_TOKEN"],
-        app_token=os.environ["SLACK_APP_TOKEN"],
-        bro_user_id=os.environ["BRO_USER_ID"],
+        bot_token=os.environ["BRO_SLACK_BOT_TOKEN"],
+        app_token=os.environ["BRO_SLACK_APP_TOKEN"],
+        bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
     conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
 

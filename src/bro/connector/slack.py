@@ -156,9 +156,9 @@ if __name__ == "__main__":
     _logger.setLevel(logging.INFO)
 
     connector = SlackConnector(
-        bot_token=os.environ["SLACK_BOT_TOKEN"],
-        app_token=os.environ["SLACK_APP_TOKEN"],
-        bro_user_id=os.environ["BRO_USER_ID"],
+        bot_token=os.environ["BRO_SLACK_BOT_TOKEN"],
+        app_token=os.environ["BRO_SLACK_APP_TOKEN"],
+        bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
     while True:
         connector.poll()
