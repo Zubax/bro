@@ -878,8 +878,11 @@ class OpenAiGenericReasoner(Reasoner):
                         now = get_local_time_llm()
                         result = f"Woke up after {duration_sec} seconds of suspension. The current time is: {now}"
 
-                    case "recall" | "remember":
-                        result = self._memory.memory_handler(name, args)
+                    case ("recall", {"query": query, "sectors": sectors}):
+                        result = self._memory.recall(query, sectors)
+
+                    case ("remember", {"text": text, "tags": tags}):
+                        result = self._memory.remember(text, tags)
 
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"

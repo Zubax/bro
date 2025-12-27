@@ -48,7 +48,7 @@ def main() -> None:
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
     _logger.info(f"User system prompt {USER_SYSTEM_PROMPT_FILE} contains {len(user_system_prompt or '')} characters")
 
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
     # Construct the system
@@ -75,7 +75,7 @@ def main() -> None:
             _logger.error(f"Unknown executive specification: {args.exe!r}")
             sys.exit(1)
 
-    memory = Memory(api_key=os.getenv("OPENAI_API_KEY"))
+    memory = Memory(api_key=os.environ["OPENAI_API_KEY"])
 
     rsn = OpenAiGenericReasoner(
         executive=exe,

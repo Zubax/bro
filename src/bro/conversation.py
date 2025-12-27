@@ -259,8 +259,12 @@ class ConversationHandler:
                                     attachments=[],
                                 )
                             )
-                    case ("recall" | "remember", _):
-                        result = self._memory.memory_handler(name, args)
+                    case ("recall", {"query": query, "sectors": sectors}):
+                        result = self._memory.recall(query, sectors)
+
+                    case ("remember", {"text": text, "tags": tags}):
+                        result = self._memory.remember(text, tags)
+
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
