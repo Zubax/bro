@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os.path
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,13 +14,14 @@ from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from bro import util
+from bro.memory import Memory, tools as memory_tools
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
 
 _logger = logging.getLogger(__name__)
 
-_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 1_000_000
+_CONTEXT_EMBEDDING_FILE_MAX_BYTES = 10_000_000
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -71,7 +73,7 @@ Finally, the response shall end with a JSON block following the schema below:
 ```
 """
 
-tools = [
+_TOOLS = [
     {
         "type": "function",
         "name": "task_reasoner",
@@ -132,7 +134,12 @@ class ConversationHandler:
     """
 
     def __init__(
-        self, connector: Connector, user_system_prompt: str | None, client: OpenAI, reasoner: Reasoner
+        self,
+        connector: Connector,
+        user_system_prompt: str | None,
+        client: OpenAI,
+        reasoner: Reasoner,
+        memory: Memory,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -142,6 +149,7 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
+        self._memory = memory
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -157,14 +165,26 @@ class ConversationHandler:
         return ctx
 
     def _process_response_output(self, output: Any) -> None:
-        for item in output:
+        _logger.info("Processing response output...")
+        addendum = output.copy()
+
+        for item in addendum:
             _logger.debug(f"Received item from the conversation model: {item}")
+            if item.get("type") == "reasoning" and "status" in item:
+                del item["status"]
+                _logger.debug("Ignoring reasoning message...")
+                continue
+
+        self._context += addendum
+
+        for item in output:
+            _logger.info(f"Received item from the conversation model: {item}")
             msg_data = self._process(item)
-            _logger.debug(f"After processing, got msg_data: {msg_data}")
+            _logger.info(f"After processing, got msg_data: {msg_data}")
             if msg_data:
                 if parsed_msg := _parse_message(msg_data):
                     via, user, text, fpaths = parsed_msg
-                    _logger.debug(f"Message from the conversation model after parsing: {text}.")
+                    _logger.info(f"Message from the conversation model after parsing: {text}.")
                     if fpaths != "":
                         attachments = [Path(file_path.strip()) for file_path in fpaths]
                     else:
@@ -222,33 +242,37 @@ class ConversationHandler:
                         if self._reasoner.task(Context(prompt=prompt, files=[])):
                             self._current_task = Task(summary=prompt, channel=Channel(name=channel))
                             result = "Successfully tasked the reasoner."
-
                     case ("get_reasoner_status", {}):
                         _logger.info("Calling legilimens for task progress...")
                         result = self._reasoner.legilimens()
+                        if not self._current_task:
+                            _logger.error(
+                                f"Missing current task context. Cannot route message to any channel. Message "
+                                f"content: {result}"
+                            )
+                        else:
+                            self._msgs.append(
+                                ReceivedMessage(
+                                    via=self._current_task.channel,
+                                    user=User(name="Bro"),
+                                    text=f"Send message to the user: {result}",
+                                    attachments=[],
+                                )
+                            )
+                    case ("recall", {"query": query, "sectors": sectors}):
+                        result = self._memory.recall(query, sectors)
+
+                    case ("remember", {"text": text, "tags": tags}):
+                        result = self._memory.remember(text, tags)
 
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
-
                     self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
+                    self._on_task_completed_cb(result)
 
-                    if self._current_task:
-                        self._msgs.append(
-                            ReceivedMessage(
-                                via=self._current_task.channel,
-                                user=User(name="Bro"),
-                                text=f"Inform the user: {result}",
-                                attachments=[],
-                            )
-                        )
-                    else:
-                        _logger.error(
-                            f"Missing current task context. Cannot route message to any channel. Message "
-                            f"content: {result}"
-                        )
         return None
 
     def _determine_response_required(self) -> bool:
@@ -267,10 +291,9 @@ class ConversationHandler:
 
     def spin(self) -> bool:
         self._msgs = self.connector.poll()
-        _logger.info("Polling for user messages...")
         if self._msgs:
             for msg in self._msgs:
-                _logger.debug(f"Processing user message: {msg}")
+                _logger.info(f"Processing user message: {msg}")
                 input_data = textwrap.dedent(
                     f"""\
                 via: {msg.via.name!r} 
@@ -295,7 +318,7 @@ class ConversationHandler:
                         "type": "input_text",
                         "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
                     }
-                    file_size = Path.stat(file_path).st_size
+                    file_size = os.path.getsize(file_path)
                     file_format = detect_file_format(file_path)
                     match (file_format, file_size):
                         case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
@@ -353,25 +376,18 @@ class ConversationHandler:
                                 },
                             ]
 
-                should_respond = self._determine_response_required()
+                if msg.via.name.startswith("D"):  # always answer messages from direct channel
+                    should_respond = True
+                else:
+                    should_respond = self._determine_response_required()
+
                 if should_respond:
-                    _logger.debug("Generating response from the conversation model...")
+                    _logger.info("Generating response from the conversation model...")
                     conversation_response = self._request_inference(self._context)
                     output = conversation_response["output"]
 
                     if not output:
                         _logger.warning("No output from model; response: %s", conversation_response)
-
-                    addendum = output.copy()
-
-                    for item in addendum:
-                        _logger.debug(f"Received item from the conversation model: {item}")
-                        if item.get("type") == "reasoning" and "status" in item:
-                            del item["status"]
-                            _logger.debug("Ignoring reasoning message...")
-                            continue
-
-                    self._context += addendum
 
                     self._process_response_output(output)
             return True
@@ -392,7 +408,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=tools,
+            tools=_TOOLS + memory_tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",

@@ -8,6 +8,7 @@ from typing import Any
 import requests
 from slack_sdk import WebClient
 from slack_sdk.socket_mode import SocketModeClient
+from slack_sdk.socket_mode.client import BaseSocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import SlackResponse
@@ -47,7 +48,7 @@ class SlackConnector(Connector):
         _logger.info(f"File is saved at {file_location}")
         return file_location
 
-    def _process_message(self, client: SocketModeClient, req: SocketModeRequest) -> None:
+    def _process_message(self, client: BaseSocketModeClient, req: SocketModeRequest) -> None:
         with self._mutex:
             event_id = req.payload["event_id"]
             if event_id in self._seen_events:
@@ -105,21 +106,23 @@ class SlackConnector(Connector):
                     return None
             return None
 
-    def list_channels(self) -> list[Channel] | SlackResponse:
+    def list_channels(self) -> list[Channel]:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(
                 types="public_channel, private_channel, mpim", exclude_archived=True
             )
             if response["ok"]:
                 return list(map(lambda c: Channel(c["id"]), response["channels"]))
-            return response
+            _logger.error(response)
+            return []
 
-    def list_users(self) -> list[User] | SlackResponse:
+    def list_users(self) -> list[User]:
         with self._mutex:
             response: SlackResponse = self._web_client.conversations_list(types="im")
             if response["ok"]:
                 return list(map(lambda c: User(c["user"]), response["channels"]))
-            return response
+            _logger.error(response)
+            return []
 
     def poll(self) -> list[ReceivedMessage]:
         with self._mutex:
@@ -130,12 +133,14 @@ class SlackConnector(Connector):
     def send(self, message: Message, via: Channel) -> None:
         with self._mutex:
             self._web_client.chat_postMessage(channel=via.name, text=message.text)
+            _logger.info("Message is posted to the channel.")
             for file_path in message.attachments:
                 try:
                     self._web_client.files_upload_v2(
                         file=file_path,
                         channel=via.name,
                     )
+                    _logger.info("File is uploaded to the channel.")
                 except Exception as e:
                     _logger.error(f"Can't upload file {file_path}. Exception: {e}")
                     self._web_client.chat_postMessage(channel=via.name, text=f"File upload error: {e}")
@@ -145,15 +150,15 @@ class SlackConnector(Connector):
 
 if __name__ == "__main__":
     from bro import logs
-    from bro.brofiles import LOG_FILE, DB_FILE
+    from bro.brofiles import LOG_FILE, LOG_DB
 
-    logs.setup(log_file=LOG_FILE, db_file=DB_FILE)
+    logs.setup(log_file=LOG_FILE, db_file=LOG_DB)
     _logger.setLevel(logging.INFO)
 
     connector = SlackConnector(
-        bot_token=os.environ["SLACK_BOT_TOKEN"],
-        app_token=os.environ["SLACK_APP_TOKEN"],
-        bro_user_id=os.environ["BRO_USER_ID"],
+        bot_token=os.environ["BRO_SLACK_BOT_TOKEN"],
+        app_token=os.environ["BRO_SLACK_APP_TOKEN"],
+        bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
     while True:
         connector.poll()
