@@ -6,42 +6,52 @@ _ADDING_AND_RECALLING_MEMORY = """When adding new information to the memory, you
 information. The tags are a list containing the information sector and keywords related to the context of the 
 conversation. There are 5 types of information sectors: EPISODIC (Events & Experiences), SEMANTIC (Facts & 
 Knowledge), PROCEDURAL (Skills & How-to), EMOTIONAL (Feelings & Sentiment) and REFLECTIVE (Meta-cognition & 
-Insights). For example:
+Insights). 
+
+IMPORTANT: For large data (documents, reports, transaction logs, etc.), store only the FILE LOCATION in memory, 
+not the full content. The memory acts as an index to help you find where information is stored on the filesystem.
+
+Examples of adding information to memory:
 
 ```
 {
-    "text": "My morning routine: coffee, then check emails, then code",
-    "tags": ["routine", "procedural"]
+    "text": "Bishop Q4 2024 financial forecast stored in /home/user/documents/bishop_forecast_q4_2024.xlsx",
+    "tags": ["semantic", "bishop", "financial", "forecast", "q4-2024"]
 },
 {
-    "text": "I feel really excited about the new AI project",
-    "tags": ["emotion", "ai"],
+    "text": "Bank transaction exports from Luminor are in /home/user/accounting/luminor_transactions_2024/",
+    "tags": ["semantic", "procedural", "luminor", "bank", "transactions", "accounting"]
 },
 {
-    "text": "The company address is at Tallinn, Estonia", 
-    "tags": ["episodic", "semantics"],
+    "text": "Company tax filing procedure: use form 1234, submit via e-Tax portal by March 31",
+    "tags": ["procedural", "tax", "filing", "deadline", "estonia"]
+},
+{
+    "text": "Customer contract templates are stored in ~/templates/contracts/, use template_standard_2024.docx for new clients",
+    "tags": ["procedural", "semantic", "contracts", "templates", "customers"]
+},
+{
+    "text": "GNSS firmware binaries location: /opt/zubax/firmware/gnss/, use flash_tool.py with --verify flag",
+    "tags": ["procedural", "gnss", "firmware", "flashing", "zubax"]
+},
+```
+
+When querying the long term memory you need to decide which sectors to query. Examples:
+
+```
+{
+    "query": "Where is the Bishop financial forecast?",
+    "sectors": ["semantic"]
+},
+{
+    "query": "Where are the bank transaction exports?",
+    "sectors": ["semantic", "procedural"]
+},
+{
+    "query": "What is the tax filing procedure?",
+    "sectors": ["procedural", "semantic"]
 }
 ```
-
-When querying the long term memory you need to decide which sectors to query. For example:
-
-```
-{
-    "text": "What is our company address?",
-    "sectors": ["procedural", "reflective", "semantic"]
-},
-{
-    "text": "How to flash GNSS using Dr Watson?",
-    "sectors": ["procedural", "reflective"]
-},
-{
-    "text": "What is the user preferred language for communication?",
-    "sectors": ["episodic", "reflective", "semantic"],
-},
-
-```
-
-
 """
 
 tools = [
