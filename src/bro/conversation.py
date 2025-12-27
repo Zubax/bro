@@ -13,7 +13,8 @@ from PIL import Image
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
-from bro import util, memory
+from bro import util
+from bro.memory import Memory, tools as memory_tools
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
@@ -138,6 +139,7 @@ class ConversationHandler:
         user_system_prompt: str | None,
         client: OpenAI,
         reasoner: Reasoner,
+        memory: Memory,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -147,6 +149,7 @@ class ConversationHandler:
         self._client = client
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
+        self._memory = memory
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -257,7 +260,7 @@ class ConversationHandler:
                                 )
                             )
                     case ("recall" | "remember", _):
-                        result = memory.memory_handler(name, args)
+                        result = self._memory.memory_handler(name, args)
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -401,7 +404,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=_TOOLS + memory.tools,
+            tools=_TOOLS + memory_tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",

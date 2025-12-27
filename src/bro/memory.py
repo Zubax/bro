@@ -1,8 +1,5 @@
 import logging
-import os
-
 from openmemory import OpenMemory
-
 from bro.brofiles import MEMORY_DB
 
 _ADDING_AND_RECALLING_MEMORY = """When adding new information to the memory, you need to also decide the tags of the 
@@ -82,38 +79,42 @@ tools = [
 
 _logger = logging.getLogger(__name__)
 
-_memory = OpenMemory(
-    mode="local",
-    path=MEMORY_DB,
-    tier="smart",
-    embeddings={"provider": "openai", "apiKey": os.getenv("OPENAI_API_KEY"), "model": "text-embedding-3-small"},
-    reflection={"enabled": True, "intervalMinutes": 1440, "minMemories": 10},  # Daily
-)
 
+class Memory:
+    def __init__(self, api_key: str):
+        self._memory = OpenMemory(
+            mode="local",
+            path=MEMORY_DB,
+            tier="smart",
+            embeddings={"provider": "openai", "apiKey": api_key, "model": "text-embedding-3-small"},
+            reflection={"enabled": True, "intervalMinutes": 1440, "minMemories": 10},  # Daily
+        )
 
-def memory_handler(name: str, args: str) -> str:
-    match name, args:
-        case ("remember", {"text": text, "tags": tags}):
-            _logger.info("Adding memory...")
-            try:
-                mem = _memory.add(text, tags=tags)
-                _logger.info(f"Memory stored: {mem['id']} with tags {tags}")
-                return "Memory is added."
-            except Exception as e:
-                return f"Memory can't be added. Error: {e}"
+    def memory_handler(self, name: str, args: str) -> str:
+        match name, args:
+            case ("remember", {"text": text, "tags": tags}):
+                _logger.info(f"Adding memory with the following tags {tags}...")
+                try:
+                    mem = self._memory.add(text, tags=tags)
+                    _logger.debug(f"Memory stored. Memory id {mem['id']}")
+                    return "Memory is added."
+                except Exception as e:
+                    return f"Memory can't be added. Error: {e}"
 
-        case ("recall", {"query": query, "sectors": sectors}):
-            _logger.info(f"Querying memories in sectors {sectors}...")
-            results = _memory.query(query, filters={"sectors": sectors})
-            _logger.info(f"Found {len(results)} matching memories:")
-            if not results:
-                return "Found no matching memories."
-            else:
-                for i, match in enumerate(results):
-                    content_preview = match["content"][:50] + "..." if len(match["content"]) > 50 else match["content"]
-                    score = match.get("score", 0)
-                    _logger.info(f"     {i + 1}. [score: {score:.3f}] {content_preview}")
-                highest_match: dict[str, str] = max(results, key=lambda r: r.get("score", 0))
-                return highest_match["content"]
+            case ("recall", {"query": query, "sectors": sectors}):
+                _logger.info(f"Querying memories in sectors {sectors}...")
+                results = self._memory.query(query, filters={"sectors": sectors})
+                _logger.info(f"Found {len(results)} matching memories:")
+                if not results:
+                    return "Found no matching memories."
+                else:
+                    for i, match in enumerate(results):
+                        content_preview = (
+                            match["content"][:50] + "..." if len(match["content"]) > 50 else match["content"]
+                        )
+                        score = match.get("score", 0)
+                        _logger.info(f"     {i + 1}. [score: {score:.3f}] {content_preview}")
+                    highest_match: dict[str, str] = max(results, key=lambda r: r.get("score", 0))
+                    return highest_match["content"]
 
-    return "Unrecognized function call."
+        return "Unrecognized function call."

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from ctypes import memmove
 import logging
 import os
 import sqlite3
@@ -23,6 +24,7 @@ from bro.executive.openai_cua import OpenAiCuaExecutive
 from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, LOG_DB
 from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
+from bro.memory import Memory
 
 _logger = logging.getLogger(__name__)
 
@@ -73,6 +75,8 @@ def main() -> None:
             _logger.error(f"Unknown executive specification: {args.exe!r}")
             sys.exit(1)
 
+    memory = Memory(api_key=os.getenv("OPENAI_API_KEY"))
+
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
@@ -80,6 +84,7 @@ def main() -> None:
         user_system_prompt=user_system_prompt,
         resume=args.resume,
         snapshot_file=SNAPSHOT_FILE,
+        memory=memory,
     )
 
     connector = SlackConnector(
@@ -87,7 +92,7 @@ def main() -> None:
         app_token=os.environ["BRO_SLACK_APP_TOKEN"],
         bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
-    conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn)
+    conversation = ConversationHandler(connector, user_system_prompt, openai_client, reasoner=rsn, memory=memory)
 
     try:
         # Start the web UI
