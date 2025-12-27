@@ -23,7 +23,7 @@ ATTACHMENT_FOLDER = tempfile.mkdtemp(f".conversation.pid{os.getpid()}.bro")
 class SlackConnector(Connector):
     """
     SlackConnector is the logic layer that does the polling, sending, downloading attachments using the Slack Socket Mode API.
-    The tokens can be obtained from Slack app's settings → Basic Information → App-Level Tokens → Generate Token.
+    See README > Setting up a Slack App for tokens generation instructions.
     """
 
     def __init__(self, *, bot_token: str, app_token: str, bro_user_id: str) -> None:
