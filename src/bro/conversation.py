@@ -51,6 +51,7 @@ necessary.
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - There is no need to check the reasoner’s status before calling task_reasoner.
+- The reasoner may need multiple iterations to complete a task. Keep the conversation going until the task is done.
 """
 
 _RESPOND_OR_IGNORE_PROMPT = """
@@ -169,7 +170,6 @@ class ConversationHandler:
         addendum = output.copy()
 
         for item in addendum:
-            _logger.debug(f"Received item from the conversation model: {item}")
             if item.get("type") == "reasoning" and "status" in item:
                 del item["status"]
                 _logger.debug("Ignoring reasoning message...")
@@ -177,7 +177,7 @@ class ConversationHandler:
 
         self._context += addendum
 
-        for item in output:
+        for item in addendum:
             _logger.info(f"Received item from the conversation model: {item}")
             msg_data = self._process(item)
             _logger.info(f"After processing, got msg_data: {msg_data}")
