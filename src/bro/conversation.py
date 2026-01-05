@@ -15,6 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from bro import util
 from bro.memory import Memory, tools as memory_tools
+from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
@@ -141,6 +142,7 @@ class ConversationHandler:
         client: OpenAI,
         reasoner: Reasoner,
         memory: Memory,
+        wiki: WikiClient | None = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -151,6 +153,7 @@ class ConversationHandler:
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
+        self._wiki = wiki
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -177,8 +180,13 @@ class ConversationHandler:
 
         self._context += addendum
 
+        # Track if we processed any function calls
+        had_function_calls = False
+
         for item in addendum:
             _logger.info(f"Received item from the conversation model: {item}")
+            if item.get("type") == "function_call":
+                had_function_calls = True
             msg_data = self._process(item)
             _logger.info(f"After processing, got msg_data: {msg_data}")
             if msg_data:
@@ -193,6 +201,14 @@ class ConversationHandler:
                 else:
                     _logger.error(f"Message can't be parsed. Received data: {msg_data}")
                     # TODO rerunning inference using Tenacity
+
+        # If we had function calls, call model again to process the results
+        if had_function_calls:
+            _logger.info("Function calls were processed, requesting follow-up inference...")
+            conversation_response = self._request_inference(self._context)
+            follow_up_output = conversation_response["output"]
+            if follow_up_output:
+                self._process_response_output(follow_up_output)  # Recursive call
 
     def _on_task_completed_cb(self, message: str) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
@@ -265,13 +281,24 @@ class ConversationHandler:
                     case ("remember", {"text": text, "tags": tags}):
                         result = self._memory.remember(text, tags)
 
+                    case ("wiki_search", {"query": query}):
+                        if self._wiki:
+                            result = self._wiki.search(query)
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                    case ("wiki_fetch_page", {"path": path}):
+                        if self._wiki:
+                            result = self._wiki.fetch_page(path)
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
                     case _:
                         _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
                     self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
-                    self._on_task_completed_cb(result)
 
         return None
 
@@ -408,7 +435,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=_TOOLS + memory_tools,
+            tools=_TOOLS + memory_tools + wiki_tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
