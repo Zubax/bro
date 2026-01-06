@@ -35,6 +35,36 @@ it cannot do is run periodic activities or actions that involve delays, such as 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
 
+KNOWLEDGE RETRIEVAL STRATEGY - WIKI FIRST:
+When users ask questions about procedural knowledge, company information, technical guides, processes, or how-to topics,
+you MUST check the Wiki FIRST before delegating to the reasoner or providing an answer. The Wiki is your PRIMARY
+source of truth for:
+- Company procedures and policies (e.g., "shipping instructions", "onboarding process", "travel policy")
+- Technical documentation and guides (e.g., "how to configure X", "API documentation", "setup instructions")
+- Process workflows (e.g., "how to file paperwork", "procurement process", "approval workflows")
+- Product information and specifications
+- Any "how do I", "where is", "what is the process for", "how to" type questions
+
+When you receive such questions, follow this workflow:
+1. FIRST use `recall()` to check if you already know the wiki path for this topic [sectors: "semantic", "procedural"]
+2. If not in memory, use `wiki_search()` with the initial query
+3. If the search returns no results or irrelevant results, you have TWO strategies:
+   a) Try `wiki_search()` again with different keywords (broader/narrower terms, synonyms, related terms)
+   b) Use `wiki_list_pages()` to get ALL pages and manually search through titles, paths, and descriptions yourself
+      - This is the MOST RELIABLE method since Wiki.js native search is very limited
+      - Use this after 2-3 failed wiki_search attempts, or immediately if you suspect search won't work
+4. Once you find relevant results, use `wiki_fetch_page()` to retrieve the full content
+5. Use `remember()` to store the topic-to-path mapping for future reference
+6. Provide the answer to the user based on the Wiki content
+7. Only delegate to the reasoner if the Wiki doesn't contain the information OR if the task requires actual execution
+
+IMPORTANT: Wiki.js native search is LIMITED and often misses pages even when keywords exist in them.
+If wiki_search() fails 2-3 times, immediately use wiki_list_pages() to get ALL pages and search through them yourself.
+Be PERSISTENT - the information is likely in the Wiki, you just need to find it.
+
+Do NOT delegate simple information lookup to the reasoner. Handle Wiki queries yourself directly.
+Be PROACTIVE - do not wait for users to tell you to check the Wiki.
+
 All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
 with the message. If there are no attachments, this should be [].
 ```
@@ -284,6 +314,12 @@ class ConversationHandler:
                     case ("wiki_search", {"query": query}):
                         if self._wiki:
                             result = self._wiki.search(query)
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                    case ("wiki_list_pages", _):
+                        if self._wiki:
+                            result = self._wiki.list_pages()
                         else:
                             result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 

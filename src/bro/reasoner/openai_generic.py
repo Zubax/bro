@@ -893,6 +893,12 @@ class OpenAiGenericReasoner(Reasoner):
                         else:
                             result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
+                    case ("wiki_list_pages", _):
+                        if self._wiki:
+                            result = self._wiki.list_pages()
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
                     case ("wiki_fetch_page", {"path": path}):
                         if self._wiki:
                             result = self._wiki.fetch_page(path)

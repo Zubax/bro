@@ -182,6 +182,35 @@ export OPENROUTER_API_KEY="..."
 bro --exe gpt-5+ui-tars-7b
 ```
 
+### Wiki.js integration
+
+Bro can access and search any Wiki.js instance to retrieve documentation and knowledge base articles.
+
+#### Setting up Wiki.js access
+
+1. **Generate an API token in your Wiki.js instance**
+   - Log into your Wiki.js admin panel
+   - Navigate to "API Access" or "Authentication" settings
+   - Create a new API key with read permissions
+   - Copy the generated token
+
+2. **Configure environment variables**
+
+   ```bash
+   export BRO_WIKI_API_TOKEN="your-api-token-here"
+   export BRO_WIKI_URL="https://your-wiki-instance.com"  # Optional, defaults to https://wiki.zubax.com
+   ```
+
+   If `BRO_WIKI_URL` is not set, Bro will default to `https://wiki.zubax.com` for backward compatibility.
+
+3. **Start Bro**
+   ```bash
+   bro --exe gpt-5+ui-tars-7b
+   ```
+
+Once configured, Bro will be able to search and fetch pages from your Wiki.js instance to answer questions
+and retrieve documentation during task execution.
+
 ## Testing
 
 To invoke a particular component for testing purposes, go like `python3 -m bro.executive.ui_tars_7b`.
