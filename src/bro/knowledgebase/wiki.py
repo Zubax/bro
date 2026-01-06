@@ -171,7 +171,10 @@ class WikiClient:
         _logger.info("Fetching list of all wiki pages")
 
         try:
-            results = self._execute_graphql(graphql_query, {}, "pages.list")
+            result = self._execute_graphql(graphql_query, {}, "pages.list")
+            # pages.list returns a list, not a dict
+            assert isinstance(result, list)
+            results: list[dict[str, Any]] = result
 
             if not results:
                 return "No pages found in the wiki."
@@ -224,6 +227,8 @@ class WikiClient:
 
         try:
             result = self._execute_graphql(graphql_query, variables, "pages.search")
+            # pages.search returns a dict with "results" key
+            assert isinstance(result, dict)
             results = result.get("results", [])
 
             if not results:
@@ -281,7 +286,10 @@ class WikiClient:
         _logger.info(f"Fetching wiki page: {path}")
 
         try:
-            page = self._execute_graphql(graphql_query, variables, "pages.singleByPath")
+            result = self._execute_graphql(graphql_query, variables, "pages.singleByPath")
+            # pages.singleByPath returns a dict (or None if not found)
+            assert isinstance(result, dict) or result is None
+            page = result
 
             if not page:
                 return f"Wiki page not found: {path}"
@@ -337,9 +345,10 @@ class WikiClient:
                 raise ValueError(f"GraphQL errors: {error_str}")
 
             # Extract result using the result_path
-            result = data.get("data", {})
+            result: dict[str, Any] | list[dict[str, Any]] = data.get("data", {})
             for key in result_path.split("."):
-                result = result.get(key, {})
+                if isinstance(result, dict):
+                    result = result.get(key, {})
 
             return result
 

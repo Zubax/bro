@@ -414,7 +414,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._wiki = wiki
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
-        self._tools = _TOOLS + memory_tools + wiki_tools
+        self._tools: list[dict[str, Any]] = _TOOLS + memory_tools + wiki_tools  # type: ignore[assignment]
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
