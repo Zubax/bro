@@ -21,6 +21,7 @@ dependencies = [
     "nicegui~=2.23",
     "openmemory-py~=1.2.3",
     "slack-sdk~=3.39.0",
+    "mcp~=1.7",
 ]
 
 [project.scripts]
@@ -56,5 +57,5 @@ show_error_context = true
 mypy_path = []
 
 [[tool.mypy.overrides]]
-module = ["pyautogui", "pynput.*", "slack_sdk.*", "requests", "yaml", "openmemory"]
+module = ["pyautogui", "pynput.*", "slack_sdk.*", "requests", "yaml", "openmemory", "mcp", "mcp.*"]
 ignore_missing_imports = true

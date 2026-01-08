@@ -5,8 +5,11 @@ This module provides access to different knowledge sources like wikis, email, do
 """
 
 from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
+from bro.knowledgebase.gmail import GmailClient, tools as gmail_tools
 
 __all__ = [
     "WikiClient",
     "wiki_tools",
+    "GmailClient",
+    "gmail_tools",
 ]
