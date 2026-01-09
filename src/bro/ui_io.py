@@ -116,7 +116,6 @@ class _Impl(UiController):
     def screenshot(self) -> Image.Image:
         im = None
         try:
-            _logger.debug(f"Capturing screenshot with mss")
             with mss.mss() as sct:
                 mon = sct.monitors[0]  # bounding box of all displays
                 img = sct.grab(
