@@ -1,15 +1,17 @@
-"""
-Knowledge base module for accessing various information sources.
+from __future__ import annotations
+from abc import ABC, abstractmethod
 
-This module provides access to different knowledge sources like wikis, email, documents, etc.
-"""
 
-from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
-from bro.knowledgebase.gmail import GmailClient, tools as gmail_tools
+class KnowledgeBase(ABC):
+    """
+    Abstract base class for knowledge base providers.
+    Knowledge bases provide access to various information sources like wikis, email, documents, etc.
+    """
 
-__all__ = [
-    "WikiClient",
-    "wiki_tools",
-    "GmailClient",
-    "gmail_tools",
-]
+    @abstractmethod
+    def search(self, query: str) -> str:
+        """
+        Search the knowledge base for information matching the query.
+        Returns a string representation of the search results.
+        """
+        raise NotImplementedError

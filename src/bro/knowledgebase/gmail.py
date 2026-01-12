@@ -11,6 +11,8 @@ import logging
 import os
 from typing import Any
 
+from bro.knowledgebase import KnowledgeBase
+
 _logger = logging.getLogger(__name__)
 
 _GMAIL_INSTRUCTIONS = """Use these functions to access Gmail for searching and reading emails, and sending messages.
@@ -145,7 +147,7 @@ tools = [
 ]
 
 
-class GmailClient:
+class GmailClient(KnowledgeBase):
     """
     Client for accessing Gmail through the Model Context Protocol (MCP) server.
 

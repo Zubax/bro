@@ -11,6 +11,8 @@ import os
 from typing import Any
 import requests
 
+from bro.knowledgebase import KnowledgeBase
+
 _logger = logging.getLogger(__name__)
 
 _WIKI_INSTRUCTIONS = """Use these functions to access the configured Wiki.js instance which may contain 
@@ -102,7 +104,7 @@ tools = [
 ]
 
 
-class WikiClient:
+class WikiClient(KnowledgeBase):
     """
     Client for accessing any Wiki.js instance via its GraphQL API.
 
