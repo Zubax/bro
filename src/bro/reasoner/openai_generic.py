@@ -15,6 +15,7 @@ from openai import OpenAI
 from bro.executive import Executive, Effort as ExecutiveEffort
 from bro.reasoner import Reasoner, Context, OnTaskCompleted
 from bro.memory import Memory, tools as memory_tools
+from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -396,6 +397,7 @@ class OpenAiGenericReasoner(Reasoner):
         ui: UiObserver,
         client: OpenAI,
         memory: Memory,
+        wiki: WikiClient | None = None,
         user_system_prompt: str | None = None,
         model: str = "gpt-5.1",
         reasoning_effort: str = "high",
@@ -409,9 +411,10 @@ class OpenAiGenericReasoner(Reasoner):
         self._client = client
         self._model = model
         self._memory = memory
+        self._wiki = wiki
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
-        self._tools = _TOOLS + memory_tools
+        self._tools: list[dict[str, Any]] = _TOOLS + memory_tools + wiki_tools  # type: ignore[assignment]
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
@@ -883,6 +886,24 @@ class OpenAiGenericReasoner(Reasoner):
 
                     case ("remember", {"text": text, "tags": tags}):
                         result = self._memory.remember(text, tags)
+
+                    case ("wiki_search", {"query": query}):
+                        if self._wiki:
+                            result = self._wiki.search(query)
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                    case ("wiki_list_pages", _):
+                        if self._wiki:
+                            result = self._wiki.list_pages()
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                    case ("wiki_fetch_page", {"path": path}):
+                        if self._wiki:
+                            result = self._wiki.fetch_page(path)
+                        else:
+                            result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                     case _:
                         result = f"ERROR: Unrecognized function call: {name!r}({args})"

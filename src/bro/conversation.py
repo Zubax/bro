@@ -15,6 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from bro import util
 from bro.memory import Memory, tools as memory_tools
+from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
@@ -33,6 +34,36 @@ it cannot do is run periodic activities or actions that involve delays, such as 
 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
+
+KNOWLEDGE RETRIEVAL STRATEGY - WIKI FIRST:
+When users ask questions about procedural knowledge, company information, technical guides, processes, or how-to topics,
+you MUST check the Wiki FIRST before delegating to the reasoner or providing an answer. The Wiki is your PRIMARY
+source of truth for:
+- Company procedures and policies (e.g., "shipping instructions", "onboarding process", "travel policy")
+- Technical documentation and guides (e.g., "how to configure X", "API documentation", "setup instructions")
+- Process workflows (e.g., "how to file paperwork", "procurement process", "approval workflows")
+- Product information and specifications
+- Any "how do I", "where is", "what is the process for", "how to" type questions
+
+When you receive such questions, follow this workflow:
+1. FIRST use `recall()` to check if you already know the wiki path for this topic [sectors: "semantic", "procedural"]
+2. If not in memory, use `wiki_search()` with the initial query
+3. If the search returns no results or irrelevant results, you have TWO strategies:
+   a) Try `wiki_search()` again with different keywords (broader/narrower terms, synonyms, related terms)
+   b) Use `wiki_list_pages()` to get ALL pages and manually search through titles, paths, and descriptions yourself
+      - This is the MOST RELIABLE method since Wiki.js native search is very limited
+      - Use this after 2-3 failed wiki_search attempts, or immediately if you suspect search won't work
+4. Once you find relevant results, use `wiki_fetch_page()` to retrieve the full content
+5. Use `remember()` to store the topic-to-path mapping for future reference
+6. Provide the answer to the user based on the Wiki content
+7. Only delegate to the reasoner if the Wiki doesn't contain the information OR if the task requires actual execution
+
+IMPORTANT: Wiki.js native search is LIMITED and often misses pages even when keywords exist in them.
+If wiki_search() fails 2-3 times, immediately use wiki_list_pages() to get ALL pages and search through them yourself.
+Be PERSISTENT - the information is likely in the Wiki, you just need to find it.
+
+Do NOT delegate simple information lookup to the reasoner. Handle Wiki queries yourself directly.
+Be PROACTIVE - do not wait for users to tell you to check the Wiki.
 
 All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
 with the message. If there are no attachments, this should be [].
@@ -141,6 +172,7 @@ class ConversationHandler:
         client: OpenAI,
         reasoner: Reasoner,
         memory: Memory,
+        wiki: WikiClient | None = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -151,6 +183,7 @@ class ConversationHandler:
         self._reasoner = reasoner
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
+        self._wiki = wiki
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -177,8 +210,13 @@ class ConversationHandler:
 
         self._context += addendum
 
+        # Track if we processed any function calls
+        had_function_calls = False
+
         for item in addendum:
             _logger.info(f"Received item from the conversation model: {item}")
+            if item.get("type") == "function_call":
+                had_function_calls = True
             msg_data = self._process(item)
             _logger.info(f"After processing, got msg_data: {msg_data}")
             if msg_data:
@@ -193,6 +231,13 @@ class ConversationHandler:
                 else:
                     _logger.error(f"Message can't be parsed. Received data: {msg_data}")
                     # TODO rerunning inference using Tenacity
+
+        if had_function_calls:
+            _logger.info("Function calls were processed, requesting follow-up inference...")
+            conversation_response = self._request_inference(self._context)
+            follow_up_output = conversation_response["output"]
+            if follow_up_output:
+                self._process_response_output(follow_up_output)
 
     def _on_task_completed_cb(self, message: str) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
@@ -212,6 +257,8 @@ class ConversationHandler:
                 "content": input_data,
             }
         ]
+
+        self._current_task = None
         _logger.info("Requesting conversation response after receiving reasoner response...")
         conversation_response = self._request_inference(self._context)
         output = conversation_response["output"]
@@ -234,44 +281,66 @@ class ConversationHandler:
                 args = json.loads(arguments)
                 _logger.debug(f"Received function call arguments: {args}")
                 result = None
-                match name, args:
-                    case ("task_reasoner", {"prompt": prompt, "channel": channel}):
-                        # TODO: add a way to interrupt the current task.
-                        _logger.info("Tasking the reasoner...")
-                        _logger.debug(f"Prompt for the reasoner: {prompt}")
-                        if self._reasoner.task(Context(prompt=prompt, files=[])):
-                            self._current_task = Task(summary=prompt, channel=Channel(name=channel))
-                            result = "Successfully tasked the reasoner."
-                    case ("get_reasoner_status", {}):
-                        _logger.info("Calling legilimens for task progress...")
-                        result = self._reasoner.legilimens()
-                        if not self._current_task:
-                            _logger.error(
-                                f"Missing current task context. Cannot route message to any channel. Message "
-                                f"content: {result}"
-                            )
-                        else:
-                            self._msgs.append(
-                                ReceivedMessage(
-                                    via=self._current_task.channel,
-                                    user=User(name="Bro"),
-                                    text=f"Send message to the user: {result}",
-                                    attachments=[],
+
+                if self._current_task and name != "get_reasoner_status":
+                    result = f"Rejected. I am currently working on another task: '{self._current_task.summary}'. Inform the user to wait."
+                else:
+                    match name, args:
+                        case ("task_reasoner", {"prompt": prompt, "channel": channel}):
+                            _logger.info("Tasking the reasoner...")
+                            _logger.debug(f"Prompt for the reasoner: {prompt}")
+                            if self._reasoner.task(Context(prompt=prompt, files=[])):
+                                self._current_task = Task(summary=prompt, channel=Channel(name=channel))
+                                result = "Successfully tasked the reasoner."
+                            else:
+                                result = "Failed to task the reasoner."
+                        case ("get_reasoner_status", {}):
+                            _logger.info("Calling legilimens for task progress...")
+                            result = self._reasoner.legilimens()
+                            if not self._current_task:
+                                _logger.error(
+                                    f"Missing current task context. Cannot route message to any channel. Message "
+                                    f"content: {result}"
                                 )
-                            )
-                    case ("recall", {"query": query, "sectors": sectors}):
-                        result = self._memory.recall(query, sectors)
+                            else:
+                                self._msgs.append(
+                                    ReceivedMessage(
+                                        via=self._current_task.channel,
+                                        user=User(name="Bro"),
+                                        text=f"Send message to the user: {result}",
+                                        attachments=[],
+                                    )
+                                )
+                        case ("recall", {"query": query, "sectors": sectors}):
+                            result = self._memory.recall(query, sectors)
 
-                    case ("remember", {"text": text, "tags": tags}):
-                        result = self._memory.remember(text, tags)
+                        case ("remember", {"text": text, "tags": tags}):
+                            result = self._memory.remember(text, tags)
 
-                    case _:
-                        _logger.error(f"Unrecognized function call: {name!r}({args})")
+                        case ("wiki_search", {"query": query}):
+                            if self._wiki:
+                                result = self._wiki.search(query)
+                            else:
+                                result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                        case ("wiki_list_pages", _):
+                            if self._wiki:
+                                result = self._wiki.list_pages()
+                            else:
+                                result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                        case ("wiki_fetch_page", {"path": path}):
+                            if self._wiki:
+                                result = self._wiki.fetch_page(path)
+                            else:
+                                result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                        case _:
+                            _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
                     self._context += [{"type": "function_call_output", "call_id": item["call_id"], "output": result}]
-                    self._on_task_completed_cb(result)
 
         return None
 
@@ -408,7 +477,7 @@ class ConversationHandler:
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=_TOOLS + memory_tools,
+            tools=_TOOLS + memory_tools + wiki_tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
