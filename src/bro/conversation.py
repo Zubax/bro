@@ -283,7 +283,7 @@ class ConversationHandler:
                 result = None
 
                 if self._current_task and name != "get_reasoner_status":
-                    result = f"Cannot execute {name}. Another task is ongoing. Please try again later."
+                    result = f"Rejected. I am currently working on another task: '{self._current_task.summary}'. Inform the user to wait."
                 else:
                     match name, args:
                         case ("task_reasoner", {"prompt": prompt, "channel": channel}):
