@@ -16,6 +16,7 @@ from bro.executive import Executive, Effort as ExecutiveEffort
 from bro.reasoner import Reasoner, Context, OnTaskCompleted
 from bro.memory import Memory, tools as memory_tools
 from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
+
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
 from bro.util import run_shell_command, run_python_code, prune_context_text_only
@@ -398,6 +399,7 @@ class OpenAiGenericReasoner(Reasoner):
         client: OpenAI,
         memory: Memory,
         wiki: WikiClient | None = None,
+        google_workspace=None,
         user_system_prompt: str | None = None,
         model: str = "gpt-5.1",
         reasoning_effort: str = "high",
@@ -412,9 +414,19 @@ class OpenAiGenericReasoner(Reasoner):
         self._model = model
         self._memory = memory
         self._wiki = wiki
+        self._google_workspace = google_workspace
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
+
+        # Build tools list
         self._tools: list[dict[str, Any]] = _TOOLS + memory_tools + wiki_tools  # type: ignore[assignment]
+
+        # Add Google Workspace tools if available
+        if self._google_workspace:
+            gw_tools = self._google_workspace.get_tools()
+            _logger.info(f"Adding {len(gw_tools)} Google Workspace tools to reasoner")
+            self._tools = self._tools + gw_tools
+
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
         self._context = self._build_system_prompt()
@@ -906,8 +918,18 @@ class OpenAiGenericReasoner(Reasoner):
                             result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                     case _:
-                        result = f"ERROR: Unrecognized function call: {name!r}({args})"
-                        _logger.error(f"Unrecognized function call: {name!r}({args})")
+                        # Try Google Workspace tools
+                        if self._google_workspace:
+                            try:
+                                _logger.info(f"Attempting to call Google Workspace tool: {name}")
+                                result = self._google_workspace.call_tool(name, args)
+                                _logger.info(f"Google Workspace tool result: {result}")
+                            except Exception as e:
+                                _logger.error(f"Google Workspace tool call failed: {e}")
+                                result = f"ERROR: Google Workspace tool '{name}' failed: {str(e)}"
+                        else:
+                            result = f"ERROR: Unrecognized function call: {name!r}({args})"
+                            _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 context += [{"type": "function_call_output", "call_id": item["call_id"], "output": json.dumps(result)}]
                 return context, final

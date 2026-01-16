@@ -26,6 +26,7 @@ from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
 from bro.memory import Memory
 from bro.knowledgebase.wiki import WikiClient
+from bro.mcp import GoogleWorkspaceClient
 
 _logger = logging.getLogger(__name__)
 
@@ -78,7 +79,6 @@ def main() -> None:
 
     memory = Memory(api_key=os.environ["OPENAI_API_KEY"])
 
-    # Initialize wiki client if token is available
     wiki = None
     if os.getenv("BRO_WIKI_API_TOKEN"):
         try:
@@ -89,6 +89,12 @@ def main() -> None:
     else:
         _logger.info("BRO_WIKI_API_TOKEN not set, wiki access disabled")
 
+    google_workspace = None
+    try:
+        google_workspace = GoogleWorkspaceClient(services=["gmail"], tool_tier="core")
+    except Exception as e:
+        _logger.warning(f"Failed to initialize Google Workspace client: {e}")
+
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
@@ -98,6 +104,7 @@ def main() -> None:
         snapshot_file=SNAPSHOT_FILE,
         memory=memory,
         wiki=wiki,
+        google_workspace=google_workspace,
     )
 
     connector = SlackConnector(
@@ -106,7 +113,13 @@ def main() -> None:
         bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
     conversation = ConversationHandler(
-        connector, user_system_prompt, openai_client, reasoner=rsn, memory=memory, wiki=wiki
+        connector,
+        user_system_prompt,
+        openai_client,
+        reasoner=rsn,
+        memory=memory,
+        wiki=wiki,
+        google_workspace=google_workspace,
     )
 
     try:

@@ -16,6 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from bro import util
 from bro.memory import Memory, tools as memory_tools
 from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
+
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
 from bro.util import prune_context_text_only, image_to_base64, detect_file_format
@@ -173,6 +174,7 @@ class ConversationHandler:
         reasoner: Reasoner,
         memory: Memory,
         wiki: WikiClient | None = None,
+        google_workspace=None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -184,6 +186,7 @@ class ConversationHandler:
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
         self._wiki = wiki
+        self._google_workspace = google_workspace
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -336,7 +339,17 @@ class ConversationHandler:
                                 result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                         case _:
-                            _logger.error(f"Unrecognized function call: {name!r}({args})")
+                            # Try Google Workspace tools
+                            if self._google_workspace:
+                                try:
+                                    _logger.info(f"Attempting to call Google Workspace tool: {name}")
+                                    result = self._google_workspace.call_tool(name, args)
+                                    _logger.info(f"Google Workspace tool result: {result}")
+                                except Exception as e:
+                                    _logger.error(f"Google Workspace tool call failed: {e}")
+                                    result = f"Error calling Google Workspace tool '{name}': {str(e)}"
+                            else:
+                                _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
@@ -473,11 +486,21 @@ class ConversationHandler:
         self, ctx: list[dict[str, Any]], /, *, model: str | None = None, reasoning_effort: str | None = None
     ) -> dict[str, Any]:
         _logger.debug(f"Requesting inference with {len(ctx)} context items...")
+
+        # Build tools list
+        tools = _TOOLS + memory_tools + wiki_tools
+
+        # Add Google Workspace tools if available
+        if self._google_workspace:
+            gw_tools = self._google_workspace.get_tools()
+            _logger.info(f"Adding {len(gw_tools)} Google Workspace tools to conversation")
+            tools = tools + gw_tools
+
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore
             model=model or "gpt-5.1",
             input=ctx,
-            tools=_TOOLS + memory_tools + wiki_tools,
+            tools=tools,
             reasoning={"effort": reasoning_effort or "low", "summary": "detailed"},
             text={"verbosity": "low"},
             service_tier="default",
