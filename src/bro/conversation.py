@@ -175,6 +175,7 @@ class ConversationHandler:
         memory: Memory,
         wiki: WikiClient | None = None,
         google_workspace=None,
+        shopify=None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -187,6 +188,16 @@ class ConversationHandler:
         self._memory = memory
         self._wiki = wiki
         self._google_workspace = google_workspace
+        self._shopify = shopify
+
+        # Build tool name mapping for MCP clients
+        self._mcp_tool_map: dict[str, Any] = {}
+        if self._google_workspace:
+            for tool in self._google_workspace.get_tools():
+                self._mcp_tool_map[tool["name"]] = self._google_workspace
+        if self._shopify:
+            for tool in self._shopify.get_tools():
+                self._mcp_tool_map[tool["name"]] = self._shopify
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -339,15 +350,16 @@ class ConversationHandler:
                                 result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                         case _:
-                            # Try Google Workspace tools
-                            if self._google_workspace:
+                            # Try MCP tools
+                            if name in self._mcp_tool_map:
                                 try:
-                                    _logger.info(f"Attempting to call Google Workspace tool: {name}")
-                                    result = self._google_workspace.call_tool(name, args)
-                                    _logger.info(f"Google Workspace tool result: {result}")
+                                    mcp_client = self._mcp_tool_map[name]
+                                    _logger.info(f"Attempting to call MCP tool: {name}")
+                                    result = mcp_client.call_tool(name, args)
+                                    _logger.info(f"MCP tool result: {result}")
                                 except Exception as e:
-                                    _logger.error(f"Google Workspace tool call failed: {e}")
-                                    result = f"Error calling Google Workspace tool '{name}': {str(e)}"
+                                    _logger.error(f"MCP tool call failed: {e}")
+                                    result = f"Error calling MCP tool '{name}': {str(e)}"
                             else:
                                 _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -495,6 +507,12 @@ class ConversationHandler:
             gw_tools = self._google_workspace.get_tools()
             _logger.info(f"Adding {len(gw_tools)} Google Workspace tools to conversation")
             tools = tools + gw_tools
+
+        # Add Shopify tools if available
+        if self._shopify:
+            shopify_tools = self._shopify.get_tools()
+            _logger.info(f"Adding {len(shopify_tools)} Shopify tools to conversation")
+            tools = tools + shopify_tools
 
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore

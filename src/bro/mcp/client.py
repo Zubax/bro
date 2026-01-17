@@ -68,13 +68,15 @@ class StdioMCPClient(MCPClient):
         logger.info(f"Starting MCP server '{self.name}' with command: {' '.join(self.command)}")
 
         # Start the subprocess
+        import os
+
         self._process = subprocess.Popen(
             self.command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            env={**self.env},
+            env={**os.environ, **self.env},
         )
 
         # Send initialize request
@@ -196,14 +198,53 @@ class MCPManager:
         for client in self._clients.values():
             for tool in client.get_tools():
                 # Convert MCP tool format to OpenAI function format (old style to match existing tools)
+                parameters = tool.get("inputSchema", {})
+
+                # Debug logging for problematic tool
+                if tool["name"] == "get_product":
+                    import json
+
+                    logger.info(f"Original get_product schema: {json.dumps(parameters, indent=2)}")
+
+                # Clean up schema for OpenAI compatibility
+                parameters = self._clean_schema(parameters)
+
+                if tool["name"] == "get_product":
+                    import json
+
+                    logger.info(f"Cleaned get_product schema: {json.dumps(parameters, indent=2)}")
+
                 openai_tool = {
                     "type": "function",
                     "name": tool["name"],
                     "description": tool.get("description", ""),
-                    "parameters": tool.get("inputSchema", {}),
+                    "parameters": parameters,
                 }
                 all_tools.append(openai_tool)
         return all_tools
+
+    def _clean_schema(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean up JSON schema to be OpenAI-compatible."""
+        if not isinstance(schema, dict):
+            return schema
+
+        cleaned = {}
+        for key, value in schema.items():
+            # Skip additionalProperties if it's a boolean (OpenAI expects object or is omitted)
+            if key == "additionalProperties" and isinstance(value, bool):
+                continue
+            # Skip 'required' if it's a boolean inside a property (should only be at object level as array)
+            elif key == "required" and isinstance(value, bool):
+                continue
+            # Recursively clean nested schemas
+            elif isinstance(value, dict):
+                cleaned[key] = self._clean_schema(value)
+            elif isinstance(value, list):
+                cleaned[key] = [self._clean_schema(item) if isinstance(item, dict) else item for item in value]
+            else:
+                cleaned[key] = value
+
+        return cleaned
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
         """Call a tool by routing to the appropriate MCP client."""
