@@ -229,6 +229,7 @@ Bro can access Google Workspace services (Gmail, Drive, Sheets, etc.) through MC
 export GOOGLE_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 export GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
 export GOOGLE_MCP_CREDENTIALS_DIR="$HOME/.google_workspace_mcp/credentials"
+export GOOGLE_MCP_DEFAULT_USER_EMAIL="your-email@example.com"
 ```
 
 ## Testing
