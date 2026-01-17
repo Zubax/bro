@@ -399,7 +399,7 @@ class OpenAiGenericReasoner(Reasoner):
         client: OpenAI,
         memory: Memory,
         wiki: WikiClient | None = None,
-        google_workspace=None,
+        google_workspace: Any = None,
         user_system_prompt: str | None = None,
         model: str = "gpt-5.1",
         reasoning_effort: str = "high",

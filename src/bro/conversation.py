@@ -174,7 +174,7 @@ class ConversationHandler:
         reasoner: Reasoner,
         memory: Memory,
         wiki: WikiClient | None = None,
-        google_workspace=None,
+        google_workspace: Any = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None

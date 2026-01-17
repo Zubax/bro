@@ -157,7 +157,8 @@ class StdioMCPClient(MCPClient):
         if not response_line:
             raise RuntimeError("MCP server closed connection")
 
-        return json.loads(response_line)
+        result: Dict[str, Any] = json.loads(response_line)
+        return result
 
     async def _send_notification(self, notification: Dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
@@ -172,7 +173,7 @@ class StdioMCPClient(MCPClient):
 class MCPManager:
     """Manages multiple MCP client connections."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._clients: Dict[str, MCPClient] = {}
         self._tool_to_client: Dict[str, str] = {}  # Map tool name to client name
 
@@ -227,7 +228,7 @@ class MCPManager:
 class SyncMCPManager:
     """Synchronous wrapper around MCPManager for use in non-async contexts."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._manager = MCPManager()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
