@@ -90,10 +90,24 @@ def main() -> None:
         _logger.info("BRO_WIKI_API_TOKEN not set, wiki access disabled")
 
     google_workspace = None
-    try:
-        google_workspace = GoogleWorkspaceClient(services=["gmail"], tool_tier="core")
-    except Exception as e:
-        _logger.warning(f"Failed to initialize Google Workspace client: {e}")
+    if (
+        os.getenv("GOOGLE_OAUTH_CLIENT_ID")
+        and os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+        and os.getenv("GOOGLE_MCP_CREDENTIALS_DIR")
+    ):
+        try:
+            google_workspace = GoogleWorkspaceClient(
+                oauth_client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
+                oauth_client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
+                credentials_dir=os.environ["GOOGLE_MCP_CREDENTIALS_DIR"],
+                services=["gmail"],
+                tool_tier="core",
+            )
+            _logger.info("Google Workspace client initialized successfully")
+        except Exception as e:
+            _logger.error(f"Failed to initialize Google Workspace client: {e}")
+    else:
+        _logger.info("No Google Workspace client initialized")
 
     shopify = None
     if os.getenv("SHOPIFY_ACCESS_TOKEN") and os.getenv("SHOPIFY_DOMAIN"):

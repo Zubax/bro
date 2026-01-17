@@ -211,6 +211,26 @@ Bro can access and search any Wiki.js instance to retrieve documentation and kno
 Once configured, Bro will be able to search and fetch pages from your Wiki.js instance to answer questions
 and retrieve documentation during task execution.
 
+### Google Workspace integration
+
+Bro can access Google Workspace services (Gmail, Drive, Sheets, etc.) through MCP.
+
+**Setup:**
+
+1. Create OAuth 2.0 credentials in Google Cloud Console:
+   - Create a project or use an existing one
+   - Enable required APIs (Gmail API, Drive API, etc.)
+   - Create OAuth 2.0 Client ID (Desktop Application type)
+   - Download the credentials
+
+2. Set environment variables:
+
+```bash
+export GOOGLE_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+export GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
+export GOOGLE_MCP_CREDENTIALS_DIR="$HOME/.google_workspace_mcp/credentials"
+```
+
 ### Shopify integration
 
 Bro can access Shopify Admin API through MCP for managing products, orders, customers, and inventory.
