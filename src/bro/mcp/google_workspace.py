@@ -21,6 +21,7 @@ class GoogleWorkspaceClient:
         oauth_client_id: str,
         oauth_client_secret: str,
         credentials_dir: str,
+        default_user_email: str,
         services: list[str] | None = None,
         tool_tier: str = "core",
     ) -> None:
@@ -31,6 +32,7 @@ class GoogleWorkspaceClient:
             oauth_client_id: Google OAuth client ID
             oauth_client_secret: Google OAuth client secret
             credentials_dir: Directory to store OAuth credentials
+            default_user_email: Default user email for accessing mailbox
             services: List of services to enable (e.g., ["gmail", "calendar", "drive"])
                      If None, only Gmail is enabled by default.
             tool_tier: Tool tier level - "core", "extended", or "complete"
@@ -72,6 +74,7 @@ class GoogleWorkspaceClient:
                 "GOOGLE_OAUTH_CLIENT_ID": oauth_client_id,
                 "GOOGLE_OAUTH_CLIENT_SECRET": oauth_client_secret,
                 "GOOGLE_MCP_CREDENTIALS_DIR": credentials_dir,
+                "GOOGLE_MCP_DEFAULT_USER_EMAIL": default_user_email,
             },
         )
 
