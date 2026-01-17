@@ -200,19 +200,8 @@ class MCPManager:
                 # Convert MCP tool format to OpenAI function format (old style to match existing tools)
                 parameters = tool.get("inputSchema", {})
 
-                # Debug logging for problematic tool
-                if tool["name"] == "get_product":
-                    import json
-
-                    logger.info(f"Original get_product schema: {json.dumps(parameters, indent=2)}")
-
                 # Clean up schema for OpenAI compatibility
                 parameters = self._clean_schema(parameters)
-
-                if tool["name"] == "get_product":
-                    import json
-
-                    logger.info(f"Cleaned get_product schema: {json.dumps(parameters, indent=2)}")
 
                 openai_tool = {
                     "type": "function",

@@ -13,65 +13,26 @@ _logger = logging.getLogger(__name__)
 
 
 class ShopifyClient:
-    """
-    Client for accessing Shopify Admin API through MCP.
-
-    This client uses the shopify-mcp-server (https://github.com/antoineschaller/shopify-mcp-server)
-    to provide access to Shopify store data including products, orders, customers, and inventory.
-
-    Setup:
-    1. Install mcp-shopify: npm install -g @akson/mcp-shopify
-    2. Create a custom app in your Shopify admin with appropriate API scopes:
-       - read_products, write_products
-       - read_orders, write_orders
-       - read_customers, write_customers
-       - etc.
-    3. Set environment variables:
-       - SHOPIFY_ACCESS_TOKEN: Your Admin API access token
-       - SHOPIFY_DOMAIN: Your store domain (e.g., your-store.myshopify.com)
-
-    The client will automatically manage the MCP server lifecycle and tool routing.
-    """
-
     def __init__(
         self,
-        access_token: str | None = None,
-        domain: str | None = None,
+        access_token: str,
+        domain: str,
     ) -> None:
         """
         Initialize Shopify MCP client.
 
         Args:
-            access_token: Shopify Admin API access token (auto-loaded from SHOPIFY_ACCESS_TOKEN env var if not provided)
-            domain: Shopify store domain (auto-loaded from SHOPIFY_DOMAIN env var if not provided)
+            access_token: Shopify Admin API access token
+            domain: Shopify store domain (e.g., your-store.myshopify.com)
         """
         self._mcp_manager = SyncMCPManager()
 
-        # Load credentials from environment if not provided
-        access_token = access_token or os.getenv("SHOPIFY_ACCESS_TOKEN")
-        domain = domain or os.getenv("SHOPIFY_DOMAIN")
-
-        if not access_token:
-            raise ValueError(
-                "Shopify access token not found. Please set SHOPIFY_ACCESS_TOKEN environment variable "
-                "or provide it as an argument."
-            )
-
-        if not domain:
-            raise ValueError(
-                "Shopify domain not found. Please set SHOPIFY_DOMAIN environment variable "
-                "or provide it as an argument. Format: your-store.myshopify.com"
-            )
-
         # Find mcp-shopify executable
-        mcp_shopify_path = "/opt/homebrew/bin/mcp-shopify"
-        if not os.path.exists(mcp_shopify_path):
-            # Try to find it in PATH
-            import shutil
+        import shutil
 
-            mcp_shopify_path = shutil.which("mcp-shopify")
-            if not mcp_shopify_path:
-                raise FileNotFoundError("mcp-shopify not found. Install it with: npm install -g @akson/mcp-shopify")
+        mcp_shopify_path = shutil.which("mcp-shopify")
+        if not mcp_shopify_path:
+            raise FileNotFoundError("mcp-shopify not found. Install it with: npm install -g @akson/mcp-shopify")
 
         # Build command
         command = [mcp_shopify_path]

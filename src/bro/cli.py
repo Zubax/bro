@@ -98,12 +98,14 @@ def main() -> None:
     shopify = None
     if os.getenv("SHOPIFY_ACCESS_TOKEN") and os.getenv("SHOPIFY_DOMAIN"):
         try:
-            shopify = ShopifyClient()
+            shopify = ShopifyClient(
+                access_token=os.environ["SHOPIFY_ACCESS_TOKEN"], domain=os.environ["SHOPIFY_DOMAIN"]
+            )
             _logger.info("Shopify client initialized successfully")
         except Exception as e:
-            _logger.warning(f"Failed to initialize Shopify client: {e}")
+            _logger.error(f"Failed to initialize Shopify client: {e}")
     else:
-        _logger.info("SHOPIFY_ACCESS_TOKEN or SHOPIFY_DOMAIN not set, Shopify access disabled")
+        _logger.info("No Shopify client initialized")
 
     rsn = OpenAiGenericReasoner(
         executive=exe,
