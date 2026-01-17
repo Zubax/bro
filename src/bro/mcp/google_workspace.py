@@ -39,6 +39,7 @@ class GoogleWorkspaceClient:
         """
         self._services = services or ["gmail"]
         self._tool_tier = tool_tier
+        self._default_user_email = default_user_email
         self._mcp_manager = SyncMCPManager()
 
         # Get workspace-mcp executable path
@@ -67,6 +68,7 @@ class GoogleWorkspaceClient:
         )
 
         # Initialize MCP client
+        _logger.info(f"Setting USER_GOOGLE_EMAIL to: {default_user_email}")
         workspace_client = StdioMCPClient(
             name="google-workspace",
             command=command,
@@ -109,6 +111,11 @@ class GoogleWorkspaceClient:
             Tool result (text content extracted from MCP response)
         """
         try:
+            # Automatically inject user_google_email if not provided
+            if "user_google_email" not in arguments:
+                arguments["user_google_email"] = self._default_user_email
+                _logger.debug(f"Injecting user_google_email: {self._default_user_email}")
+
             mcp_result = self._mcp_manager.call_tool(name, arguments)
 
             # Extract text from MCP result format
