@@ -74,7 +74,7 @@ class GoogleWorkspaceClient:
                 "GOOGLE_OAUTH_CLIENT_ID": oauth_client_id,
                 "GOOGLE_OAUTH_CLIENT_SECRET": oauth_client_secret,
                 "GOOGLE_MCP_CREDENTIALS_DIR": credentials_dir,
-                "GOOGLE_MCP_DEFAULT_USER_EMAIL": default_user_email,
+                "USER_GOOGLE_EMAIL": default_user_email,
             },
         )
 

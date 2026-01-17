@@ -94,14 +94,14 @@ def main() -> None:
         os.getenv("GOOGLE_OAUTH_CLIENT_ID")
         and os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
         and os.getenv("GOOGLE_MCP_CREDENTIALS_DIR")
-        and os.getenv("GOOGLE_MCP_DEFAULT_USER_EMAIL")
+        and os.getenv("USER_GOOGLE_EMAIL")
     ):
         try:
             google_workspace = GoogleWorkspaceClient(
                 oauth_client_id=os.environ["GOOGLE_OAUTH_CLIENT_ID"],
                 oauth_client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
                 credentials_dir=os.environ["GOOGLE_MCP_CREDENTIALS_DIR"],
-                default_user_email=os.environ["GOOGLE_MCP_DEFAULT_USER_EMAIL"],
+                default_user_email=os.environ["USER_GOOGLE_EMAIL"],
                 services=["gmail"],
                 tool_tier="core",
             )
