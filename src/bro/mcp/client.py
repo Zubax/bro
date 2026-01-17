@@ -159,7 +159,8 @@ class StdioMCPClient(MCPClient):
         if not response_line:
             raise RuntimeError("MCP server closed connection")
 
-        return json.loads(response_line)
+        result: Dict[str, Any] = json.loads(response_line)
+        return result
 
     async def _send_notification(self, notification: Dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
@@ -174,7 +175,7 @@ class StdioMCPClient(MCPClient):
 class MCPManager:
     """Manages multiple MCP client connections."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._clients: Dict[str, MCPClient] = {}
         self._tool_to_client: Dict[str, str] = {}  # Map tool name to client name
 
@@ -217,7 +218,7 @@ class MCPManager:
         if not isinstance(schema, dict):
             return schema
 
-        cleaned = {}
+        cleaned: Dict[str, Any] = {}
         for key, value in schema.items():
             # Skip additionalProperties if it's a boolean (OpenAI expects object or is omitted)
             if key == "additionalProperties" and isinstance(value, bool):
@@ -229,7 +230,10 @@ class MCPManager:
             elif isinstance(value, dict):
                 cleaned[key] = self._clean_schema(value)
             elif isinstance(value, list):
-                cleaned[key] = [self._clean_schema(item) if isinstance(item, dict) else item for item in value]
+                cleaned_list: List[Any] = [
+                    self._clean_schema(item) if isinstance(item, dict) else item for item in value
+                ]
+                cleaned[key] = cleaned_list
             else:
                 cleaned[key] = value
 
@@ -257,7 +261,7 @@ class MCPManager:
 class SyncMCPManager:
     """Synchronous wrapper around MCPManager for use in non-async contexts."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._manager = MCPManager()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
