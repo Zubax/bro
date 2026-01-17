@@ -111,10 +111,8 @@ class GoogleWorkspaceClient:
             Tool result (text content extracted from MCP response)
         """
         try:
-            # Automatically inject or replace user_google_email (replace "me" with actual email)
-            if "user_google_email" not in arguments or arguments.get("user_google_email") == "me":
-                arguments["user_google_email"] = self._default_user_email
-                _logger.debug(f"Setting user_google_email to: {self._default_user_email}")
+            # Automatically inject or replace user_google_email
+            arguments["user_google_email"] = self._default_user_email
 
             mcp_result = self._mcp_manager.call_tool(name, arguments)
 
