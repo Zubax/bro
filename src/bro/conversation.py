@@ -88,6 +88,9 @@ attachments: ["path/to/file1", "path/to/file2", ...]
 <user message verbatim>
 ```
 
+To send a message to a specific channel or person, simply set the "via" field to the target channel name or user ID.
+To include attachments, add the file paths to the "attachments" field.
+
 The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
 consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
 necessary.
