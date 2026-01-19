@@ -69,16 +69,27 @@ Be PROACTIVE - do not wait for users to tell you to check the Wiki.
 EMAIL MANAGEMENT WORKFLOW:
 When checking emails, you can handle customer inquiries directly using Gmail and Shopify MCP tools.
 
-For emails requiring responses:
-1. Use Gmail tools to search and read emails
-2. For order-related inquiries, use Shopify tools to lookup order details (order date, items, prices, status)
-3. Prepare draft responses including relevant order information
-4. Post drafts for human approval before sending
-5. After approval, send the email, then use modify_gmail_message_labels to:
-   - Mark as read: remove "UNREAD" label
-   - Archive: remove "INBOX" label
+Gmail MCP tools you have access to include:
+- search_gmail_messages: Search for emails with queries like "from:fedex@example.com"
+- read_gmail_message: Read full content of a specific email by message ID
+- send_gmail_message: Send emails with optional attachments
+- modify_gmail_message_labels: Add or remove Gmail labels (including UNREAD and INBOX)
+  * To mark as read: remove the "UNREAD" label
+  * To archive: remove the "INBOX" label
+  * You can add custom labels or remove multiple labels at once
 
-IMPORTANT: You handle email workflows yourself. Do NOT delegate to the reasoner.
+For emails requiring responses:
+1. Use search_gmail_messages to find relevant emails (e.g., "from:fedex invoice")
+2. Use read_gmail_message to read the full email content
+3. For order-related inquiries, use Shopify tools to lookup order details (order date, items, prices, status)
+4. Prepare draft responses including relevant order information
+5. Post drafts for human approval before sending
+6. After sending or processing emails, use modify_gmail_message_labels to:
+   - Mark as read: {"remove_label_names": ["UNREAD"]}
+   - Archive: {"remove_label_names": ["INBOX"]}
+   - Mark as read AND archive: {"remove_label_names": ["UNREAD", "INBOX"]}
+
+IMPORTANT: You handle email workflows yourself directly using Gmail MCP tools. Do NOT delegate to the reasoner.
 
 All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
 with the message. If there are no attachments, this should be [].
