@@ -113,73 +113,33 @@ The web interface is intended for monitoring purposes only. It is available via 
 
 ### Slack connector
 
-To use Bro with Slack, you need to create a Slack app and obtain the necessary tokens.
+Create a Slack app at https://api.slack.com/apps and configure:
 
-#### Setting up a Slack App
+1. **Socket Mode**: Enable and generate app-level token (`connections:write` scope) → `BRO_SLACK_APP_TOKEN`
 
-1. **Create a new Slack app** at https://api.slack.com/apps
-   - Click "Create New App" → "From scratch"
-   - Give it a name (e.g., "Bro") and select your workspace
+2. **OAuth & Permissions**: Add bot token scopes:
+   - `channels:history`, `channels:read`, `chat:write`
+   - `files:read`, `files:write`
+   - `groups:history`, `groups:read`
+   - `im:history`, `im:read`, `im:write`
+   - `mpim:history`, `mpim:read`
+   - `users:read`
 
-2. **Enable Socket Mode**
-   - Go to "Socket Mode" in the sidebar
-   - Toggle "Enable Socket Mode" to ON
-   - Generate an app-level token with the `connections:write` scope
-   - Copy this token - this is your `BRO_SLACK_APP_TOKEN` (starts with `xapp-`)
+   Install to workspace → `BRO_SLACK_BOT_TOKEN`
 
-3. **Configure OAuth & Permissions**
-   - Go to "OAuth & Permissions" in the sidebar
-   - Add the following Bot Token Scopes:
-     - `channels:history` - View messages in public channels
-     - `channels:read` - View basic channel info
-     - `chat:write` - Send messages as the bot
-     - `files:read` - View files shared in channels
-     - `files:write` - Upload and modify files
-     - `groups:history` - View messages in private channels
-     - `groups:read` - View basic private channel info
-     - `im:history` - View messages in direct messages
-     - `im:read` - View basic direct message info
-     - `im:write` - Start direct messages with users
-     - `mpim:history` - View messages in group direct messages
-     - `mpim:read` - View basic group direct message info
-     - `users:read` - View users in the workspace
+3. **Event Subscriptions**: Enable and subscribe to:
+   - `message.channels`, `message.groups`, `message.im`, `message.mpim`
 
-4. **Install the app to your workspace**
-   - Scroll up to "OAuth Tokens for Your Workspace"
-   - Click "Install to Workspace" and authorize
-   - Copy the "Bot User OAuth Token" - this is your `BRO_SLACK_BOT_TOKEN` (starts with `xoxb-`)
+4. **Bot User ID**: View bot profile → Copy member ID → `BRO_SLACK_USER_ID`
 
-5. **Enable Event Subscriptions**
-   - Go to "Event Subscriptions" in the sidebar
-   - Toggle "Enable Events" to ON
-   - Under "Subscribe to bot events", add:
-     - `message.channels` - Listen to messages in public channels
-     - `message.groups` - Listen to messages in private channels
-     - `message.im` - Listen to messages in direct messages
-     - `message.mpim` - Listen to messages in group direct messages
-   - Click "Save Changes"
+5. **Invite bot**: `/invite @Bro` in channels
 
-6. **Get your Bot's User ID**
-   - In your Slack workspace, click on the bot's name to view its profile
-   - Click the "⋮" (three dots) menu → "View full profile"
-   - Click "⋮ More" → "Copy member ID"
-   - This is your `BRO_SLACK_USER_ID` (starts with `U`)
-
-7. **Invite the bot to channels**
-   - In any channel where you want Bro to operate, type: `/invite @Bro`
-
-#### Environment Variables
-
-When using Bro with Slack, make sure to export all required environment variables:
+**Environment variables:**
 
 ```bash
 export BRO_SLACK_BOT_TOKEN="xoxb-..."
 export BRO_SLACK_APP_TOKEN="xapp-..."
 export BRO_SLACK_USER_ID="U..."
-export OPENAI_API_KEY="..."
-export OPENROUTER_API_KEY="..."
-
-bro --exe gpt-5+ui-tars-7b
 ```
 
 ### Wiki.js integration
