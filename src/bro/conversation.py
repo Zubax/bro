@@ -97,11 +97,11 @@ You can send messages to any channel or person by formatting your response with 
 
 Example - posting to a channel:
 ```
-via: "sell-or-die"
+via: "general"
 user: "Bro"
 attachments: []
 ---
-@channel I need help with pricing for bare PCB KOMARs.
+@channel I need help with this task.
 ```
 
 You can proactively post messages to channels when you need human input or want to share information.
