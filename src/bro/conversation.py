@@ -130,6 +130,8 @@ attachments: []
 ---
 📧 Customer email needs response
 
+*Customer:* <customer name> (<company name if available>)
+
 *Question:* <paste customer's question verbatim>
 
 *Order Details:* (only if order-related, otherwise omit this section)
