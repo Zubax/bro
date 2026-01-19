@@ -88,8 +88,23 @@ attachments: ["path/to/file1", "path/to/file2", ...]
 <user message verbatim>
 ```
 
-To send a message to a specific channel or person, simply set the "via" field to the target channel name or user ID.
-To include attachments, add the file paths to the "attachments" field.
+SENDING MESSAGES:
+You can send messages to any channel or person by formatting your response with the message schema above:
+- Set "via" to the target channel name (e.g., "sell-or-die") or user ID
+- Set "user" to "Bro" (your name)
+- Add file paths to "attachments" if needed
+- Put your message content after the "---" separator
+
+Example - posting to a channel:
+```
+via: "sell-or-die"
+user: "Bro"
+attachments: []
+---
+@channel I need help with pricing for bare PCB KOMARs.
+```
+
+You can proactively post messages to channels when you need human input or want to share information.
 
 The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
 consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
