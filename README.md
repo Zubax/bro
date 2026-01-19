@@ -232,6 +232,28 @@ export GOOGLE_MCP_CREDENTIALS_DIR="$HOME/.google_workspace_mcp/credentials"
 export USER_GOOGLE_EMAIL="your-email@example.com"
 ```
 
+### Shopify integration
+
+Bro can access Shopify Admin API through MCP for managing products, orders, customers, and inventory.
+
+**Setup:**
+
+```bash
+# Install MCP server
+npm install -g @akson/mcp-shopify
+
+# Get access token via OAuth
+curl -X POST "https://YOUR_STORE.myshopify.com/admin/oauth/access_token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET"
+
+# Set environment variables
+export SHOPIFY_ACCESS_TOKEN="shpat_..."
+export SHOPIFY_DOMAIN="your-store.myshopify.com"
+```
+
 ## Testing
 
 To invoke a particular component for testing purposes, go like `python3 -m bro.executive.ui_tars_7b`.

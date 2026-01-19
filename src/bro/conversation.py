@@ -24,6 +24,8 @@ from bro.util import prune_context_text_only, image_to_base64, detect_file_forma
 _logger = logging.getLogger(__name__)
 
 _CONTEXT_EMBEDDING_FILE_MAX_BYTES = 10_000_000
+
+
 _OPENAI_CONVERSATION_PROMPT = """
 You are a confident autonomous AI agent named Bro, designed to complete complex tasks using the reasoner tool. 
 The reasoner is a computer-use agent that can complete arbitrary tasks on the local computer like a human would.
@@ -76,6 +78,29 @@ attachments: ["path/to/file1", "path/to/file2", ...]
 <user message verbatim>
 ```
 
+SENDING MESSAGES:
+You can send messages to any channel or person by formatting your response with the message schema above:
+- Set "via" to the target channel name (e.g., "sell-or-die") or user ID
+- Set "user" to "Bro" (your name)
+- Add file paths to "attachments" if needed
+- Put your message content after the "---" separator
+
+Example - posting to a channel:
+```
+via: "general"
+user: "Bro"
+attachments: []
+---
+@channel I need help with this task.
+```
+
+You can proactively post messages to channels when you need human input or want to share information.
+
+CRITICAL: You MUST only send ONE message block per response. Do NOT send multiple message blocks to different 
+channels in the same response (e.g., one to a channel + one confirmation DM). If you need to send messages to 
+multiple destinations (like posting to a channel AND sending a confirmation DM), send them in SEPARATE responses 
+- first send one message, then in your next response send the other message.
+
 The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
 consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
 necessary.
@@ -84,6 +109,46 @@ Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - There is no need to check the reasoner’s status before calling task_reasoner.
 - The reasoner may need multiple iterations to complete a task. Keep the conversation going until the task is done.
+"""
+
+_EMAIL_MANAGEMENT_WORKFLOW = """
+When checking emails, categorize and handle them as follows:
+
+1. Promotional emails, bills, invoices, receipts:
+   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
+   - No further action needed
+
+2. Customer inquiry emails:
+   - Use get_gmail_message_content to read the full email content
+   - If order-related (customer mentions order number), use Shopify tools to lookup order details
+   - Post to the appropriate Slack channel using this template:
+
+```
+via: "<channel-name>"
+user: "Bro"
+attachments: []
+---
+📧 Customer email needs response
+
+*Question:* <paste customer's question verbatim>
+
+*Order Details:* (only if order-related, otherwise omit this section)
+- Order: #<order_number>
+- Date: <order_date>
+- Items: <item1>, <item2>
+
+What should I tell the customer?
+```
+
+   - Wait for team response with the answer
+   - Send the email using send_gmail_message
+   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
+
+IMPORTANT: 
+- Handle email workflows yourself using Gmail MCP tools. Do NOT delegate to reasoner.
+- ALWAYS ask team for the answer before responding to customers
+- Only include order details if the inquiry is order-related
+- Keep order details minimal: order number, date, and items only
 """
 
 _RESPOND_OR_IGNORE_PROMPT = """
@@ -175,6 +240,7 @@ class ConversationHandler:
         memory: Memory,
         wiki: WikiClient | None = None,
         google_workspace: Any = None,
+        shopify: Any = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -187,6 +253,16 @@ class ConversationHandler:
         self._memory = memory
         self._wiki = wiki
         self._google_workspace = google_workspace
+        self._shopify = shopify
+
+        # Build tool name mapping for MCP clients
+        self._mcp_tool_map: dict[str, Any] = {}
+        if self._google_workspace:
+            for tool in self._google_workspace.get_tools():
+                self._mcp_tool_map[tool["name"]] = self._google_workspace
+        if self._shopify:
+            for tool in self._shopify.get_tools():
+                self._mcp_tool_map[tool["name"]] = self._shopify
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -339,15 +415,16 @@ class ConversationHandler:
                                 result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                         case _:
-                            # Try Google Workspace tools
-                            if self._google_workspace:
+                            # Try MCP tools
+                            if name in self._mcp_tool_map:
                                 try:
-                                    _logger.info(f"Attempting to call Google Workspace tool: {name}")
-                                    result = self._google_workspace.call_tool(name, args)
-                                    _logger.info(f"Google Workspace tool result: {result}")
+                                    mcp_client = self._mcp_tool_map[name]
+                                    _logger.info(f"Attempting to call MCP tool: {name}")
+                                    result = mcp_client.call_tool(name, args)
+                                    _logger.info(f"MCP tool result: {result}")
                                 except Exception as e:
-                                    _logger.error(f"Google Workspace tool call failed: {e}")
-                                    result = f"Error calling Google Workspace tool '{name}': {str(e)}"
+                                    _logger.error(f"MCP tool call failed: {e}")
+                                    result = f"Error calling MCP tool '{name}': {str(e)}"
                             else:
                                 _logger.error(f"Unrecognized function call: {name!r}({args})")
 
@@ -495,6 +572,12 @@ class ConversationHandler:
             gw_tools = self._google_workspace.get_tools()
             _logger.info(f"Adding {len(gw_tools)} Google Workspace tools to conversation")
             tools = tools + gw_tools
+
+        # Add Shopify tools if available
+        if self._shopify:
+            shopify_tools = self._shopify.get_tools()
+            _logger.info(f"Adding {len(shopify_tools)} Shopify tools to conversation")
+            tools = tools + shopify_tools
 
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore

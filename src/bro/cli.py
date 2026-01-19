@@ -26,7 +26,7 @@ from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
 from bro.memory import Memory
 from bro.knowledgebase.wiki import WikiClient
-from bro.mcp import GoogleWorkspaceClient
+from bro.mcp import GoogleWorkspaceClient, ShopifyClient
 
 _logger = logging.getLogger(__name__)
 
@@ -111,6 +111,18 @@ def main() -> None:
     else:
         _logger.info("No Google Workspace client initialized")
 
+    shopify = None
+    if os.getenv("SHOPIFY_ACCESS_TOKEN") and os.getenv("SHOPIFY_DOMAIN"):
+        try:
+            shopify = ShopifyClient(
+                access_token=os.environ["SHOPIFY_ACCESS_TOKEN"], domain=os.environ["SHOPIFY_DOMAIN"]
+            )
+            _logger.info("Shopify client initialized successfully")
+        except Exception as e:
+            _logger.error(f"Failed to initialize Shopify client: {e}")
+    else:
+        _logger.info("No Shopify client initialized")
+
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
@@ -121,6 +133,7 @@ def main() -> None:
         memory=memory,
         wiki=wiki,
         google_workspace=google_workspace,
+        shopify=shopify,
     )
 
     connector = SlackConnector(
@@ -136,6 +149,7 @@ def main() -> None:
         memory=memory,
         wiki=wiki,
         google_workspace=google_workspace,
+        shopify=shopify,
     )
 
     try:
