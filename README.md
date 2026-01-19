@@ -232,6 +232,53 @@ export GOOGLE_MCP_CREDENTIALS_DIR="$HOME/.google_workspace_mcp/credentials"
 export USER_GOOGLE_EMAIL="your-email@example.com"
 ```
 
+**Example Email Management Workflow:**
+
+You can add custom email handling workflows to `~/bro/system_prompt.txt`. Here's an example:
+
+````
+EMAIL_MANAGEMENT_WORKFLOW:
+When checking emails, categorize and handle them as follows:
+
+1. Promotional emails, bills, invoices, receipts:
+   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
+   - No further action needed
+
+2. Customer inquiry emails:
+   - Use get_gmail_message_content to read the full email content
+   - If order-related (customer mentions order number), use Shopify tools to lookup order details
+   - Post to the appropriate Slack channel using this template:
+
+\```
+via: "<channel-name>"
+user: "Bro"
+attachments: []
+---
+📧 Customer email needs response
+
+*Customer:* <customer name> (<company name if available>)
+
+*Question:* <paste customer's question verbatim>
+
+*Order Details:* (only if order-related, otherwise omit this section)
+- Order: #<order_number>
+- Date: <order_date>
+- Items: <item1>, <item2>
+
+What should I tell the customer?
+\```
+
+   - Wait for team response with the answer
+   - Send the email using send_gmail_message
+   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
+
+IMPORTANT:
+- Handle email workflows yourself using Gmail MCP tools. Do NOT delegate to reasoner.
+- ALWAYS ask team for the answer before responding to customers
+- Only include order details if the inquiry is order-related
+- Keep order details minimal: order number, date, and items only
+````
+
 ### Shopify integration
 
 Bro can access Shopify Admin API through MCP for managing products, orders, customers, and inventory.

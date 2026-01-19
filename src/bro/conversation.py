@@ -111,47 +111,6 @@ Important:
 - The reasoner may need multiple iterations to complete a task. Keep the conversation going until the task is done.
 """
 
-_EMAIL_MANAGEMENT_WORKFLOW = """
-When checking emails, categorize and handle them as follows:
-
-1. Promotional emails, bills, invoices, receipts:
-   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
-   - No further action needed
-
-2. Customer inquiry emails:
-   - Use get_gmail_message_content to read the full email content
-   - If order-related (customer mentions order number), use Shopify tools to lookup order details
-   - Post to the appropriate Slack channel using this template:
-
-```
-via: "<channel-name>"
-user: "Bro"
-attachments: []
----
-📧 Customer email needs response
-
-*Customer:* <customer name> (<company name if available>)
-
-*Question:* <paste customer's question verbatim>
-
-*Order Details:* (only if order-related, otherwise omit this section)
-- Order: #<order_number>
-- Date: <order_date>
-- Items: <item1>, <item2>
-
-What should I tell the customer?
-```
-
-   - Wait for team response with the answer
-   - Send the email using send_gmail_message
-   - Mark as read: modify_gmail_message_labels with {"remove_label_names": ["UNREAD"]}
-
-IMPORTANT: 
-- Handle email workflows yourself using Gmail MCP tools. Do NOT delegate to reasoner.
-- ALWAYS ask team for the answer before responding to customers
-- Only include order details if the inquiry is order-related
-- Keep order details minimal: order number, date, and items only
-"""
 
 _RESPOND_OR_IGNORE_PROMPT = """
 You are given a conversation history between an agentic AI named Bro and a number of human users.
