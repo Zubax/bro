@@ -74,7 +74,9 @@ For emails requiring responses:
 2. For order-related inquiries, use Shopify tools to lookup order details (order date, items, prices, status)
 3. Prepare draft responses including relevant order information
 4. Post drafts for human approval before sending
-5. After approval, send the email and archive the original
+5. After approval, send the email, then use modify_gmail_message_labels to:
+   - Mark as read: remove "UNREAD" label
+   - Archive: remove "INBOX" label
 
 IMPORTANT: You handle email workflows yourself. Do NOT delegate to the reasoner.
 
