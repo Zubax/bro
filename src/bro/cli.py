@@ -103,7 +103,7 @@ def main() -> None:
                 credentials_dir=os.environ["GOOGLE_MCP_CREDENTIALS_DIR"],
                 default_user_email=os.environ["USER_GOOGLE_EMAIL"],
                 services=["gmail"],
-                tool_tier="core",
+                tool_tier="extended",
             )
             _logger.info("Google Workspace client initialized successfully")
         except Exception as e:
