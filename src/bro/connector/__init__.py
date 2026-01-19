@@ -38,6 +38,7 @@ class Message:
 class ReceivedMessage(Message):
     via: Channel
     user: User
+    thread_ts: str | None = None
 
 
 class MessagingError(Exception):

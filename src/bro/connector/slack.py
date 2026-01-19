@@ -95,12 +95,18 @@ class SlackConnector(Connector):
                     user_info = self._web_client.users_info(user=user_id)["user"]
                     user_name = user_info["name"]
                     _logger.debug(f"User info: id={user_id}, name={user_name}")
+
+                    # Capture thread_ts for threading replies
+                    # If message is in a thread, use thread_ts; otherwise use the message's own ts to start a new thread
+                    thread_ts = event.get("thread_ts") or event.get("ts")
+
                     self._unread_msgs.append(
                         ReceivedMessage(
                             via=Channel(name=channel_id),
                             user=User(name=user_name),
                             text=text,
                             attachments=attachments,
+                            thread_ts=thread_ts,
                         )
                     )
                     return None
@@ -130,20 +136,31 @@ class SlackConnector(Connector):
             self._unread_msgs = []
         return last_unread_msgs
 
-    def send(self, message: Message, via: Channel) -> None:
+    def send(self, message: Message, via: Channel, thread_ts: str | None = None) -> None:
         with self._mutex:
-            self._web_client.chat_postMessage(channel=via.name, text=message.text)
+            # Send message, optionally in a thread
+            kwargs = {"channel": via.name, "text": message.text}
+            if thread_ts:
+                kwargs["thread_ts"] = thread_ts
+                _logger.info(f"Posting message in thread {thread_ts}")
+
+            self._web_client.chat_postMessage(**kwargs)
             _logger.info("Message is posted to the channel.")
+
             for file_path in message.attachments:
                 try:
-                    self._web_client.files_upload_v2(
-                        file=file_path,
-                        channel=via.name,
-                    )
+                    upload_kwargs = {"file": file_path, "channel": via.name}
+                    if thread_ts:
+                        upload_kwargs["thread_ts"] = thread_ts
+
+                    self._web_client.files_upload_v2(**upload_kwargs)
                     _logger.info("File is uploaded to the channel.")
                 except Exception as e:
                     _logger.error(f"Can't upload file {file_path}. Exception: {e}")
-                    self._web_client.chat_postMessage(channel=via.name, text=f"File upload error: {e}")
+                    error_kwargs = {"channel": via.name, "text": f"File upload error: {e}"}
+                    if thread_ts:
+                        error_kwargs["thread_ts"] = thread_ts
+                    self._web_client.chat_postMessage(**error_kwargs)
 
             return None
 

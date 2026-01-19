@@ -244,6 +244,7 @@ class ConversationHandler:
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
+        self._current_thread_ts: str | None = None  # Track thread_ts for threading replies
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
@@ -306,7 +307,11 @@ class ConversationHandler:
                         attachments = [Path(file_path.strip()) for file_path in fpaths]
                     else:
                         attachments = []
-                    self.connector.send(Message(text=text, attachments=attachments), via=Channel(via))
+
+                    # Use thread_ts for threading (already None for DMs)
+                    self.connector.send(
+                        Message(text=text, attachments=attachments), via=Channel(via), thread_ts=self._current_thread_ts
+                    )
                 else:
                     _logger.error(f"Message can't be parsed. Received data: {msg_data}")
                     # TODO rerunning inference using Tenacity
@@ -453,6 +458,8 @@ class ConversationHandler:
         if self._msgs:
             for msg in self._msgs:
                 _logger.info(f"Processing user message: {msg}")
+                # Store thread_ts for threading replies (only for public channels, not DMs)
+                self._current_thread_ts = msg.thread_ts if not msg.via.name.startswith("D") else None
                 input_data = textwrap.dedent(
                     f"""\
                 via: {msg.via.name!r} 
