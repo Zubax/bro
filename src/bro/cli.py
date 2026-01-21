@@ -102,7 +102,7 @@ def main() -> None:
                 oauth_client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
                 credentials_dir=os.environ["GOOGLE_MCP_CREDENTIALS_DIR"],
                 default_user_email=os.environ["USER_GOOGLE_EMAIL"],
-                services=["gmail", "sheets", "drive"],
+                services=["gmail", "sheets", "drive", "docs"],
                 tool_tier="extended",
             )
             _logger.info("Google Workspace client initialized successfully")
