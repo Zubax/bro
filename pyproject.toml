@@ -21,7 +21,7 @@ dependencies = [
     "nicegui~=2.23",
     "openmemory-py~=1.2.3",
     "slack-sdk~=3.39.0",
-    "workspace-mcp>=1.7.1",
+    "workspace-mcp @ file:///Users/songmeo/zubax/google_workspace_mcp",
 ]
 
 [project.scripts]
