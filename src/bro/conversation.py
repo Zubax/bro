@@ -32,8 +32,9 @@ The reasoner is a computer-use agent that can complete arbitrary tasks on the lo
 It can analyze data, search the Web, write and run programs, and do anything else you would expect a human user to do.
 
 An example of what the reasoner can do is searching the web, compiling reports, entering data into bookkeeping 
-software, creating and running programs, installing software, creating user accounts, and so on. An example of what 
-it cannot do is run periodic activities or actions that involve delays, such as waiting for events.
+software, creating and running programs, installing software, creating user accounts, checking emails, handling 
+customer inquiries, creating quotations/invoices, looking up orders, and so on. An example of what it cannot do 
+is run periodic activities or actions that involve delays, such as waiting for events.
 
 You should handle all tasks independently, without asking for permission.
 Delegate only complex or high-level reasoning tasks to the reasoner when necessary.
@@ -107,7 +108,7 @@ necessary.
 
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
-- There is no need to check the reasoner’s status before calling task_reasoner.
+- Do NOT call get_reasoner_status immediately after calling task_reasoner. Wait for the reasoner to complete and report back.
 - The reasoner may need multiple iterations to complete a task. Keep the conversation going until the task is done.
 """
 
@@ -200,8 +201,6 @@ class ConversationHandler:
         reasoner: Reasoner,
         memory: Memory,
         wiki: WikiClient | None = None,
-        google_workspace: Any = None,
-        shopify: Any = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -214,17 +213,6 @@ class ConversationHandler:
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
         self._wiki = wiki
-        self._google_workspace = google_workspace
-        self._shopify = shopify
-
-        # Build tool name mapping for MCP clients
-        self._mcp_tool_map: dict[str, Any] = {}
-        if self._google_workspace:
-            for tool in self._google_workspace.get_tools():
-                self._mcp_tool_map[tool["name"]] = self._google_workspace
-        if self._shopify:
-            for tool in self._shopify.get_tools():
-                self._mcp_tool_map[tool["name"]] = self._shopify
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -381,18 +369,7 @@ class ConversationHandler:
                                 result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
 
                         case _:
-                            # Try MCP tools
-                            if name in self._mcp_tool_map:
-                                try:
-                                    mcp_client = self._mcp_tool_map[name]
-                                    _logger.info(f"Attempting to call MCP tool: {name}")
-                                    result = mcp_client.call_tool(name, args)
-                                    _logger.info(f"MCP tool result: {result}")
-                                except Exception as e:
-                                    _logger.error(f"MCP tool call failed: {e}")
-                                    result = f"Error calling MCP tool '{name}': {str(e)}"
-                            else:
-                                _logger.error(f"Unrecognized function call: {name!r}({args})")
+                            _logger.error(f"Unrecognized function call: {name!r}({args})")
 
                 if result:
                     _logger.info(f"Function call result: {result}")
@@ -534,18 +511,6 @@ class ConversationHandler:
 
         # Build tools list
         tools = _TOOLS + memory_tools + wiki_tools
-
-        # Add Google Workspace tools if available
-        if self._google_workspace:
-            gw_tools = self._google_workspace.get_tools()
-            _logger.info(f"Adding {len(gw_tools)} Google Workspace tools to conversation")
-            tools = tools + gw_tools
-
-        # Add Shopify tools if available
-        if self._shopify:
-            shopify_tools = self._shopify.get_tools()
-            _logger.info(f"Adding {len(shopify_tools)} Shopify tools to conversation")
-            tools = tools + shopify_tools
 
         # noinspection PyTypeChecker
         return self._client.responses.create(  # type: ignore

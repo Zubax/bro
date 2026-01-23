@@ -21,7 +21,7 @@ from bro.executive import Executive
 from bro.executive.hierarchical import HierarchicalExecutive
 from bro.executive.ui_tars_7b import UiTars7bExecutive
 from bro.executive.openai_cua import OpenAiCuaExecutive
-from bro.brofiles import USER_SYSTEM_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, LOG_DB
+from bro.brofiles import USER_SYSTEM_PROMPT_FILE, EMAIL_WORKFLOW_PROMPT_FILE, SNAPSHOT_FILE, LOG_FILE, LOG_DB
 from bro.connector.slack import SlackConnector
 from bro.conversation import ConversationHandler
 from bro.memory import Memory
@@ -47,8 +47,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else None
-    _logger.info(f"User system prompt {USER_SYSTEM_PROMPT_FILE} contains {len(user_system_prompt or '')} characters")
+    user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else ""
+    email_workflow_prompt = EMAIL_WORKFLOW_PROMPT_FILE.read_text() if EMAIL_WORKFLOW_PROMPT_FILE.is_file() else ""
+    _logger.info(f"User system prompt: {len(user_system_prompt or '')} characters")
+    _logger.info(f"Email workflow prompt: {len(email_workflow_prompt or '')} characters")
 
     openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
@@ -127,7 +129,7 @@ def main() -> None:
         executive=exe,
         ui=ui,
         client=openai_client,
-        user_system_prompt=user_system_prompt,
+        user_system_prompt=user_system_prompt + "\n\n" + email_workflow_prompt,
         resume=args.resume,
         snapshot_file=SNAPSHOT_FILE,
         memory=memory,
@@ -148,8 +150,6 @@ def main() -> None:
         reasoner=rsn,
         memory=memory,
         wiki=wiki,
-        google_workspace=google_workspace,
-        shopify=shopify,
     )
 
     try:
