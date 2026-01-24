@@ -149,7 +149,7 @@ class SlackConnector(Connector):
 
             for file_path in message.attachments:
                 try:
-                    upload_kwargs = {"file": file_path, "channel": via.name}
+                    upload_kwargs = {"file": file_path, "channel_id": via.name}
                     if thread_ts:
                         upload_kwargs["thread_ts"] = thread_ts
 
