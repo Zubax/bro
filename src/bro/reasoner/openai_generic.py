@@ -388,7 +388,7 @@ Feel free to add dark humor if pertinent. Please do not include the questions in
 """
 
 
-def _dummy_cb(_: Any) -> None:
+def _dummy_cb(_: str, __: bool = False) -> None:
     _logger.error("The dummy callback is not supposed to be invoked")
 
 
@@ -513,7 +513,7 @@ class OpenAiGenericReasoner(Reasoner):
                         time.sleep(1)
                     _logger.debug("Calling the callback...")
                     try:
-                        self._on_task_completed_cb(final, scheduled=self._is_scheduled_task)
+                        self._on_task_completed_cb(final, self._is_scheduled_task)
                     except Exception as ex:
                         _logger.exception("Unhandled exception in the callback: %s", ex)
                     self._is_scheduled_task = False  # Reset flag

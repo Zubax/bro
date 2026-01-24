@@ -118,8 +118,9 @@ class Memory:
         _logger.info(f"Adding memory with the following tags {tags}...")
         try:
             mem = self._memory.add(text, tags=tags)
-            _logger.debug(f"Memory stored. Memory id {mem['id']}")
-            return mem["id"]  # Return the memory ID
+            memory_id = str(mem["id"])  # Explicitly cast to str
+            _logger.debug(f"Memory stored. Memory id {memory_id}")
+            return memory_id
         except Exception as e:
             return f"Memory can't be added. Error: {e}"
 

@@ -16,6 +16,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from bro import util
 from bro.memory import Memory, tools as memory_tools
 from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
+from bro.scheduler import TaskScheduler
 
 from bro.connector import Message, Connector, Channel, ReceivedMessage, User
 from bro.reasoner import Context, Reasoner
@@ -244,7 +245,7 @@ class ConversationHandler:
         reasoner: Reasoner,
         memory: Memory,
         wiki: WikiClient | None = None,
-        scheduler: "TaskScheduler | None" = None,
+        scheduler: TaskScheduler | None = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None

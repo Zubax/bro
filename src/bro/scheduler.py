@@ -1,7 +1,7 @@
 """Task scheduler using APScheduler + OpenMemory."""
 
 import logging
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore[import-untyped]
 from bro.memory import Memory
 from bro.reasoner import Reasoner, Context
 
