@@ -12,7 +12,7 @@ and administration, such as doing accounting, filing paperwork, and submitting a
 Bro is primarily designed to run on a dedicated VM or a spare laptop;
 it runs as a headless process and offers a remotely accessible web interface for monitoring and control.
 
-ℹ️ *"Bro" is Latvian for "one who beheads the Messiah".*
+ℹ️ _"Bro" is Latvian for "one who beheads the Messiah"._
 
 <img src="screenshot_webui.png" width="800" alt="">
 
@@ -49,7 +49,7 @@ exported as environment variables `OPENROUTER_API_KEY` and `OPENAI_API_KEY`.
 In the future we may add other models and other inference backends.
 
 Bro has only been tested on GNU/Linux distributions so far with X11 (Wayland may not work).
-Adding support for macOS and Windows should be trivial  and contributions are welcome.
+Adding support for macOS and Windows should be trivial and contributions are welcome.
 
 ⚠️ Bro can only work with single-monitor setups with the resolution at most 1920x1080.
 We mostly use it in an Ubuntu virtual machine with a 1280x1024 screen resolution.
@@ -57,7 +57,7 @@ It is highly advised to use the default UI theme and a highly textured wallpaper
 to avoid confusing the UI grounding model (e.g., a solid black desktop background is known to cause issues).
 Disable spell checking everywhere. Disable popups. Ensure scroll bars are always visible.
 Use light themes everywhere. Disable the automatic translation suggestions in browsers.
-Disable tools that inject context menus, like the ChatGPT integration in Firefox,  Grammarly, etc.
+Disable tools that inject context menus, like the ChatGPT integration in Firefox, Grammarly, etc.
 
 ## Installation
 
@@ -111,9 +111,76 @@ To reattach to the session later, use the command `tmux attach-session -t ssh_tm
 
 The web interface is intended for monitoring purposes only. It is available via `http://<host>:8814`.
 
-### Instant messaging connectors
+### Slack connector
 
-This is intended to be the main use case, but it is not implemented yet.
+To use Bro with Slack, you need to create a Slack app and obtain the necessary tokens.
+
+#### Setting up a Slack App
+
+1. **Create a new Slack app** at https://api.slack.com/apps
+   - Click "Create New App" → "From scratch"
+   - Give it a name (e.g., "Bro") and select your workspace
+
+2. **Enable Socket Mode**
+   - Go to "Socket Mode" in the sidebar
+   - Toggle "Enable Socket Mode" to ON
+   - Generate an app-level token with the `connections:write` scope
+   - Copy this token - this is your `BRO_SLACK_APP_TOKEN` (starts with `xapp-`)
+
+3. **Configure OAuth & Permissions**
+   - Go to "OAuth & Permissions" in the sidebar
+   - Add the following Bot Token Scopes:
+     - `channels:history` - View messages in public channels
+     - `channels:read` - View basic channel info
+     - `chat:write` - Send messages as the bot
+     - `files:read` - View files shared in channels
+     - `files:write` - Upload and modify files
+     - `groups:history` - View messages in private channels
+     - `groups:read` - View basic private channel info
+     - `im:history` - View messages in direct messages
+     - `im:read` - View basic direct message info
+     - `im:write` - Start direct messages with users
+     - `mpim:history` - View messages in group direct messages
+     - `mpim:read` - View basic group direct message info
+     - `users:read` - View users in the workspace
+
+4. **Install the app to your workspace**
+   - Scroll up to "OAuth Tokens for Your Workspace"
+   - Click "Install to Workspace" and authorize
+   - Copy the "Bot User OAuth Token" - this is your `BRO_SLACK_BOT_TOKEN` (starts with `xoxb-`)
+
+5. **Enable Event Subscriptions**
+   - Go to "Event Subscriptions" in the sidebar
+   - Toggle "Enable Events" to ON
+   - Under "Subscribe to bot events", add:
+     - `message.channels` - Listen to messages in public channels
+     - `message.groups` - Listen to messages in private channels
+     - `message.im` - Listen to messages in direct messages
+     - `message.mpim` - Listen to messages in group direct messages
+   - Click "Save Changes"
+
+6. **Get your Bot's User ID**
+   - In your Slack workspace, click on the bot's name to view its profile
+   - Click the "⋮" (three dots) menu → "View full profile"
+   - Click "⋮ More" → "Copy member ID"
+   - This is your `BRO_SLACK_USER_ID` (starts with `U`)
+
+7. **Invite the bot to channels**
+   - In any channel where you want Bro to operate, type: `/invite @Bro`
+
+#### Environment Variables
+
+When using Bro with Slack, make sure to export all required environment variables:
+
+```bash
+export BRO_SLACK_BOT_TOKEN="xoxb-..."
+export BRO_SLACK_APP_TOKEN="xapp-..."
+export BRO_SLACK_USER_ID="U..."
+export OPENAI_API_KEY="..."
+export OPENROUTER_API_KEY="..."
+
+bro --exe gpt-5+ui-tars-7b
+```
 
 ## Testing
 

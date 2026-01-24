@@ -11,4 +11,5 @@ BRODIR_LOCAL.mkdir(parents=True, exist_ok=True)
 USER_SYSTEM_PROMPT_FILE = BRODIR_GLOBAL / "system_prompt.txt"
 SNAPSHOT_FILE = BRODIR_LOCAL / "state.bro.json"
 LOG_FILE = BRODIR_LOCAL / "bro.log"
-DB_FILE = BRODIR_LOCAL / "bro.db"
+LOG_DB = BRODIR_LOCAL / "bro.db"
+MEMORY_DB = BRODIR_LOCAL / "memory.db"
