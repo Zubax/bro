@@ -11,7 +11,7 @@ class Context:
     files: list[Path]
 
 
-OnTaskCompleted = Callable[[str], None]
+OnTaskCompleted = Callable[[str, bool], None]  # (message, scheduled)
 
 
 class Reasoner(ABC):
@@ -21,11 +21,14 @@ class Reasoner(ABC):
     """
 
     @abstractmethod
-    def task(self, ctx: Context, /) -> bool:
+    def task(self, ctx: Context, /, *, scheduled: bool = False) -> bool:
         """
         Commence a new task with the given context. The callback set via on_task_completed_cb is invoked from a
         worker thread with the final response once the task is finished.
         TODO: allow the reasoner to return files and images.
+        Args:
+            ctx: The task context
+            scheduled: If True, this is a scheduled task (won't trigger user notification callback)
         Returns True if the task is accepted, False if another task is still running.
         """
         raise NotImplementedError

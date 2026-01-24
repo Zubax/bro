@@ -23,6 +23,11 @@ class TaskScheduler:
         _logger.info(f"Loaded scheduled tasks from memory: {results}")
         # TODO: Parse results and re-add tasks to scheduler
 
+    def _run_scheduled_task(self, task_prompt: str, task_id: str) -> None:
+        """Run a scheduled task silently (no user notification)."""
+        _logger.info(f"Running scheduled task '{task_id}': {task_prompt}")
+        self._reasoner.task(Context(prompt=task_prompt, files=[]), scheduled=True)
+
     def schedule(self, task_prompt: str, cron: str, task_id: str) -> str:
         """Schedule a task with cron syntax (e.g., '0 9 * * *' for 9am daily)."""
         try:
@@ -34,7 +39,7 @@ class TaskScheduler:
             # Add to APScheduler
             minute, hour, day, month, day_of_week = cron.split()
             self._scheduler.add_job(
-                lambda: self._reasoner.task(Context(prompt=task_prompt, files=[])),
+                lambda: self._run_scheduled_task(task_prompt, task_id),
                 "cron",
                 minute=minute,
                 hour=hour,

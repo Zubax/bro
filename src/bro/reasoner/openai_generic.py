@@ -449,6 +449,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._context = self._build_system_prompt()
         self._step_number = 0
         self._on_task_completed_cb: OnTaskCompleted = _dummy_cb
+        self._is_scheduled_task = False
         self._thread = threading.Thread(target=self._run_thread, daemon=True)
         self._thread_stop = False
         self._thread.start()
@@ -471,12 +472,13 @@ class OpenAiGenericReasoner(Reasoner):
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
         return ctx
 
-    def task(self, ctx: Context, /) -> bool:
+    def task(self, ctx: Context, /, *, scheduled: bool = False) -> bool:
         if self._busy:
             return False
         if self._on_task_completed_cb is _dummy_cb:
             raise RuntimeError("Please configure the callback first")
         self._strategy = None
+        self._is_scheduled_task = scheduled
         self._context += [{"role": "user", "content": [{"type": "input_text", "text": ctx.prompt}]}]
         if ctx.files:
             # Ensure the files are uploaded so we can reference them in the prompt
@@ -511,9 +513,10 @@ class OpenAiGenericReasoner(Reasoner):
                         time.sleep(1)
                     _logger.debug("Calling the callback...")
                     try:
-                        self._on_task_completed_cb(final)
+                        self._on_task_completed_cb(final, scheduled=self._is_scheduled_task)
                     except Exception as ex:
                         _logger.exception("Unhandled exception in the callback: %s", ex)
+                    self._is_scheduled_task = False  # Reset flag
                 else:
                     time.sleep(1)
             except Exception as ex:

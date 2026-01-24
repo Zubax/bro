@@ -310,7 +310,7 @@ class ConversationHandler:
             if follow_up_output:
                 self._process_response_output(follow_up_output)
 
-    def _on_task_completed_cb(self, message: str) -> None:
+    def _on_task_completed_cb(self, message: str, scheduled: bool = False) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
         input_data = textwrap.dedent(
             f"""\
@@ -329,8 +329,11 @@ class ConversationHandler:
             }
         ]
 
-        self._current_task = None
-        _logger.info("Requesting conversation response after receiving reasoner response...")
+        # Clear current task for user-initiated tasks
+        if not scheduled:
+            self._current_task = None
+
+        _logger.info(f"Requesting conversation response...")
         conversation_response = self._request_inference(self._context)
         output = conversation_response["output"]
         if not output:
