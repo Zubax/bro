@@ -161,6 +161,42 @@ _TOOLS = [
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         "strict": True,
     },
+    {
+        "type": "function",
+        "name": "schedule_task",
+        "description": "Schedule a task to run automatically at specified times using cron syntax. "
+        "Example: '0 9 * * *' runs daily at 9am",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_prompt": {"type": "string", "description": "The task instruction for the reasoner"},
+                "cron": {"type": "string", "description": "Cron expression (minute hour day month day_of_week)"},
+                "task_id": {"type": "string", "description": "Unique identifier for this scheduled task"},
+            },
+            "required": ["task_prompt", "cron", "task_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "cancel_scheduled_task",
+        "description": "Cancel a previously scheduled task. Use recall to find the task_id if needed (search for 'scheduled' tasks).",
+        "parameters": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string", "description": "The ID of the task to cancel"}},
+            "required": ["task_id"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "list_scheduled_tasks",
+        "description": "List all currently scheduled tasks",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        "strict": True,
+    },
 ]
 
 
@@ -201,6 +237,7 @@ class ConversationHandler:
         reasoner: Reasoner,
         memory: Memory,
         wiki: WikiClient | None = None,
+        scheduler: "TaskScheduler | None" = None,
     ) -> None:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
@@ -213,6 +250,7 @@ class ConversationHandler:
         self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
         self._wiki = wiki
+        self._scheduler = scheduler
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
@@ -349,6 +387,24 @@ class ConversationHandler:
 
                         case ("remember", {"text": text, "tags": tags}):
                             result = self._memory.remember(text, tags)
+
+                        case ("schedule_task", {"task_prompt": task_prompt, "cron": cron, "task_id": task_id}):
+                            if self._scheduler:
+                                result = self._scheduler.schedule(task_prompt, cron, task_id)
+                            else:
+                                result = "Scheduler not available"
+
+                        case ("cancel_scheduled_task", {"task_id": task_id}):
+                            if self._scheduler:
+                                result = self._scheduler.cancel(task_id)
+                            else:
+                                result = "Scheduler not available"
+
+                        case ("list_scheduled_tasks", {}):
+                            if self._scheduler:
+                                result = self._scheduler.list_tasks()
+                            else:
+                                result = "Scheduler not available"
 
                         case ("wiki_search", {"query": query}):
                             if self._wiki:
