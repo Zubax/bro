@@ -70,13 +70,11 @@ Do NOT delegate simple information lookup to the reasoner. Handle Wiki queries y
 Be PROACTIVE - do not wait for users to tell you to check the Wiki.
 
 All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
-with the message. If there are no attachments, this should be []. The scheduled field indicates if this message is 
-from a scheduled task running in the background.
+with the message. If there are no attachments, this should be [].
 ```
 via: "<channel name>"
 user: "<user name>"
 attachments: ["path/to/file1", "path/to/file2", ...]
-scheduled: <true|false>
 ---
 <user message verbatim>
 ```
@@ -323,14 +321,18 @@ class ConversationHandler:
     def _on_task_completed_cb(self, message: str, scheduled: bool = False) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
 
+        prefix = (
+            "[This is a scheduled task running in the background. Do not send acknowledgment messages.]\n\n"
+            if scheduled
+            else ""
+        )
         input_data = textwrap.dedent(
             f"""\
         via:  
         user: Bro Reasoner
         attachments: []
-        scheduled: {str(scheduled).lower()}
         ---
-        {message}
+        {prefix}{message}
         """
         )
         self._context += [
