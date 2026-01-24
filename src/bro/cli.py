@@ -27,6 +27,7 @@ from bro.conversation import ConversationHandler
 from bro.memory import Memory
 from bro.knowledgebase.wiki import WikiClient
 from bro.mcp import GoogleWorkspaceClient, ShopifyClient
+from bro.scheduler import TaskScheduler
 
 _logger = logging.getLogger(__name__)
 
@@ -143,6 +144,9 @@ def main() -> None:
         app_token=os.environ["BRO_SLACK_APP_TOKEN"],
         bro_user_id=os.environ["BRO_SLACK_USER_ID"],
     )
+
+    scheduler = TaskScheduler(memory=memory, reasoner=rsn)
+
     conversation = ConversationHandler(
         connector,
         user_system_prompt,
@@ -150,6 +154,7 @@ def main() -> None:
         reasoner=rsn,
         memory=memory,
         wiki=wiki,
+        scheduler=scheduler,
     )
 
     try:
