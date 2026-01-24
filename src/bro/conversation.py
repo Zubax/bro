@@ -70,11 +70,13 @@ Do NOT delegate simple information lookup to the reasoner. Handle Wiki queries y
 Be PROACTIVE - do not wait for users to tell you to check the Wiki.
 
 All messages MUST follow the schema defined below. Attachments field is a list of file paths for files included 
-with the message. If there are no attachments, this should be [].
+with the message. If there are no attachments, this should be []. The scheduled field indicates if this message is 
+from a scheduled task running in the background.
 ```
 via: "<channel name>"
 user: "<user name>"
 attachments: ["path/to/file1", "path/to/file2", ...]
+scheduled: <true|false>
 ---
 <user message verbatim>
 ```
@@ -105,6 +107,14 @@ multiple destinations (like posting to a channel AND sending a confirmation DM),
 The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
 consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
 necessary.
+
+SCHEDULED TASKS:
+When you receive a message from `Bro Reasoner` about a scheduled task completion, do NOT send any response back to the 
+user. Scheduled tasks run automatically in the background and should not notify users unless there's an actionable item 
+(like EMAIL CHECK RESULTS that need to be posted to a channel).
+
+If the reasoner's message contains actionable results (e.g., "EMAIL CHECK RESULTS: ..."), process those results 
+appropriately (e.g., post to the designated channel), but do NOT send a general "task completed" acknowledgment message.
 
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
@@ -312,11 +322,13 @@ class ConversationHandler:
 
     def _on_task_completed_cb(self, message: str, scheduled: bool = False) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
+
         input_data = textwrap.dedent(
             f"""\
         via:  
         user: Bro Reasoner
         attachments: []
+        scheduled: {str(scheduled).lower()}
         ---
         {message}
         """
