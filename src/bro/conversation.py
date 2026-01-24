@@ -322,7 +322,7 @@ class ConversationHandler:
         _logger.warning("🏁 " * 40 + "\n" + message)
 
         prefix = (
-            "[This is a scheduled task running in the background. Do not send acknowledgment messages.]\n\n"
+            "[This is a scheduled task running in the background. Process any actionable results (like EMAIL CHECK RESULTS) but do not send acknowledgment or completion messages to users.]\n\n"
             if scheduled
             else ""
         )
