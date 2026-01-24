@@ -107,12 +107,11 @@ consider notifying the user by sending an appropriately formatted response with 
 necessary.
 
 SCHEDULED TASKS:
-When you receive a message from `Bro Reasoner` about a scheduled task completion, do NOT send any response back to the 
-user. Scheduled tasks run automatically in the background and should not notify users unless there's an actionable item 
-(like EMAIL CHECK RESULTS that need to be posted to a channel).
-
-If the reasoner's message contains actionable results (e.g., "EMAIL CHECK RESULTS: ..."), process those results 
-appropriately (e.g., post to the designated channel), but do NOT send a general "task completed" acknowledgment message.
+Messages from `Bro Reasoner` that start with "SCHEDULED TASK:" are from automated background tasks. 
+For these messages:
+- Process any actionable results (e.g., EMAIL CHECK RESULTS should be posted to the designated channel)
+- Do NOT send acknowledgment or completion messages to users
+- Only respond if there's critical information that requires immediate human attention
 
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
@@ -321,18 +320,16 @@ class ConversationHandler:
     def _on_task_completed_cb(self, message: str, scheduled: bool = False) -> None:
         _logger.warning("🏁 " * 40 + "\n" + message)
 
-        prefix = (
-            "[This is a scheduled task running in the background. Process any actionable results (like EMAIL CHECK RESULTS) but do not send acknowledgment or completion messages to users.]\n\n"
-            if scheduled
-            else ""
-        )
+        if scheduled:
+            message = f"SCHEDULED TASK: {message}"
+
         input_data = textwrap.dedent(
             f"""\
         via:  
         user: Bro Reasoner
         attachments: []
         ---
-        {prefix}{message}
+        {message}
         """
         )
         self._context += [
