@@ -63,6 +63,6 @@ class Connector(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def send(self, message: Message, via: Channel) -> None:
+    def send(self, message: Message, via: Channel, thread_ts: str | None = None) -> None:
         """Submit message for transmission."""
         raise NotImplementedError
