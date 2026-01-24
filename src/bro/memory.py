@@ -119,6 +119,16 @@ class Memory:
         try:
             mem = self._memory.add(text, tags=tags)
             _logger.debug(f"Memory stored. Memory id {mem['id']}")
-            return "Memory is added."
+            return mem["id"]  # Return the memory ID
         except Exception as e:
             return f"Memory can't be added. Error: {e}"
+
+    def forget(self, memory_id: str) -> bool:
+        """Delete a memory by ID."""
+        try:
+            self._memory.delete(memory_id)
+            _logger.info(f"Deleted memory {memory_id}")
+            return True
+        except Exception as e:
+            _logger.error(f"Failed to delete memory {memory_id}: {e}")
+            return False

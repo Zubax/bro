@@ -13,34 +13,30 @@ class TaskScheduler:
         self._memory = memory
         self._reasoner = reasoner
         self._scheduler = BackgroundScheduler()
+        self._task_memory_ids: dict[str, str] = {}  # task_id -> memory_id mapping
         self._scheduler.start()
         self._load_scheduled_tasks()
         _logger.info("Scheduler started")
 
     def _load_scheduled_tasks(self) -> None:
         """Load scheduled tasks from memory on startup."""
-        results = self._memory.recall("all scheduled tasks", ["procedural", "scheduled"])
-        _logger.info(f"Loaded scheduled tasks from memory: {results}")
+        # Query returns all matching memories with their IDs
+        results = self._memory._memory.query("scheduled tasks", filters={"tags": ["scheduled"]})
+        _logger.info(f"Found {len(results)} scheduled task memories")
 
-        # Parse and re-add tasks: format is "task_id: <id> | prompt: <prompt> | cron: <cron>"
-        if not results or "No memories found" in results:
-            return
+        for memory_entry in results:
+            content = memory_entry.get("content", "")
+            memory_id = memory_entry.get("id", "")
 
-        for line in results.split("\n"):
-            if "task_id:" in line and "prompt:" in line and "cron:" in line:
+            if "task_id:" in content and "prompt:" in content and "cron:" in content:
                 try:
-                    parts = line.split("|")
+                    parts = content.split("|")
                     task_id = parts[0].split("task_id:")[1].strip()
                     task_prompt = parts[1].split("prompt:")[1].strip()
                     cron = parts[2].split("cron:")[1].strip()
 
-                    # Check if this task was cancelled
-                    cancel_check = self._memory.recall(
-                        f"cancelled task {task_id}", ["procedural", "scheduled", "cancelled"]
-                    )
-                    if cancel_check and f"CANCELLED: {task_id}" in cancel_check:
-                        _logger.info(f"Skipping cancelled task: {task_id}")
-                        continue
+                    # Store the memory ID for later deletion
+                    self._task_memory_ids[task_id] = memory_id
 
                     minute, hour, day, month, day_of_week = cron.split()
                     self._scheduler.add_job(
@@ -54,9 +50,9 @@ class TaskScheduler:
                         id=task_id,
                         replace_existing=True,
                     )
-                    _logger.info(f"Restored scheduled task: {task_id}")
+                    _logger.info(f"Restored scheduled task: {task_id} (memory: {memory_id})")
                 except Exception as e:
-                    _logger.error(f"Failed to restore task from line '{line}': {e}")
+                    _logger.error(f"Failed to restore task from memory '{content}': {e}")
 
     def _run_scheduled_task(self, task_prompt: str, task_id: str) -> None:
         """Run a scheduled task silently (no user notification)."""
@@ -66,10 +62,11 @@ class TaskScheduler:
     def schedule(self, task_prompt: str, cron: str, task_id: str) -> str:
         """Schedule a task with cron syntax (e.g., '0 9 * * *' for 9am daily)."""
         try:
-            # Store in memory
-            self._memory.remember(
+            # Store in memory and save the memory ID
+            memory_id = self._memory.remember(
                 f"task_id: {task_id} | prompt: {task_prompt} | cron: {cron}", ["procedural", "scheduled", task_id]
             )
+            self._task_memory_ids[task_id] = memory_id
 
             # Add to APScheduler
             minute, hour, day, month, day_of_week = cron.split()
@@ -84,7 +81,7 @@ class TaskScheduler:
                 id=task_id,
                 replace_existing=True,
             )
-            _logger.info(f"Scheduled: {task_id} - {task_prompt} ({cron})")
+            _logger.info(f"Scheduled: {task_id} - {task_prompt} ({cron}) [memory: {memory_id}]")
             return f"Successfully scheduled task '{task_id}'"
         except Exception as e:
             _logger.error(f"Failed to schedule {task_id}: {e}")
@@ -96,10 +93,15 @@ class TaskScheduler:
             # Remove from APScheduler
             self._scheduler.remove_job(task_id)
 
-            # Mark as cancelled in memory (can't delete from OpenMemory)
-            self._memory.remember(f"CANCELLED: {task_id}", ["procedural", "scheduled", "cancelled", task_id])
+            # Delete from memory
+            memory_id = self._task_memory_ids.get(task_id)
+            if memory_id:
+                self._memory.forget(memory_id)
+                del self._task_memory_ids[task_id]
+                _logger.info(f"Cancelled: {task_id} (deleted memory {memory_id})")
+            else:
+                _logger.warning(f"Cancelled {task_id} but no memory ID found")
 
-            _logger.info(f"Cancelled: {task_id}")
             return f"Successfully cancelled task '{task_id}'"
         except Exception as e:
             _logger.error(f"Failed to cancel {task_id}: {e}")
