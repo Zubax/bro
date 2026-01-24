@@ -34,6 +34,14 @@ class TaskScheduler:
                     task_prompt = parts[1].split("prompt:")[1].strip()
                     cron = parts[2].split("cron:")[1].strip()
 
+                    # Check if this task was cancelled
+                    cancel_check = self._memory.recall(
+                        f"cancelled task {task_id}", ["procedural", "scheduled", "cancelled"]
+                    )
+                    if cancel_check and f"CANCELLED: {task_id}" in cancel_check:
+                        _logger.info(f"Skipping cancelled task: {task_id}")
+                        continue
+
                     minute, hour, day, month, day_of_week = cron.split()
                     self._scheduler.add_job(
                         lambda p=task_prompt, tid=task_id: self._run_scheduled_task(p, tid),
@@ -85,7 +93,12 @@ class TaskScheduler:
     def cancel(self, task_id: str) -> str:
         """Cancel a scheduled task."""
         try:
+            # Remove from APScheduler
             self._scheduler.remove_job(task_id)
+
+            # Mark as cancelled in memory (can't delete from OpenMemory)
+            self._memory.remember(f"CANCELLED: {task_id}", ["procedural", "scheduled", "cancelled", task_id])
+
             _logger.info(f"Cancelled: {task_id}")
             return f"Successfully cancelled task '{task_id}'"
         except Exception as e:
