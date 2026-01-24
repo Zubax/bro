@@ -21,7 +21,34 @@ class TaskScheduler:
         """Load scheduled tasks from memory on startup."""
         results = self._memory.recall("all scheduled tasks", ["procedural", "scheduled"])
         _logger.info(f"Loaded scheduled tasks from memory: {results}")
-        # TODO: Parse results and re-add tasks to scheduler
+
+        # Parse and re-add tasks: format is "task_id: <id> | prompt: <prompt> | cron: <cron>"
+        if not results or "No memories found" in results:
+            return
+
+        for line in results.split("\n"):
+            if "task_id:" in line and "prompt:" in line and "cron:" in line:
+                try:
+                    parts = line.split("|")
+                    task_id = parts[0].split("task_id:")[1].strip()
+                    task_prompt = parts[1].split("prompt:")[1].strip()
+                    cron = parts[2].split("cron:")[1].strip()
+
+                    minute, hour, day, month, day_of_week = cron.split()
+                    self._scheduler.add_job(
+                        lambda p=task_prompt, tid=task_id: self._run_scheduled_task(p, tid),
+                        "cron",
+                        minute=minute,
+                        hour=hour,
+                        day=day,
+                        month=month,
+                        day_of_week=day_of_week,
+                        id=task_id,
+                        replace_existing=True,
+                    )
+                    _logger.info(f"Restored scheduled task: {task_id}")
+                except Exception as e:
+                    _logger.error(f"Failed to restore task from line '{line}': {e}")
 
     def _run_scheduled_task(self, task_prompt: str, task_id: str) -> None:
         """Run a scheduled task silently (no user notification)."""
