@@ -149,9 +149,9 @@ class SlackConnector(Connector):
             for file_path in message.attachments:
                 try:
                     if thread_ts:
-                        self._web_client.files_upload_v2(file=file_path, channel_id=via.name, thread_ts=thread_ts)
+                        self._web_client.files_upload_v2(file=file_path, channel=via.name, thread_ts=thread_ts)
                     else:
-                        self._web_client.files_upload_v2(file=file_path, channel_id=via.name)
+                        self._web_client.files_upload_v2(file=file_path, channel=via.name)
                     _logger.info("File is uploaded to the channel.")
                 except Exception as e:
                     _logger.error(f"Can't upload file {file_path}. Exception: {e}")
