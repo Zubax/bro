@@ -163,17 +163,17 @@ _TOOLS = [
     {
         "type": "function",
         "name": "get_reasoner_status",
-        "description": "Update users on the current task’s progress. If the response is None, it means there is no "
+        "description": "Update users on the current task's progress. If the response is None, it means there is no "
         "active task and the reasoner has finished its work",
-        "parameters": {"type": "object", "properties": {},
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        "strict": True,
+    },
     {
         "type": "function",
         "name": "abort_task",
         "description": "Abort the currently running reasoner task. Use this when the user requests to stop/cancel "
         "the current task, or when the task needs to be terminated.",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        "strict": True,
-    }, "additionalProperties": False},
         "strict": True,
     },
     {
