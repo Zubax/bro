@@ -580,6 +580,26 @@ class OpenAiGenericReasoner(Reasoner):
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
+    def abort(self) -> None:
+        """Abort the current task immediately."""
+        _logger.warning("Aborting current reasoner task...")
+
+        # Add a message to context asking the reasoner to stop gracefully
+        self._context += [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "ABORT REQUEST: The user has requested to stop this task. Please use the 'stop' function "
+                        "immediately to report what you have accomplished so far and terminate the task gracefully.",
+                    }
+                ],
+            }
+        ]
+
+        # Don't set _busy = False yet - let the reasoner respond to the abort request first
+
     def close(self) -> None:
         self._thread_stop = True
         self._thread.join()

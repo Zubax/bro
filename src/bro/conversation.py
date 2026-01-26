@@ -165,7 +165,15 @@ _TOOLS = [
         "name": "get_reasoner_status",
         "description": "Update users on the current task’s progress. If the response is None, it means there is no "
         "active task and the reasoner has finished its work",
+        "parameters": {"type": "object", "properties": {},
+    {
+        "type": "function",
+        "name": "abort_task",
+        "description": "Abort the currently running reasoner task. Use this when the user requests to stop/cancel "
+        "the current task, or when the task needs to be terminated.",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        "strict": True,
+    }, "additionalProperties": False},
         "strict": True,
     },
     {
@@ -388,6 +396,15 @@ class ConversationHandler:
                                 result = "Successfully tasked the reasoner."
                             else:
                                 result = "Failed to task the reasoner."
+                        case ("abort_task", {}):
+                            _logger.info("Aborting reasoner task...")
+                            if self._current_task:
+                                self._reasoner.abort()
+                                self._current_task = None
+                                result = "Reasoner task aborted successfully."
+                            else:
+                                result = "No active reasoner task to abort."
+                        
                         case ("get_reasoner_status", {}):
                             _logger.info("Calling legilimens for task progress...")
                             result = self._reasoner.legilimens()

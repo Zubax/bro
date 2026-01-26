@@ -44,6 +44,13 @@ class Reasoner(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def abort(self) -> None:
+        """
+        Abort the currently running task immediately.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def close(self) -> None:
         """
         Close the background thread.
