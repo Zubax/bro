@@ -98,10 +98,9 @@ attachments: []
 
 You can proactively post messages to channels when you need human input or want to share information.
 
-SENDING MULTIPLE MESSAGES:
-- You CAN send multiple message blocks in a single response if they go to the SAME channel/destination
-- You MUST NOT send message blocks to DIFFERENT channels/destinations in the same response
-- For different destinations (e.g., one to a channel + one confirmation DM), send them in SEPARATE responses
+SENDING MESSAGES:
+You can send messages to channels or users by formatting your response with the message schema.
+If you need to send messages to DIFFERENT channels/destinations, send them in SEPARATE responses.
 
 The computer use agent sends messages under the name `Bro Reasoner`. When you receive a message from the reasoner, 
 consider notifying the user by sending an appropriately formatted response with the user name and `via` specified as 
@@ -113,31 +112,6 @@ For these messages:
 - Process any actionable results (e.g., EMAIL CHECK RESULTS should be posted to the designated channel)
 - Do NOT send acknowledgment or completion messages to users
 - Only respond if there's critical information that requires immediate human attention
-
-MULTIPLE NOTIFICATIONS IN ONE MESSAGE:
-When the reasoner sends results containing multiple distinct items that should be threaded separately (e.g., multiple 
-customer emails, multiple updates), send each item as its OWN message block in a SINGLE response.
-
-Example - If reasoner says:
-"EMAIL CHECK RESULTS: Customer A needs invoice correction. Customer B has shipping question."
-
-Send BOTH in the same response as separate message blocks:
-```
-via: "sell-or-die"
-user: "Bro"
-attachments: []
----
-Customer A needs invoice correction...
-```
-```
-via: "sell-or-die"
-user: "Bro"
-attachments: []
----
-Customer B has shipping question...
-```
-
-This allows the team to reply to each item individually in separate threads.
 
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
@@ -349,33 +323,38 @@ class ConversationHandler:
         if scheduled:
             message = f"SCHEDULED TASK: {message}"
 
-        input_data = textwrap.dedent(
-            f"""\
-        via:  
-        user: Bro Reasoner
-        attachments: []
-        ---
-        {message}
-        """
-        )
-        self._context += [
-            {
-                "type": "message",
-                "role": "user",
-                "content": input_data,
-            }
-        ]
+        # Split on delimiter if present
+        messages = message.split("===SPLIT_MESSAGE===")
+        messages = [msg.strip() for msg in messages if msg.strip()]
+
+        for msg in messages:
+            input_data = textwrap.dedent(
+                f"""\
+            via:  
+            user: Bro Reasoner
+            attachments: []
+            ---
+            {msg}
+            """
+            )
+            self._context += [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": input_data,
+                }
+            ]
+
+            _logger.info(f"Requesting conversation response...")
+            conversation_response = self._request_inference(self._context)
+            output = conversation_response["output"]
+            if not output:
+                _logger.warning("No output from conversation model; response: %s", conversation_response)
+            self._process_response_output(output)
 
         # Clear current task for user-initiated tasks
         if not scheduled:
             self._current_task = None
-
-        _logger.info(f"Requesting conversation response...")
-        conversation_response = self._request_inference(self._context)
-        output = conversation_response["output"]
-        if not output:
-            _logger.warning("No output from conversation model; response: %s", conversation_response)
-        self._process_response_output(output)
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
