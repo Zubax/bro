@@ -114,6 +114,33 @@ For these messages:
 - Do NOT send acknowledgment or completion messages to users
 - Only respond if there's critical information that requires immediate human attention
 
+MULTIPLE EMAIL NOTIFICATIONS:
+When the reasoner sends EMAIL CHECK RESULTS containing multiple email notifications (e.g., "New email from X about Y", 
+"New email from Z about W"), you MUST send each notification as a SEPARATE message. This allows the team to reply 
+to each notification individually in threads.
+
+Example - If reasoner says:
+"EMAIL CHECK RESULTS: New email from john@example.com about Project A. New email from jane@example.com about Budget."
+
+You should send TWO separate messages:
+First response:
+```
+via: "sell-or-die"
+user: "Bro"
+attachments: []
+---
+New email from john@example.com about Project A.
+```
+
+Then in your next response (after receiving follow-up):
+```
+via: "sell-or-die"
+user: "Bro"
+attachments: []
+---
+New email from jane@example.com about Budget.
+```
+
 Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - Do NOT call get_reasoner_status immediately after calling task_reasoner. Wait for the reasoner to complete and report back.
