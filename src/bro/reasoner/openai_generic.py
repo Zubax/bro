@@ -38,6 +38,9 @@ the main ones are:
   that can manipulate the computer and report back the results of its actions, to be used only as a last resort,
   if the task cannot be completed using other functions;
 - Google Workspace tools: for Gmail (checking emails, sending messages with attachments), Google Sheets, Drive, and Docs;
+  IMPORTANT: Gmail attachment download tools return localhost URLs. You MUST download these attachments to the local 
+  filesystem first using shell commands (e.g., wget, curl) before sending them to OpenAI or processing them. 
+  Never send localhost URLs directly to OpenAI as they are not accessible from the API.
 - Shopify tools: for looking up orders, customers, products, and inventory;
 - And several other functions that may be useful to complete the task.
 
