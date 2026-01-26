@@ -100,11 +100,36 @@ class SlackConnector(Connector):
                     # If message is in a thread, use thread_ts; otherwise use the message's own ts to start a new thread
                     thread_ts = event.get("thread_ts") or event.get("ts")
 
+                    # If this is a reply in a thread, fetch the thread context
+                    thread_context = ""
+                    if event.get("thread_ts"):
+                        try:
+                            thread_replies = self._web_client.conversations_replies(
+                                channel=channel_id, ts=event["thread_ts"]
+                            )
+                            # Build thread context from parent and previous replies (excluding current message)
+                            messages = thread_replies["messages"]
+                            thread_msgs = []
+                            for msg in messages:
+                                if msg.get("ts") != event.get("ts"):  # Exclude current message
+                                    msg_user = msg.get("user", "unknown")
+                                    msg_text = msg.get("text", "")
+                                    thread_msgs.append(f"[{msg_user}]: {msg_text}")
+                            if thread_msgs:
+                                thread_context = (
+                                    "\n\n[Thread context]:\n" + "\n".join(thread_msgs) + "\n[End thread context]\n\n"
+                                )
+                        except Exception as e:
+                            _logger.error(f"Failed to fetch thread context: {e}")
+
+                    # Prepend thread context to the message text
+                    full_text = thread_context + text if thread_context else text
+
                     self._unread_msgs.append(
                         ReceivedMessage(
                             via=Channel(name=channel_id),
                             user=User(name=user_name),
-                            text=text,
+                            text=full_text,
                             attachments=attachments,
                             thread_ts=thread_ts,
                         )
