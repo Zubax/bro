@@ -115,30 +115,35 @@ For these messages:
 - Only respond if there's critical information that requires immediate human attention
 
 MULTIPLE EMAIL NOTIFICATIONS:
-When the reasoner sends EMAIL CHECK RESULTS containing multiple email notifications (e.g., "New email from X about Y", 
-"New email from Z about W"), you MUST send each notification as a SEPARATE message. This allows the team to reply 
-to each notification individually in threads.
+When the reasoner sends EMAIL CHECK RESULTS containing multiple distinct email notifications, customer inquiries, 
+or items requiring separate responses, you MUST send each one as a SEPARATE message. This allows the team to reply 
+to each item individually in threads.
+
+Common patterns to split:
+- "New email from X..." followed by "New email from Y..."
+- "Customer: Name A ... Draft Response: ..." followed by "Customer: Name B ... Draft Response: ..."
+- Multiple "--- Customer email needs response" sections
+
+Send ONE notification per response, then wait for follow-up inference before sending the next one.
 
 Example - If reasoner says:
-"EMAIL CHECK RESULTS: New email from john@example.com about Project A. New email from jane@example.com about Budget."
+"EMAIL CHECK RESULTS: Customer A needs invoice correction. Customer B has shipping question."
 
-You should send TWO separate messages:
-First response:
+Send the first notification, wait for follow-up, then send the second:
 ```
 via: "sell-or-die"
 user: "Bro"
 attachments: []
 ---
-New email from john@example.com about Project A.
+Customer A needs invoice correction...
 ```
-
-Then in your next response (after receiving follow-up):
+[wait for follow-up]
 ```
 via: "sell-or-die"
 user: "Bro"
 attachments: []
 ---
-New email from jane@example.com about Budget.
+Customer B has shipping question...
 ```
 
 Important:
