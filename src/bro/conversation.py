@@ -327,6 +327,10 @@ class ConversationHandler:
         messages = message.split("===SPLIT_MESSAGE===")
         messages = [msg.strip() for msg in messages if msg.strip()]
 
+        # If split occurred, skip the first part (summary) and only send the individual items
+        if len(messages) > 1:
+            messages = messages[1:]  # Skip the summary, keep only the split items
+
         for msg in messages:
             input_data = textwrap.dedent(
                 f"""\
