@@ -218,11 +218,12 @@ _TOOLS = [
 @dataclass(frozen=True)
 class Task:
     """
-    Remember the channel so that the bot could send updates about the task when it's finished.
+    Remember the channel and thread so that the bot could send updates about the task when it's finished.
     """
 
     channel: Channel
     summary: str
+    thread_ts: str | None = None  # Slack thread timestamp for threading replies
 
 
 def _parse_message(msg_data: str) -> tuple[str, str, str, str] | None:
@@ -339,34 +340,44 @@ class ConversationHandler:
         if len(messages) > 1:
             messages = messages[1:]  # Skip the summary, keep only the split items
 
-        for msg in messages:
-            input_data = textwrap.dedent(
-                f"""\
-            via:  
-            user: Bro Reasoner
-            attachments: []
-            ---
-            {msg}
-            """
-            )
-            self._context += [
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": input_data,
-                }
-            ]
+        # Save and restore thread_ts to ensure replies go to the correct thread
+        saved_thread_ts = self._current_thread_ts
+        if self._current_task:
+            self._current_thread_ts = self._current_task.thread_ts
+            _logger.info(f"Using task's thread_ts for completion callback: {self._current_thread_ts}")
 
-            _logger.info(f"Requesting conversation response...")
-            conversation_response = self._request_inference(self._context)
-            output = conversation_response["output"]
-            if not output:
-                _logger.warning("No output from conversation model; response: %s", conversation_response)
-            self._process_response_output(output)
+        try:
+            for msg in messages:
+                input_data = textwrap.dedent(
+                    f"""\
+                via:  
+                user: Bro Reasoner
+                attachments: []
+                ---
+                {msg}
+                """
+                )
+                self._context += [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": input_data,
+                    }
+                ]
 
-        # Clear current task for user-initiated tasks
-        if not scheduled:
-            self._current_task = None
+                _logger.info(f"Requesting conversation response...")
+                conversation_response = self._request_inference(self._context)
+                output = conversation_response["output"]
+                if not output:
+                    _logger.warning("No output from conversation model; response: %s", conversation_response)
+                self._process_response_output(output)
+        finally:
+            # Restore the original thread_ts
+            self._current_thread_ts = saved_thread_ts
+
+            # Clear current task for user-initiated tasks
+            if not scheduled:
+                self._current_task = None
 
     def _process(self, item: dict[str, Any]) -> str | None:
         _logger.debug(f"Processing item: {item}")
@@ -392,7 +403,10 @@ class ConversationHandler:
                             _logger.info("Tasking the reasoner...")
                             _logger.debug(f"Prompt for the reasoner: {prompt}")
                             if self._reasoner.task(Context(prompt=prompt, files=[])):
-                                self._current_task = Task(summary=prompt, channel=Channel(name=channel))
+                                # Store the current thread_ts with the task so replies go to the correct thread
+                                self._current_task = Task(
+                                    summary=prompt, channel=Channel(name=channel), thread_ts=self._current_thread_ts
+                                )
                                 result = "Successfully tasked the reasoner."
                             else:
                                 result = "Failed to task the reasoner."
@@ -404,7 +418,7 @@ class ConversationHandler:
                                 result = "Reasoner task aborted successfully."
                             else:
                                 result = "No active reasoner task to abort."
-                        
+
                         case ("get_reasoner_status", {}):
                             _logger.info("Calling legilimens for task progress...")
                             result = self._reasoner.legilimens()
