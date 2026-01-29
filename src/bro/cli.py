@@ -158,7 +158,7 @@ def main() -> None:
 
     conversation = ConversationHandler(
         connector,
-        user_system_prompt,
+        user_system_prompt + "\n\n" + email_workflow_prompt + "\n\n" + invoice_creation_prompt,
         openai_client,
         reasoner=rsn,
         memory=memory,
