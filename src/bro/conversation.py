@@ -513,11 +513,11 @@ class ConversationHandler:
                 _logger.info(f"Processing user message: {msg}")
                 # Store thread_ts for this specific message (only for public channels, not DMs)
                 msg_thread_ts = msg.thread_ts if not msg.via.name.startswith("D") else None
-                
+
                 # Save current thread_ts and set to this message's thread
                 saved_thread_ts = self._current_thread_ts
                 self._current_thread_ts = msg_thread_ts
-                
+
                 try:
                     input_data = textwrap.dedent(
                         f"""\
@@ -539,67 +539,67 @@ class ConversationHandler:
                     ]
 
                     for file_path in msg.attachments:
-                    text_msg = {
-                        "type": "input_text",
-                        "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
-                    }
-                    file_size = os.path.getsize(file_path)
-                    file_format = detect_file_format(file_path)
-                    match (file_format, file_size):
-                        case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
-                            with open(file_path, "rb") as file_content:
-                                self._context += [
-                                    {
-                                        "role": "user",
-                                        "content": [
-                                            text_msg,
-                                            {"type": "input_text", "text": file_content.read().decode()},
-                                        ],
-                                    }
-                                ]
-                        case ("application/pdf", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
-                            with open(file_path, "rb") as file_content:
-                                file_bytes = base64.b64encode(file_content.read())
+                        text_msg = {
+                            "type": "input_text",
+                            "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
+                        }
+                        file_size = os.path.getsize(file_path)
+                        file_format = detect_file_format(file_path)
+                        match (file_format, file_size):
+                            case ("text/plain", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
+                                with open(file_path, "rb") as file_content:
+                                    self._context += [
+                                        {
+                                            "role": "user",
+                                            "content": [
+                                                text_msg,
+                                                {"type": "input_text", "text": file_content.read().decode()},
+                                            ],
+                                        }
+                                    ]
+                            case ("application/pdf", size) if size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
+                                with open(file_path, "rb") as file_content:
+                                    file_bytes = base64.b64encode(file_content.read())
+                                    self._context += [
+                                        {
+                                            "role": "user",
+                                            "content": [
+                                                text_msg,
+                                                {
+                                                    "type": "input_file",
+                                                    "filename": file_path.name,
+                                                    "file_data": f"data:{file_format};base64,{file_bytes.decode()}",
+                                                },
+                                            ],
+                                        },
+                                    ]
+                            case (fmt, size) if fmt and "image" in fmt and size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
                                 self._context += [
                                     {
                                         "role": "user",
                                         "content": [
                                             text_msg,
                                             {
-                                                "type": "input_file",
-                                                "filename": file_path.name,
-                                                "file_data": f"data:{file_format};base64,{file_bytes.decode()}",
+                                                "type": "input_image",
+                                                "image_url": f"data:{fmt};base64,{image_to_base64(Image.open(file_path))}",
                                             },
                                         ],
                                     },
                                 ]
-                        case (fmt, size) if fmt and "image" in fmt and size < _CONTEXT_EMBEDDING_FILE_MAX_BYTES:
-                            self._context += [
-                                {
-                                    "role": "user",
-                                    "content": [
-                                        text_msg,
-                                        {
-                                            "type": "input_image",
-                                            "image_url": f"data:{fmt};base64,{image_to_base64(Image.open(file_path))}",
-                                        },
-                                    ],
-                                },
-                            ]
-                        case _:
-                            self._context += [
-                                {
-                                    "role": "user",
-                                    "content": [
-                                        {
-                                            "type": "input_text",
-                                            "text": f"User uploaded this file: {file_path}."
-                                            f"File can't be processed because it is too big or file format "
-                                            f"isn't supported. Please task the reasoner instead.",
-                                        },
-                                    ],
-                                },
-                            ]
+                            case _:
+                                self._context += [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "input_text",
+                                                "text": f"User uploaded this file: {file_path}."
+                                                f"File can't be processed because it is too big or file format "
+                                                f"isn't supported. Please task the reasoner instead.",
+                                            },
+                                        ],
+                                    },
+                                ]
 
                     if msg.via.name.startswith("D"):  # always answer messages from direct channel
                         should_respond = True
