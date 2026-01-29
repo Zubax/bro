@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os.path
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -258,6 +259,7 @@ class ConversationHandler:
         self._msgs: list[ReceivedMessage] = []
         self._current_task: Task | None = None
         self._current_thread_ts: str | None = None  # Track thread_ts for threading replies
+        self._thread_ts_lock = threading.Lock()  # Protect thread_ts from concurrent access
         self._user_system_prompt = user_system_prompt
         self.connector = connector
         self._context = self._build_system_prompt()
@@ -341,15 +343,16 @@ class ConversationHandler:
             messages = messages[1:]  # Skip the summary, keep only the split items
 
         # Save and restore thread_ts to ensure replies go to the correct thread
-        saved_thread_ts = self._current_thread_ts
-        if self._current_task:
-            # User-initiated task: use the task's thread_ts
-            self._current_thread_ts = self._current_task.thread_ts
-            _logger.info(f"Using task's thread_ts for completion callback: {self._current_thread_ts}")
-        elif scheduled:
-            # Scheduled task: post to main channel without threading
-            self._current_thread_ts = None
-            _logger.info("Scheduled task completion: posting to main channel without threading")
+        with self._thread_ts_lock:
+            saved_thread_ts = self._current_thread_ts
+            if self._current_task:
+                # User-initiated task: use the task's thread_ts
+                self._current_thread_ts = self._current_task.thread_ts
+                _logger.info(f"Using task's thread_ts for completion callback: {self._current_thread_ts}")
+            elif scheduled:
+                # Scheduled task: post to main channel without threading
+                self._current_thread_ts = None
+                _logger.info("Scheduled task completion: posting to main channel without threading")
 
         try:
             for msg in messages:
@@ -378,7 +381,8 @@ class ConversationHandler:
                 self._process_response_output(output)
         finally:
             # Restore the original thread_ts
-            self._current_thread_ts = saved_thread_ts
+            with self._thread_ts_lock:
+                self._current_thread_ts = saved_thread_ts
 
             # Clear current task for user-initiated tasks
             if not scheduled:
@@ -515,8 +519,9 @@ class ConversationHandler:
                 msg_thread_ts = msg.thread_ts if not msg.via.name.startswith("D") else None
 
                 # Save current thread_ts and set to this message's thread
-                saved_thread_ts = self._current_thread_ts
-                self._current_thread_ts = msg_thread_ts
+                with self._thread_ts_lock:
+                    saved_thread_ts = self._current_thread_ts
+                    self._current_thread_ts = msg_thread_ts
 
                 try:
                     input_data = textwrap.dedent(
@@ -617,7 +622,8 @@ class ConversationHandler:
                         self._process_response_output(output)
                 finally:
                     # Restore the original thread_ts
-                    self._current_thread_ts = saved_thread_ts
+                    with self._thread_ts_lock:
+                        self._current_thread_ts = saved_thread_ts
             return True
         return False
 

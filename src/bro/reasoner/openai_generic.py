@@ -19,7 +19,7 @@ from bro.knowledgebase.wiki import WikiClient, tools as wiki_tools
 
 from bro.ui_io import UiObserver
 from bro.util import image_to_base64, format_exception, get_local_time_llm, openai_upload_files, locate_file
-from bro.util import run_shell_command, run_python_code, prune_context_text_only
+from bro.util import run_shell_command, run_python_code, prune_context_text_only, refresh_shopify_token
 from bro import __version_info__
 
 _logger = logging.getLogger(__name__)
@@ -379,6 +379,13 @@ This function is safe for security-sensitive tasks.
             "additionalProperties": False,
             "required": ["code"],
         },
+    },
+    {
+        "type": "function",
+        "name": "refresh_shopify_token",
+        "description": "Refresh the Shopify access token when authentication fails or token expires. "
+        "This will obtain a new access token using client credentials and update the environment.",
+        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
     },
 ]
 
@@ -963,6 +970,10 @@ class OpenAiGenericReasoner(Reasoner):
                             result = self._wiki.fetch_page(path)
                         else:
                             result = "Wiki client not available. Set BRO_WIKI_API_TOKEN environment variable."
+
+                    case "refresh_shopify_token":
+                        success, message = refresh_shopify_token()
+                        result = message
 
                     case _:
                         # Try MCP tools

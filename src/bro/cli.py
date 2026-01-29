@@ -24,7 +24,6 @@ from bro.executive.openai_cua import OpenAiCuaExecutive
 from bro.brofiles import (
     USER_SYSTEM_PROMPT_FILE,
     EMAIL_WORKFLOW_PROMPT_FILE,
-    INVOICE_CREATION_PROMPT_FILE,
     SNAPSHOT_FILE,
     LOG_FILE,
     LOG_DB,
@@ -57,10 +56,8 @@ def main() -> None:
 
     user_system_prompt = USER_SYSTEM_PROMPT_FILE.read_text() if USER_SYSTEM_PROMPT_FILE.is_file() else ""
     email_workflow_prompt = EMAIL_WORKFLOW_PROMPT_FILE.read_text() if EMAIL_WORKFLOW_PROMPT_FILE.is_file() else ""
-    invoice_creation_prompt = INVOICE_CREATION_PROMPT_FILE.read_text() if INVOICE_CREATION_PROMPT_FILE.is_file() else ""
     _logger.info(f"User system prompt: {len(user_system_prompt or '')} characters")
     _logger.info(f"Email workflow prompt: {len(email_workflow_prompt or '')} characters")
-    _logger.info(f"Invoice creation prompt: {len(invoice_creation_prompt or '')} characters")
 
     openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
@@ -124,22 +121,32 @@ def main() -> None:
         _logger.info("No Google Workspace client initialized")
 
     shopify = None
-    if os.getenv("SHOPIFY_ACCESS_TOKEN") and os.getenv("SHOPIFY_DOMAIN"):
-        try:
-            shopify = ShopifyClient(
-                access_token=os.environ["SHOPIFY_ACCESS_TOKEN"], domain=os.environ["SHOPIFY_DOMAIN"]
-            )
-            _logger.info("Shopify client initialized successfully")
-        except Exception as e:
-            _logger.error(f"Failed to initialize Shopify client: {e}")
+    if os.getenv("SHOPIFY_CLIENT_ID") and os.getenv("SHOPIFY_CLIENT_SECRET") and os.getenv("SHOPIFY_DOMAIN"):
+        # Import here to avoid circular dependency
+        from bro.util import refresh_shopify_token
+
+        # Refresh token at startup
+        success, message = refresh_shopify_token()
+        if success:
+            try:
+                shopify = ShopifyClient(
+                    access_token=os.environ["SHOPIFY_ACCESS_TOKEN"], domain=os.environ["SHOPIFY_DOMAIN"]
+                )
+                _logger.info("Shopify client initialized successfully")
+            except Exception as e:
+                _logger.error(f"Failed to initialize Shopify client: {e}")
+        else:
+            _logger.error(f"Failed to refresh Shopify token at startup: {message}")
     else:
-        _logger.info("No Shopify client initialized")
+        _logger.info(
+            "No Shopify client initialized (missing SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, or SHOPIFY_DOMAIN)"
+        )
 
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
         client=openai_client,
-        user_system_prompt=user_system_prompt + "\n\n" + email_workflow_prompt + "\n\n" + invoice_creation_prompt,
+        user_system_prompt=user_system_prompt + "\n\n" + email_workflow_prompt,
         resume=args.resume,
         snapshot_file=SNAPSHOT_FILE,
         memory=memory,
@@ -156,9 +163,18 @@ def main() -> None:
 
     scheduler = TaskScheduler(memory=memory, reasoner=rsn)
 
+    # Schedule daily Shopify token refresh if Shopify is initialized
+    if shopify is not None:
+        scheduler.schedule(
+            task_prompt="Refresh the Shopify access token using the refresh_shopify_token tool",
+            cron="0 3 * * *",  # Run at 3 AM daily
+            task_id="shopify_token_refresh",
+        )
+        _logger.info("📅 Scheduled daily Shopify token refresh at 3 AM")
+
     conversation = ConversationHandler(
         connector,
-        user_system_prompt + "\n\n" + email_workflow_prompt + "\n\n" + invoice_creation_prompt,
+        user_system_prompt + "\n\n" + email_workflow_prompt,
         openai_client,
         reasoner=rsn,
         memory=memory,

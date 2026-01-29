@@ -174,6 +174,55 @@ def run_python_code(code: str) -> tuple[int, str, str]:
             pass
 
 
+def refresh_shopify_token() -> tuple[bool, str]:
+    client_id = os.getenv("SHOPIFY_CLIENT_ID")
+    client_secret = os.getenv("SHOPIFY_CLIENT_SECRET")
+    domain = os.getenv("SHOPIFY_DOMAIN", "zubax.myshopify.com")
+
+    if not client_id or not client_secret:
+        return False, "ERROR: SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET environment variables must be set"
+
+    _logger.info("🔄 Refreshing Shopify access token...")
+    status, stdout, stderr = run_shell_command(
+        f'curl -X POST "https://{domain}/admin/oauth/access_token" '
+        '-H "Content-Type: application/x-www-form-urlencoded" '
+        '-d "grant_type=client_credentials" '
+        f'-d "client_id={client_id}" '
+        f'-d "client_secret={client_secret}"'
+    )
+
+    if status != 0:
+        error_msg = f"Token refresh failed (exit {status}). stdout: {stdout}, stderr: {stderr}"
+        _logger.error(f"❌ {error_msg}")
+        return False, error_msg
+
+    try:
+        # Parse the JSON response
+        response_data = json.loads(stdout)
+        access_token = response_data.get("access_token")
+        expires_in = response_data.get("expires_in", 86399)
+
+        if not access_token:
+            error_msg = f"No access_token in response: {stdout}"
+            _logger.error(f"❌ {error_msg}")
+            return False, error_msg
+
+        # Update the environment variable for immediate use
+        os.environ["SHOPIFY_ACCESS_TOKEN"] = access_token
+
+        _logger.info(f"✅ Shopify token refreshed (expires in {expires_in} seconds)")
+        return True, f"Token refreshed successfully (expires in {expires_in} seconds)"
+
+    except json.JSONDecodeError as e:
+        error_msg = f"Failed to parse JSON response: {e}. Response: {stdout}"
+        _logger.error(f"❌ {error_msg}")
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Error refreshing token: {e}"
+        _logger.error(f"❌ {error_msg}")
+        return False, error_msg
+
+
 def split_trailing_json(text: str) -> tuple[str, Any]:
     """
     Extract parsed JSON from the end of the message. None if not found.
