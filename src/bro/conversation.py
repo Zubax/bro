@@ -343,8 +343,13 @@ class ConversationHandler:
         # Save and restore thread_ts to ensure replies go to the correct thread
         saved_thread_ts = self._current_thread_ts
         if self._current_task:
+            # User-initiated task: use the task's thread_ts
             self._current_thread_ts = self._current_task.thread_ts
             _logger.info(f"Using task's thread_ts for completion callback: {self._current_thread_ts}")
+        elif scheduled:
+            # Scheduled task: post to main channel without threading
+            self._current_thread_ts = None
+            _logger.info("Scheduled task completion: posting to main channel without threading")
 
         try:
             for msg in messages:
@@ -506,28 +511,34 @@ class ConversationHandler:
         if self._msgs:
             for msg in self._msgs:
                 _logger.info(f"Processing user message: {msg}")
-                # Store thread_ts for threading replies (only for public channels, not DMs)
-                self._current_thread_ts = msg.thread_ts if not msg.via.name.startswith("D") else None
-                input_data = textwrap.dedent(
-                    f"""\
-                via: {msg.via.name!r} 
-                user: {msg.user.name!r}
-                attachments: {list(map(str, msg.attachments))}
-                ---
-                {msg.text}
-                """
-                )
-                _logger.debug(f"Adding user message to context.")
-                self._context += [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": input_data},
-                        ],
-                    },
-                ]
+                # Store thread_ts for this specific message (only for public channels, not DMs)
+                msg_thread_ts = msg.thread_ts if not msg.via.name.startswith("D") else None
+                
+                # Save current thread_ts and set to this message's thread
+                saved_thread_ts = self._current_thread_ts
+                self._current_thread_ts = msg_thread_ts
+                
+                try:
+                    input_data = textwrap.dedent(
+                        f"""\
+                    via: {msg.via.name!r} 
+                    user: {msg.user.name!r}
+                    attachments: {list(map(str, msg.attachments))}
+                    ---
+                    {msg.text}
+                    """
+                    )
+                    _logger.debug(f"Adding user message to context.")
+                    self._context += [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": input_data},
+                            ],
+                        },
+                    ]
 
-                for file_path in msg.attachments:
+                    for file_path in msg.attachments:
                     text_msg = {
                         "type": "input_text",
                         "text": f"User uploaded this file: {file_path}. Content of the file in the next message.",
@@ -590,20 +601,23 @@ class ConversationHandler:
                                 },
                             ]
 
-                if msg.via.name.startswith("D"):  # always answer messages from direct channel
-                    should_respond = True
-                else:
-                    should_respond = self._determine_response_required()
+                    if msg.via.name.startswith("D"):  # always answer messages from direct channel
+                        should_respond = True
+                    else:
+                        should_respond = self._determine_response_required()
 
-                if should_respond:
-                    _logger.info("Generating response from the conversation model...")
-                    conversation_response = self._request_inference(self._context)
-                    output = conversation_response["output"]
+                    if should_respond:
+                        _logger.info("Generating response from the conversation model...")
+                        conversation_response = self._request_inference(self._context)
+                        output = conversation_response["output"]
 
-                    if not output:
-                        _logger.warning("No output from model; response: %s", conversation_response)
+                        if not output:
+                            _logger.warning("No output from model; response: %s", conversation_response)
 
-                    self._process_response_output(output)
+                        self._process_response_output(output)
+                finally:
+                    # Restore the original thread_ts
+                    self._current_thread_ts = saved_thread_ts
             return True
         return False
 
