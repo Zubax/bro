@@ -118,6 +118,18 @@ Important:
 - When writing a prompt for the reasoner, provide only the end goal, not step-by-step instructions.
 - Do NOT call get_reasoner_status immediately after calling task_reasoner. Wait for the reasoner to complete and report back.
 - The reasoner may need multiple iterations to complete a task. Keep the conversation going until the task is done.
+
+CRITICAL - DELEGATING TASKS TO THE REASONER:
+Before delegating a task to the reasoner, check the REASONER AVAILABLE TOOLS list below to see if specialized tools exist
+for the task. If relevant tools exist, explicitly mention them in your prompt to guide the reasoner.
+
+Examples:
+- Email task → Check if Gmail tools exist → Instruct: "Use Gmail API tools (search_gmail_messages, etc.)"
+- Spreadsheet task → Check if Sheets tools exist → Instruct: "Use Google Sheets API tools"
+- E-commerce task → Check if Shopify tools exist → Instruct: "Use Shopify API tools (list_orders, etc.)"
+
+If no specialized tools exist for the task, the reasoner will use UI automation or other appropriate methods.
+Always prefer directing the reasoner to use specialized tools when available - they are faster and more reliable.
 """
 
 
