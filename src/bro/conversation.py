@@ -281,6 +281,19 @@ class ConversationHandler:
         ]
         if self._user_system_prompt:
             ctx[0]["content"].append({"type": "input_text", "text": self._user_system_prompt})
+
+        # Add reasoner tools information
+        tools = self._reasoner.get_tools()
+        if tools:
+            tools_desc = "\n\nREASONER AVAILABLE TOOLS:\n"
+            tools_desc += "The reasoner has access to the following tools (you should NOT call these directly, only delegate via task_reasoner):\n"
+            for tool in tools:
+                if tool.get("type") == "function":
+                    name = tool.get("name", "unknown")
+                    desc = tool.get("description", "No description")
+                    tools_desc += f"- {name}: {desc}\n"
+            ctx[0]["content"].append({"type": "input_text", "text": tools_desc})
+
         return ctx
 
     def _process_response_output(self, output: Any) -> None:

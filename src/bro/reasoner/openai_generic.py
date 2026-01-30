@@ -591,6 +591,10 @@ class OpenAiGenericReasoner(Reasoner):
         _logger.debug(f"🧙‍♂️ Legilimens: {reflection}")
         return reflection
 
+    def get_tools(self) -> list[dict[str, Any]]:
+        """Return the list of tools available to this reasoner."""
+        return self._tools
+
     def abort(self) -> None:
         """Abort the current task immediately."""
         _logger.warning("Aborting current reasoner task...")

@@ -65,3 +65,11 @@ class Reasoner(ABC):
         Returns None if there is no task at the moment.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def get_tools(self) -> list[dict[str, Any]]:
+        """
+        Return the list of tools available to this reasoner.
+        Used by the conversation handler to inform its decisions about task delegation.
+        """
+        raise NotImplementedError
