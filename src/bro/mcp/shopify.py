@@ -28,24 +28,25 @@ class ShopifyClient:
         self._mcp_manager = SyncMCPManager()
         import shutil
 
-        # Initialize @akson/mcp-shopify (original server)
-        mcp_shopify_path = shutil.which("mcp-shopify")
-        if mcp_shopify_path:
-            shopify_akson = StdioMCPClient(
-                name="shopify-akson",
-                command=[mcp_shopify_path],
-                env={
-                    "SHOPIFY_ACCESS_TOKEN": access_token,
-                    "SHOPIFY_DOMAIN": domain,
-                },
-            )
-            try:
-                self._mcp_manager.add_client(shopify_akson)
-                _logger.info(f"Initialized @akson/mcp-shopify server")
-            except Exception as e:
-                _logger.warning(f"Failed to initialize @akson/mcp-shopify: {e}")
-        else:
-            _logger.warning("mcp-shopify (@akson) not found. Install with: npm install -g @akson/mcp-shopify")
+        # Initialize @akson/mcp-shopify (original server) - TEMPORARILY DISABLED
+        # mcp_shopify_path = shutil.which("mcp-shopify")
+        # if mcp_shopify_path:
+        #     shopify_akson = StdioMCPClient(
+        #         name="shopify-akson",
+        #         command=[mcp_shopify_path],
+        #         env={
+        #             "SHOPIFY_ACCESS_TOKEN": access_token,
+        #             "SHOPIFY_DOMAIN": domain,
+        #         },
+        #     )
+        #     try:
+        #         self._mcp_manager.add_client(shopify_akson)
+        #         _logger.info(f"Initialized @akson/mcp-shopify server")
+        #     except Exception as e:
+        #         _logger.warning(f"Failed to initialize @akson/mcp-shopify: {e}")
+        # else:
+        #     _logger.warning("mcp-shopify (@akson) not found. Install with: npm install -g @akson/mcp-shopify")
+        _logger.info("@akson/mcp-shopify temporarily disabled")
 
         # Initialize GeLi2001/shopify-mcp (for update_order support)
         npx_path = shutil.which("npx")
