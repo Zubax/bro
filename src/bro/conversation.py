@@ -455,21 +455,7 @@ class ConversationHandler:
 
                         case ("get_reasoner_status", {}):
                             _logger.info("Calling legilimens for task progress...")
-                            result = self._reasoner.legilimens()
-                            if not self._current_task:
-                                _logger.error(
-                                    f"Missing current task context. Cannot route message to any channel. Message "
-                                    f"content: {result}"
-                                )
-                            else:
-                                self._msgs.append(
-                                    ReceivedMessage(
-                                        via=self._current_task.channel,
-                                        user=User(name="Bro"),
-                                        text=f"Send message to the user: {result}",
-                                        attachments=[],
-                                    )
-                                )
+                            result = self._reasoner.legilimens() or "No active task. The reasoner is idle."
                         case ("recall", {"query": query, "sectors": sectors}):
                             result = self._memory.recall(query, sectors)
 
