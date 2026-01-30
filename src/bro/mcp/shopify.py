@@ -19,41 +19,64 @@ class ShopifyClient:
         domain: str,
     ) -> None:
         """
-        Initialize Shopify MCP client.
+        Initialize Shopify MCP clients (using both @akson and GeLi2001 servers).
 
         Args:
             access_token: Shopify Admin API access token
             domain: Shopify store domain (e.g., your-store.myshopify.com)
         """
         self._mcp_manager = SyncMCPManager()
-
-        # Find mcp-shopify executable
         import shutil
 
+        # Initialize @akson/mcp-shopify (original server)
         mcp_shopify_path = shutil.which("mcp-shopify")
-        if not mcp_shopify_path:
-            raise FileNotFoundError("mcp-shopify not found. Install it with: npm install -g @akson/mcp-shopify")
+        if mcp_shopify_path:
+            shopify_akson = StdioMCPClient(
+                name="shopify-akson",
+                command=[mcp_shopify_path],
+                env={
+                    "SHOPIFY_ACCESS_TOKEN": access_token,
+                    "SHOPIFY_DOMAIN": domain,
+                },
+            )
+            try:
+                self._mcp_manager.add_client(shopify_akson)
+                _logger.info(f"Initialized @akson/mcp-shopify server")
+            except Exception as e:
+                _logger.warning(f"Failed to initialize @akson/mcp-shopify: {e}")
+        else:
+            _logger.warning("mcp-shopify (@akson) not found. Install with: npm install -g @akson/mcp-shopify")
 
-        # Build command
-        command = [mcp_shopify_path]
+        # Initialize GeLi2001/shopify-mcp (for update_order support)
+        npx_path = shutil.which("npx")
+        if npx_path:
+            shopify_geli = StdioMCPClient(
+                name="shopify-geli",
+                command=[
+                    npx_path,
+                    "shopify-mcp",
+                    "--accessToken",
+                    access_token,
+                    "--domain",
+                    domain,
+                ],
+                env={},
+            )
+            try:
+                self._mcp_manager.add_client(shopify_geli)
+                _logger.info(f"Initialized GeLi2001/shopify-mcp server")
+            except Exception as e:
+                _logger.warning(f"Failed to initialize GeLi2001/shopify-mcp: {e}")
+        else:
+            _logger.warning("npx not found. Install Node.js to use GeLi2001/shopify-mcp")
 
-        # Initialize MCP client
-        shopify_client = StdioMCPClient(
-            name="shopify",
-            command=command,
-            env={
-                "SHOPIFY_ACCESS_TOKEN": access_token,
-                "SHOPIFY_DOMAIN": domain,
-            },
-        )
+        tools = self._mcp_manager.get_all_tools()
+        if not tools:
+            raise RuntimeError("No Shopify MCP servers could be initialized")
 
-        try:
-            self._mcp_manager.add_client(shopify_client)
-            tools = self._mcp_manager.get_all_tools()
-            _logger.info(f"Shopify MCP client initialized with {len(tools)} tools for domain: {domain}")
-        except Exception as e:
-            _logger.error(f"Failed to initialize Shopify MCP client: {e}")
-            raise
+        _logger.info(f"Shopify MCP clients initialized with {len(tools)} total tools for domain: {domain}")
+        for tool in tools:
+            _logger.debug(f"  - {tool.get('name')}")
 
     def get_tools(self) -> list[dict[str, Any]]:
         """
