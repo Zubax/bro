@@ -262,13 +262,13 @@ class ConversationHandler:
         self._thread_ts_lock = threading.Lock()  # Protect thread_ts from concurrent access
         self._user_system_prompt = user_system_prompt
         self.connector = connector
-        self._context = self._build_system_prompt()
         self._client = client
         self._reasoner = reasoner
-        self._reasoner.on_task_completed_cb = self._on_task_completed_cb
         self._memory = memory
         self._wiki = wiki
         self._scheduler = scheduler
+        self._context = self._build_system_prompt()
+        self._reasoner.on_task_completed_cb = self._on_task_completed_cb
 
     def _build_system_prompt(self) -> list[dict[str, Any]]:
         ctx: list[dict[str, Any]] = [
