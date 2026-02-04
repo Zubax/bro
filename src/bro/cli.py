@@ -33,6 +33,7 @@ from bro.conversation import ConversationHandler
 from bro.memory import Memory
 from bro.knowledgebase.wiki import WikiClient
 from bro.mcp import GoogleWorkspaceClient, ShopifyClient
+from bro.agent import EmailAgent
 from bro.scheduler import TaskScheduler
 
 _logger = logging.getLogger(__name__)
@@ -142,6 +143,29 @@ def main() -> None:
             "No Shopify client initialized (missing SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, or SHOPIFY_DOMAIN)"
         )
 
+    # Initialize EmailAgent if both Gmail and Shopify are available
+    email_agent = None
+    if google_workspace and shopify:
+        try:
+            from langchain_openai import ChatOpenAI
+
+            email_llm = ChatOpenAI(
+                model="gpt-5.1",
+                temperature=0,
+                api_key=os.environ["OPENAI_API_KEY"],
+            )
+            email_agent = EmailAgent(
+                langchain_gmail=google_workspace.get_langchain_client(),
+                langchain_shopify=shopify.get_langchain_client(),
+                llm=email_llm,
+                workflow_prompt=email_workflow_prompt,
+            )
+            _logger.info("✉️ EmailAgent initialized successfully")
+        except Exception as e:
+            _logger.error(f"Failed to initialize EmailAgent: {e}")
+    else:
+        _logger.info("EmailAgent not initialized (requires both Google Workspace and Shopify)")
+
     rsn = OpenAiGenericReasoner(
         executive=exe,
         ui=ui,
@@ -153,6 +177,7 @@ def main() -> None:
         wiki=wiki,
         google_workspace=google_workspace,
         shopify=shopify,
+        email_agent=email_agent,
     )
 
     connector = SlackConnector(

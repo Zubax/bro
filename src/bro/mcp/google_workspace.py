@@ -10,6 +10,8 @@ import os
 import sys
 from typing import Any
 
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
 from bro.mcp.client import SyncMCPManager, StdioMCPClient
 
 _logger = logging.getLogger(__name__)
@@ -40,6 +42,8 @@ class GoogleWorkspaceClient:
         self._services = services or ["gmail"]
         self._tool_tier = tool_tier
         self._default_user_email = default_user_email
+
+        # Keep legacy MCP manager for backward compatibility
         self._mcp_manager = SyncMCPManager()
 
         # Get workspace-mcp executable path
@@ -51,10 +55,10 @@ class GoogleWorkspaceClient:
                 f"workspace-mcp not found at {workspace_mcp_path}. Install it with: rye add workspace-mcp"
             )
 
-        # Build command
-        command = (
+        # Build command and args
+        command = workspace_mcp_path
+        args = (
             [
-                workspace_mcp_path,
                 "--tool-tier",
                 tool_tier,
                 "--tools",
@@ -67,11 +71,11 @@ class GoogleWorkspaceClient:
             ]
         )
 
-        # Initialize MCP client
+        # Initialize legacy MCP client for backward compatibility
         _logger.info(f"Setting USER_GOOGLE_EMAIL to: {default_user_email}")
         workspace_client = StdioMCPClient(
             name="google-workspace",
-            command=command,
+            command=[command] + args,
             env={
                 "GOOGLE_OAUTH_CLIENT_ID": oauth_client_id,
                 "GOOGLE_OAUTH_CLIENT_SECRET": oauth_client_secret,
@@ -89,6 +93,24 @@ class GoogleWorkspaceClient:
         except Exception as e:
             _logger.error(f"Failed to initialize Google Workspace MCP client: {e}")
             raise
+
+        # Initialize LangChain MultiServerMCPClient
+        self._langchain_client = MultiServerMCPClient(
+            {
+                "google-workspace": {
+                    "transport": "stdio",
+                    "command": command,
+                    "args": args,
+                    "env": {
+                        "GOOGLE_OAUTH_CLIENT_ID": oauth_client_id,
+                        "GOOGLE_OAUTH_CLIENT_SECRET": oauth_client_secret,
+                        "GOOGLE_MCP_CREDENTIALS_DIR": credentials_dir,
+                        "USER_GOOGLE_EMAIL": default_user_email,
+                    },
+                }
+            }
+        )
+        _logger.info("LangChain MultiServerMCPClient initialized for Google Workspace")
 
     def get_tools(self) -> list[dict[str, Any]]:
         """
@@ -129,6 +151,15 @@ class GoogleWorkspaceClient:
             error_msg = f"Failed to call Google Workspace tool '{name}': {e}"
             _logger.error(error_msg)
             return error_msg
+
+    def get_langchain_client(self) -> MultiServerMCPClient:
+        """
+        Get the LangChain MultiServerMCPClient instance.
+
+        Returns:
+            MultiServerMCPClient instance for use with LangChain agents
+        """
+        return self._langchain_client
 
     def close(self) -> None:
         """Close the MCP client and cleanup resources."""

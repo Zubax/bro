@@ -417,6 +417,7 @@ class OpenAiGenericReasoner(Reasoner):
         wiki: WikiClient | None = None,
         google_workspace: Any = None,
         shopify: Any = None,
+        email_agent: Any = None,
         user_system_prompt: str | None = None,
         model: str = "gpt-5.1",
         reasoning_effort: str = "high",
@@ -433,6 +434,7 @@ class OpenAiGenericReasoner(Reasoner):
         self._wiki = wiki
         self._google_workspace = google_workspace
         self._shopify = shopify
+        self._email_agent = email_agent
         self._reasoning_effort = reasoning_effort
         self._service_tier = service_tier
 
@@ -457,6 +459,20 @@ class OpenAiGenericReasoner(Reasoner):
                 self._mcp_tool_map[tool["name"]] = self._shopify
             _logger.info(f"Adding {len(shopify_tools)} Shopify tools to reasoner")
             self._tools = self._tools + shopify_tools
+
+        # Add EmailAgent tool if available
+        if self._email_agent:
+            email_agent_tool = {
+                "type": "function",
+                "name": "check_emails",
+                "description": "Check and process unread emails using the email agent. This runs a complete workflow "
+                "that searches for unread emails, categorizes them (promotional/already replied/needs response), "
+                "and takes appropriate actions (marks as read, drafts replies for customer inquiries with order lookups).",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+                "strict": True,
+            }
+            self._tools.append(email_agent_tool)
+            _logger.info("Adding check_emails tool to reasoner")
 
         self._user_system_prompt = user_system_prompt
         self._strategy: str | None = None
@@ -978,6 +994,12 @@ class OpenAiGenericReasoner(Reasoner):
                     case "refresh_shopify_token":
                         success, message = refresh_shopify_token()
                         result = message
+
+                    case "check_emails":
+                        if self._email_agent:
+                            result = self._email_agent.check_emails()
+                        else:
+                            result = "EmailAgent not available"
 
                     case _:
                         # Try MCP tools

@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any
 
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
 from bro.mcp.client import SyncMCPManager, StdioMCPClient
 
 _logger = logging.getLogger(__name__)
@@ -78,6 +80,34 @@ class ShopifyClient:
         for tool in tools:
             _logger.debug(f"  - {tool.get('name')}")
 
+        # Initialize LangChain MultiServerMCPClient
+        langchain_config = {}
+
+        if mcp_shopify_path:
+            langchain_config["shopify-akson"] = {
+                "transport": "stdio",
+                "command": mcp_shopify_path,
+                "args": [],
+                "env": {
+                    "SHOPIFY_ACCESS_TOKEN": access_token,
+                    "SHOPIFY_DOMAIN": domain,
+                },
+            }
+
+        if npx_path:
+            langchain_config["shopify-geli"] = {
+                "transport": "stdio",
+                "command": npx_path,
+                "args": ["shopify-mcp", "--accessToken", access_token, "--domain", domain],
+                "env": {},
+            }
+
+        if langchain_config:
+            self._langchain_client = MultiServerMCPClient(langchain_config)
+            _logger.info("LangChain MultiServerMCPClient initialized for Shopify")
+        else:
+            self._langchain_client = None
+
     def get_tools(self) -> list[dict[str, Any]]:
         """
         Get all available tools from Shopify MCP server.
@@ -114,6 +144,15 @@ class ShopifyClient:
             error_msg = f"Failed to call Shopify tool '{name}': {e}"
             _logger.error(error_msg)
             return error_msg
+
+    def get_langchain_client(self) -> MultiServerMCPClient | None:
+        """
+        Get the LangChain MultiServerMCPClient instance.
+
+        Returns:
+            MultiServerMCPClient instance for use with LangChain agents, or None if not initialized
+        """
+        return self._langchain_client
 
     def close(self) -> None:
         """Close the MCP client and cleanup resources."""

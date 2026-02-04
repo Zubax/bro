@@ -23,6 +23,10 @@ dependencies = [
     "slack-sdk~=3.39.0",
     "workspace-mcp>=1.7.1",
     "APScheduler~=3.10",
+    "langchain~=0.3",
+    "langchain-openai~=0.2",
+    "langchain-mcp-adapters~=0.1",
+    "langgraph~=0.2",
 ]
 
 [project.scripts]
